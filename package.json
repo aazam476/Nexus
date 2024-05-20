@@ -1,0 +1,24 @@
+{
+  "name": "nexus",
+  "version": "1.0.0",
+  "description": "A website where students and teachers alike can monitor school clubs",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && node dist/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aazam476/Nexus.git"
+  },
+  "author": "Ali Azam",
+  "license": "LGPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/aazam476/Nexus/issues"
+  },
+  "homepage": "https://github.com/aazam476/Nexus#readme",
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
