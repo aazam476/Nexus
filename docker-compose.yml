@@ -1,0 +1,12 @@
+name: nexus
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - LOG_LEVEL=debug
+      - CORS_ORIGIN=*
