@@ -28,6 +28,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "mongodb": "^6.6.2",
     "morgan": "^1.10.0",
     "winston": "^3.13.0"
   }

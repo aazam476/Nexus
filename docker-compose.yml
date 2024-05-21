@@ -1,6 +1,19 @@
-name: nexus
+version: '3.8'
 
 services:
+  db:
+    image: mongo:7.0.2
+    container_name: mongo
+    volumes:
+      - db-data:/data/db
+      - ./res/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=change_me
+      - MONGO_INITDB_USER_USERNAME=nexus
+      - MONGO_INITDB_USER_PASSWORD=change_me
+      - MONGO_INITDB_DATABASE=nexus
+
   app:
     build: .
     restart: unless-stopped
@@ -10,3 +23,13 @@ services:
       - PORT=3000
       - LOG_LEVEL=debug
       - CORS_ORIGIN=*
+      - MONGODB_HOST=db
+      - MONGODB_PORT=27017
+      - MONGODB_USER=nexus
+      - MONGODB_PASS=change_me
+      - MONGODB_DB=nexus
+    depends_on:
+      - db
+
+volumes:
+  db-data:

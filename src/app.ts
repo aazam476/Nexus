@@ -3,8 +3,11 @@ import cors from 'cors';
 import morgan from 'morgan';
 import http from 'http';
 import logger from './logger';
+import {establishDBConnection, closeDBConnection} from "./dbConnection";
 
 async function startServer() {
+    await establishDBConnection();
+
     const app = express();
 
     const corsOrigin = process.env.CORS_ORIGIN || '*';
@@ -27,7 +30,16 @@ async function startServer() {
 
 async function stopServer() {
     logger.info('Attempting a graceful shutdown');
+
+    if (!server) {
+        logger.error('Server is not running');
+        process.exit(1);
+    }
+
     server.close(async () => {
+        logger.info('API is no longer accepting connections');
+        await closeDBConnection();
+        logger.info('Server shutdown successful');
         process.exit(0);
     });
 }
