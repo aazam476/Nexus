@@ -3,6 +3,7 @@
 .dockerignore
 .gitignore
 node_modules
+res/firebaseServiceAccountKey.json
 docker-compose.yml
 Dockerfile
 LICENSE

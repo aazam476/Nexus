@@ -1,5 +1,7 @@
 FROM node:22-alpine as development
 
+RUN apk add python3 make g++
+
 WORKDIR /usr/src/app
 
 COPY package*.json .
@@ -13,6 +15,8 @@ RUN npm run build
 FROM node:22-alpine as production
 
 ENV NODE_ENV=production
+
+RUN apk add python3 make g++
 
 WORKDIR /usr/src/app
 

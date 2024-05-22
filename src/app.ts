@@ -4,9 +4,11 @@ import morgan from 'morgan';
 import http from 'http';
 import logger from './logger';
 import {establishDBConnection, closeDBConnection} from "./dbConnection";
+import {establishFirebaseConnection, firebaseMiddleware} from "./firebaseConnection";
 
 async function startServer() {
     await establishDBConnection();
+    await establishFirebaseConnection();
 
     const app = express();
 
@@ -21,6 +23,7 @@ async function startServer() {
     }));
 
     app.use(express.json());
+    app.use(firebaseMiddleware);
 
     const port = parseInt(process.env.PORT) || 3000;
     return app.listen(port, () => {

@@ -1,4 +1,4 @@
-version: '3.8'
+name: 'nexus'
 
 services:
   db:
@@ -19,6 +19,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      - ./res/firebaseServiceAccountKey.json:/usr/src/app/dist/firebaseServiceAccountKey.json
     environment:
       - PORT=3000
       - LOG_LEVEL=debug
