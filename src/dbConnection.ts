@@ -1,4 +1,4 @@
-import { Db, MongoClient } from 'mongodb';
+import {Db, MongoClient} from 'mongodb';
 import logger from "./logger";
 
 const mongoHost = process.env.MONGODB_HOST || 'db';
@@ -36,4 +36,4 @@ async function getDatabase() {
     return db;
 }
 
-export { establishDBConnection, closeDBConnection, getDatabase };
+export {establishDBConnection, closeDBConnection, getDatabase};

@@ -3,8 +3,9 @@ import cors from 'cors';
 import morgan from 'morgan';
 import http from 'http';
 import logger from './logger';
-import {establishDBConnection, closeDBConnection} from "./dbConnection";
+import {closeDBConnection, establishDBConnection} from "./dbConnection";
 import {establishFirebaseConnection, firebaseMiddleware} from "./firebaseConnection";
+import userRoutes from "./userRoutes";
 
 async function startServer() {
     await establishDBConnection();
@@ -13,7 +14,7 @@ async function startServer() {
     const app = express();
 
     const corsOrigin = process.env.CORS_ORIGIN || '*';
-    app.use(cors({ origin: corsOrigin }));
+    app.use(cors({origin: corsOrigin}));
 
     const morganFormat = ":remote-addr - :remote-user \":method :url HTTP/:http-version\" :status :res[content-length] \":referrer\" \":user-agent\"";
     app.use(morgan(morganFormat, {
@@ -24,6 +25,8 @@ async function startServer() {
 
     app.use(express.json());
     app.use(firebaseMiddleware);
+
+    app.use('/users', userRoutes);
 
     const port = parseInt(process.env.PORT) || 3000;
     return app.listen(port, () => {
