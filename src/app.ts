@@ -6,6 +6,7 @@ import logger from './logger';
 import {closeDBConnection, establishDBConnection} from "./dbConnection";
 import {establishFirebaseConnection, firebaseMiddleware} from "./firebaseConnection";
 import userRoutes from "./userRoutes";
+import clubRoutes from "./clubRoutes";
 
 async function startServer() {
     await establishDBConnection();
@@ -27,6 +28,7 @@ async function startServer() {
     app.use(firebaseMiddleware);
 
     app.use('/users', userRoutes);
+    app.use('/clubs', clubRoutes);
 
     const port = parseInt(process.env.PORT) || 3000;
     return app.listen(port, () => {

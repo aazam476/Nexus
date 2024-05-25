@@ -1,7 +1,6 @@
 import express from 'express';
 import logger from './logger';
 import {getDatabase} from './dbConnection';
-import {UpdateResult} from "mongodb";
 
 const router = express.Router();
 
