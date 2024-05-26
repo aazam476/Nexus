@@ -11,6 +11,11 @@ router.get('/', async (req, res) => {
         const requesterUser = await db.collection('users').findOne({email: requesterEmail});
         const userEmail = req.body.email;
 
+        if (!userEmail) {
+            logger.warn('Bad request: missing email');
+            return res.status(400).json({error: 'Missing email'});
+        }
+
         if (!requesterUser || requesterUser.type !== 'admin' && requesterEmail !== userEmail) {
             logger.warn('Unauthorized access attempt');
             return res.status(403).json({error: 'Forbidden'});
@@ -36,6 +41,11 @@ router.put('/:change', async (req, res) => {
         const requesterEmail = req["userEmail"];
         const requesterUser = await db.collection('users').findOne({email: requesterEmail});
         const userEmail = req.body.currentEmail;
+
+        if (!userEmail) {
+            logger.warn('Bad request: missing email');
+            return res.status(400).json({error: 'Missing email'});
+        }
 
         if (!requesterUser || requesterUser.type !== 'admin' && requesterEmail !== userEmail) {
             logger.warn('Unauthorized access attempt');
@@ -152,13 +162,18 @@ router.delete('/', async (req, res) => {
         const db = await getDatabase();
         const requesterEmail = req["userEmail"];
         const requesterUser = await db.collection('users').findOne({email: requesterEmail});
+        const userEmail = req.body.email;
+
+        if (!userEmail) {
+            logger.warn('Bad request: missing email');
+            return res.status(400).json({error: 'Missing email'});
+        }
 
         if (!requesterUser || requesterUser.type !== 'admin') {
             logger.warn('Unauthorized access attempt');
             return res.status(403).json({error: 'Forbidden'});
         }
 
-        const userEmail = req.body.email;
         const result = await db.collection('users').deleteOne({email: userEmail});
 
         if (result.deletedCount === 0) {
