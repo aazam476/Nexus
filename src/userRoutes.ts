@@ -134,6 +134,12 @@ router.post('/', async (req, res) => {
             return res.status(400).json({error: 'User with this email already exists'});
         }
 
+        const allowedTypes = ['student', 'teacher', 'admin'];
+        if (!allowedTypes.includes(type)) {
+            logger.warn('Bad request: invalid type');
+            return res.status(400).json({error: 'Invalid user type'});
+        }
+
         const clubsAttending = type === 'student' ? [] : null;
         const clubsOfficer = type === 'student' ? [] : null;
         const clubsAdvisor = type === 'teacher' ? [] : null;
