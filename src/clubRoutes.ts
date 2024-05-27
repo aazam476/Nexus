@@ -28,6 +28,19 @@ router.get('/', async (req, res) => {
     }
 });
 
+router.get('/all', async (req, res) => {
+    try {
+        const db = await getDatabase();
+        const clubs = await db.collection('clubs').find().toArray();
+
+        logger.info('Retrieved all clubs');
+        res.status(200).json(clubs);
+    } catch (error) {
+        logger.error('Failed to get clubs', error);
+        res.status(500).json({error: 'Internal Server Error'});
+    }
+});
+
 router.put('/:change', async (req, res) => {
     try {
         const db = await getDatabase();

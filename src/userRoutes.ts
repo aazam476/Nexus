@@ -35,6 +35,26 @@ router.get('/', async (req, res) => {
     }
 });
 
+router.get('/all', async (req, res) => {
+    try {
+        const db = await getDatabase();
+        const requesterEmail = req["userEmail"];
+        const requesterUser = await db.collection('users').findOne({email: requesterEmail});
+
+        if (!requesterUser || requesterUser.type !== 'admin') {
+            logger.warn('Unauthorized access attempt');
+            return res.status(403).json({error: 'Forbidden'});
+        }
+
+        const users = await db.collection('users').find().toArray();
+        logger.info('Retrieved all users');
+        res.status(200).json(users);
+    } catch (error) {
+        logger.error('Failed to get all users', error);
+        res.status(500).json({error: 'Internal Server Error'});
+    }
+});
+
 router.put('/:change', async (req, res) => {
     try {
         const db = await getDatabase();
