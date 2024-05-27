@@ -84,15 +84,15 @@ router.get('/', async (req, res) => {
         let note: WithId<Document>;
         if (type === 'personal') {
             note = await db.collection('notes').findOne({
-                creator: requesterEmail,
-                member: memberEmail,
-                club: clubName,
+                creatorEmail: requesterEmail,
+                memberEmail: memberEmail,
+                clubName: clubName,
                 type: "personal"
             });
         } else {
             note = await db.collection('notes').findOne({
-                member: memberEmail,
-                club: clubName,
+                memberEmail: memberEmail,
+                clubName: clubName,
                 type: type
             });
         }
@@ -185,9 +185,9 @@ router.put('/', async (req, res) => {
 
         if (type === 'personal') {
             await db.collection('notes').updateOne({
-                creator: requesterEmail,
-                member: memberEmail,
-                club: clubName,
+                creatorEmail: requesterEmail,
+                memberEmail: memberEmail,
+                clubName: clubName,
                 type: "personal"
             }, {
                 $set: {
@@ -196,8 +196,8 @@ router.put('/', async (req, res) => {
             });
         } else {
             await db.collection('notes').updateOne({
-                member: memberEmail,
-                club: clubName,
+                memberEmail: memberEmail,
+                clubName: clubName,
                 type: type
             }, {
                 $set: {

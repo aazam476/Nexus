@@ -39,16 +39,16 @@ router.put('/:change', async (req, res) => {
             return res.status(403).json({error: 'Forbidden'});
         }
 
-        const name = req.body.currentName;
+        const currentName = req.body.currentName;
 
-        if (!name) {
+        if (!currentName) {
             logger.warn('No current name provided');
             return res.status(400).json({error: 'No current name provided'});
         }
 
-        const club = await db.collection('clubs').findOne({name});
+        const club = await db.collection('clubs').findOne({name: currentName});
         if (!club) {
-            logger.warn(`Club not found: ${name}`);
+            logger.warn(`Club not found: ${currentName}`);
             return res.status(404).json({error: 'Club not found'});
         }
 
@@ -70,7 +70,6 @@ router.put('/:change', async (req, res) => {
             }
 
             const user = await db.collection('users').findOne({email});
-
             if (!user) {
                 logger.warn(`User not found: ${email}`);
                 return res.status(404).json({error: 'User not found'});
@@ -91,16 +90,103 @@ router.put('/:change', async (req, res) => {
                     return res.status(400).json({error: `User is not a ${userTypeRequired}`});
                 }
 
-                if (type === 'student' && club.members.officers.includes(email)) {
-                    club.members.officers = club.members.officers.filter((officer: any) => officer !== email);
-                } else if (type === 'officer' && club.members.students.includes(email)) {
-                    club.members.students = club.members.students.filter((student: any) => student !== email);
-                }
+                if (type === 'student' || type === 'officer') {
+                    if (type === 'student' && club.members.students.includes(email)) {
+                        logger.info(`Updated club: ${currentName}, field: members`);
+                        return res.status(200).json();
+                    } else if (type === 'officer' && club.members.officers.includes(email)) {
+                        logger.info(`Updated club: ${currentName}, field: members`);
+                        return res.status(200).json();
+                    } else if (type === 'student' && club.members.officers.includes(email)) {
+                        club.members.officers = club.members.officers.filter((officer: any) => officer !== email);
 
-                club.members[type + "s"].push(email);
+                        await db.collection('notes').deleteMany({
+                            $or: [
+                                { creator: email },
+                                { member: email }
+                            ]
+                        });
+                    } else if (type === 'officer' && club.members.students.includes(email)) {
+                        club.members.students = club.members.students.filter((officer: any) => officer !== email);
+
+                        await db.collection('notes').deleteMany({
+                            $or: [
+                                { creator: email },
+                                { member: email }
+                            ]
+                        });
+                    }
+
+                    const noteTypes = ['admin', 'advisor', 'officer', 'student'];
+                    for (let noteType of noteTypes) {
+                        await db.collection('notes').insertOne({
+                            creatorEmail: null,
+                            memberEmail: email,
+                            clubName: currentName,
+                            type: noteType,
+                            note: ''
+                        });
+                    }
+
+                    const personalNoteEmails = [
+                        ...(await db.collection('users').find({type: 'admin'}).toArray()).map(admin => admin.email),
+                        ...club.members.advisors,
+                        ...club.members.officers,
+                        email
+                    ];
+
+                    for (let personalNoteEmail of personalNoteEmails) {
+                        await db.collection('notes').insertOne({
+                            creatorEmail: personalNoteEmail,
+                            memberEmail: email,
+                            clubName: currentName,
+                            type: 'personal',
+                            note: ''
+                        });
+                    }
+
+                    if (type === 'officer') {
+                        const studentEmails = club.members.students;
+
+                        for (let studentEmail of studentEmails) {
+                            await db.collection('notes').insertOne({
+                                creatorEmail: email,
+                                memberEmail: studentEmail,
+                                clubName: currentName,
+                                type: 'personal',
+                                note: ''
+                            });
+                        }
+                    }
+
+                    club.members[type + "s"].push(email);
+                } else {
+                    if (club.members.advisors.includes(email)) {
+                        logger.info(`Updated club: ${currentName}, field: members`);
+                        return res.status(200).json();
+                    }
+
+                    const personalNoteEmails = [
+                        ...club.members.students,
+                        ...club.members.officers
+                    ];
+
+                    for (let personalNoteEmail of personalNoteEmails) {
+                        await db.collection('notes').insertOne({
+                            creatorEmail: email,
+                            memberEmail: personalNoteEmail,
+                            clubName: currentName,
+                            type: 'personal',
+                            note: ''
+                        });
+                    }
+
+                    club.members.advisors.push(email);
+                }
             } else {
                 let memberTypes = ['students', 'officers', 'advisors'];
                 let found = false;
+
                 for (let memberType of memberTypes) {
                     if (club.members[memberType].includes(email)) {
                         club.members[memberType] = club.members[memberType].filter((member: any) => member !== email);
@@ -108,15 +194,23 @@ router.put('/:change', async (req, res) => {
                         break;
                     }
                 }
+
                 if (!found) {
                     logger.warn(`User not found in club: ${email}`);
                     return res.status(404).json({error: 'User not found in club'});
                 }
+
+                await db.collection('notes').deleteMany({
+                    $or: [
+                        { creator: email },
+                        { member: email }
+                    ]
+                });
             }
 
-            await db.collection('clubs').updateOne({name: name}, {$set: {members: club.members}});
+            await db.collection('clubs').updateOne({name: currentName}, {$set: {members: club.members}});
 
-            logger.info(`Updated club: ${name}, field: members`);
+            logger.info(`Updated club: ${currentName}, field: members`);
 
             return res.status(200).json();
         }
@@ -128,19 +222,51 @@ router.put('/:change', async (req, res) => {
         }
 
         if (change === 'name') {
-            const existingUser = await db.collection('clubs').findOne({name: value});
-            if (existingUser) {
-                logger.warn('Bad request: user with this email already exists');
-                return res.status(400).json({error: 'User with this email already exists'});
+            const existingClub = await db.collection('clubs').findOne({name: value});
+            if (existingClub) {
+                logger.warn('Bad request: club with this email already exists');
+                return res.status(400).json({error: 'Club with this email already exists'});
             }
-        }
 
-        await db.collection('clubs').updateOne({name: name}, {$set: {[change]: value}});
+            const users = await db.collection('users').find({
+                $or: [
+                    { 'clubsAttending': currentName },
+                    { 'clubsOfficer': currentName },
+                    { 'clubsAdvisor': currentName }
+                ]
+            }).toArray();
 
-        if (change === 'name') {
+            for (let user of users) {
+                user.clubsAttending = user.clubsAttending.map((club: any) => club === currentName ? value : club);
+                user.clubsOfficer = user.clubsOfficer.map((club: any) => club === currentName ? value : club);
+                user.clubsAdvisor = user.clubsAdvisor.map((club: any) => club === currentName ? value : club);
+
+                await db.collection('users').updateOne({email: user.email}, {
+                    $set: {
+                        clubsAttending: user.clubsAttending,
+                        clubsOfficer: user.clubsOfficer,
+                        clubsAdvisor: user.clubsAdvisor
+                    }
+                });
+            }
+
+            const notes = await db.collection('notes').find({clubName: currentName}).toArray();
+
+            for (let note of notes) {
+                note.club = value;
+
+                await db.collection('notes').updateOne({_id: note._id}, {
+                    $set: {
+                        clubName: note.club
+                    }
+                });
+            }
+
+            await db.collection('clubs').updateOne({name: currentName}, {$set: {[change]: value}});
+
             logger.info(`Updated club: ${value}, field: name`);
         } else {
-            logger.info(`Updated club: ${name}, field: ${change}`);
+            logger.info(`Updated club: ${currentName}, field: ${change}`);
         }
 
         res.status(200).json();
@@ -240,6 +366,8 @@ router.delete('/', async (req, res) => {
                 }
             });
         }
+
+        await db.collection('notes').deleteMany({clubName: name});
 
         await db.collection('clubs').deleteOne({name});
 

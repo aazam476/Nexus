@@ -59,29 +59,33 @@ router.put('/:change', async (req, res) => {
         }
 
         let change = req.params.change;
-        const allowedChanges = ['firstName', 'lastName', 'newEmail', 'type', 'schoolID'];
+        const allowedChanges = ['firstName', 'lastName', 'email', 'type', 'schoolID'];
 
         if (!allowedChanges.includes(change)) {
             logger.warn('Bad request: invalid field');
             return res.status(400).json({error: 'Invalid field'});
         }
 
-        const value = req.body[change];
+        const value = change !== 'email' ? req.body[change] : req.body.newEmail;
         if (!value) {
             logger.warn('Bad request: missing value');
             return res.status(400).json({error: 'Missing value'});
         }
 
-        if (change === 'newEmail') {
+        if (change === 'email') {
             const existingUser = await db.collection('users').findOne({email: value});
             if (existingUser) {
                 logger.warn('Bad request: user with this email already exists');
                 return res.status(400).json({error: 'User with this email already exists'});
             }
-            change = 'email';
         }
 
         if (change === 'type') {
+            if (value === user.type) {
+                logger.info(`Updated user: ${userEmail}, field: type`);
+                return res.status(200).json();
+            }
+
             const userTypes = {
                 'student': {type: value, clubsAttending: [], clubsOfficer: [], clubsAdvisor: null},
                 'teacher': {type: value, clubsAttending: null, clubsOfficer: null, clubsAdvisor: []},
@@ -93,14 +97,81 @@ router.put('/:change', async (req, res) => {
                 return res.status(400).json({error: 'Invalid user type'});
             }
 
-            await db.collection('users').updateOne({email: userEmail}, {$set: userTypes[value]});
-        } else {
-            await db.collection('users').updateOne({email: userEmail}, {$set: {[change]: value}});
-        }
+            const clubs = await db.collection('clubs').find({
+                $or: [
+                    { 'members.students': userEmail },
+                    { 'members.officers': userEmail },
+                    { 'members.advisors': userEmail }
+                ]
+            }).toArray();
 
-        if (change === 'email') {
+            for (let club of clubs) {
+                club.members.students = club.members.students.filter((member: any) => member !== userEmail);
+                club.members.officers = club.members.officers.filter((member: any) => member !== userEmail);
+                club.members.advisors = club.members.advisors.filter((member: any) => member !== userEmail);
+
+                await db.collection('clubs').updateOne({name: club.name}, {
+                    $set: {
+                        members: club.members
+                    }
+                });
+            }
+
+            await db.collection('notes').deleteMany({
+                $or: [
+                    { creatorEmail: userEmail },
+                    { memberEmail: userEmail }
+                ]
+            });
+
+            if (value === 'admin') {
+                const clubs = await db.collection('clubs').find().toArray();
+
+                for (let club of clubs) {
+                    for (let member of [...club.members.students, ...club.members.officers]) {
+                        const note = {
+                            creatorEmail: userEmail,
+                            memberEmail: member,
+                            clubName: club.name,
+                            type: "personal",
+                            note: ""
+                        };
+                        await db.collection('notes').insertOne(note);
+                    }
+                }
+            }
+
+            await db.collection('users').updateOne({email: userEmail}, {$set: userTypes[value]});
+
+            logger.info(`Updated user: ${userEmail}, field: type`);
+        } else if (change === 'email') {
+            await db.collection('clubs').updateMany(
+                { 'members.students': userEmail },
+                { $set: { 'members.students.$': value } }
+            );
+            await db.collection('clubs').updateMany(
+                { 'members.officers': userEmail },
+                { $set: { 'members.officers.$': value } }
+            );
+            await db.collection('clubs').updateMany(
+                { 'members.advisors': userEmail },
+                { $set: { 'members.advisors.$': value } }
+            );
+            await db.collection('notes').updateMany(
+                { creatorEmail: userEmail },
+                { $set: { creatorEmail: value } }
+            );
+            await db.collection('notes').updateMany(
+                { memberEmail: userEmail },
+                { $set: { memberEmail: value } }
+            );
+
+            await db.collection('users').updateOne({email: userEmail}, {$set: {email: value}});
+
             logger.info(`Updated user: ${value}, field: email`);
         } else {
+            await db.collection('users').updateOne({email: userEmail}, {$set: {[change]: value}});
+
             logger.info(`Updated user: ${userEmail}, field: ${change}`);
         }
 
@@ -155,6 +226,23 @@ router.post('/', async (req, res) => {
             clubsAdvisor
         });
 
+        if (type === 'admin') {
+            const clubs = await db.collection('clubs').find().toArray();
+
+            for (let club of clubs) {
+                for (let member of [...club.members.students, ...club.members.officers]) {
+                    const note = {
+                        creatorEmail: email,
+                        memberEmail: member.email,
+                        clubName: club.name,
+                        type: "personal",
+                        note: ""
+                    };
+                    await db.collection('notes').insertOne(note);
+                }
+            }
+        }
+
         logger.info(`Created new user: ${email}`);
         res.status(201).json();
     } catch (error) {
@@ -180,12 +268,40 @@ router.delete('/', async (req, res) => {
             return res.status(403).json({error: 'Forbidden'});
         }
 
-        const result = await db.collection('users').deleteOne({email: userEmail});
-
-        if (result.deletedCount === 0) {
+        const user = await db.collection('users').findOne({email: userEmail});
+        if (!user) {
             logger.warn(`User not found: ${userEmail}`);
             return res.status(404).json({error: 'User not found'});
         }
+
+        const clubs = await db.collection('clubs').find({
+            $or: [
+                { 'members.students': userEmail },
+                { 'members.officers': userEmail },
+                { 'members.advisors': userEmail }
+            ]
+        }).toArray();
+
+        for (let club of clubs) {
+            club.members.students = club.members.students.filter((member: any) => member !== userEmail);
+            club.members.officers = club.members.officers.filter((member: any) => member !== userEmail);
+            club.members.advisors = club.members.advisors.filter((member: any) => member !== userEmail);
+
+            await db.collection('clubs').updateOne({name: club.name}, {
+                $set: {
+                    members: club.members
+                }
+            });
+        }
+
+        await db.collection('notes').deleteMany({
+            $or: [
+                { creatorEmail: userEmail },
+                { memberEmail: userEmail }
+            ]
+        });
+
+        await db.collection('users').deleteOne({email: userEmail});
 
         logger.info(`Deleted user: ${userEmail}`);
         res.status(200).json();
