@@ -8,7 +8,7 @@ router.get('/', async (req, res) => {
     try {
         const db = await getDatabase();
         const requesterEmail = req["userEmail"];
-        const requesterUser = await db.collection('users').findOne({email: requesterEmail});
+        const requesterUser = req["requesterUser"];
         const userEmail = req.body.email;
 
         if (!userEmail) {
@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
             return res.status(400).json({error: 'Missing email'});
         }
 
-        if (!requesterUser || requesterUser.type !== 'admin' && requesterEmail !== userEmail) {
+        if (requesterUser.type !== 'admin' && requesterEmail !== userEmail) {
             logger.warn('Unauthorized access attempt');
             return res.status(403).json({error: 'Forbidden'});
         }
@@ -38,10 +38,9 @@ router.get('/', async (req, res) => {
 router.get('/all', async (req, res) => {
     try {
         const db = await getDatabase();
-        const requesterEmail = req["userEmail"];
-        const requesterUser = await db.collection('users').findOne({email: requesterEmail});
+        const requesterUser = req["requesterUser"];
 
-        if (!requesterUser || requesterUser.type !== 'admin') {
+        if (requesterUser.type !== 'admin') {
             logger.warn('Unauthorized access attempt');
             return res.status(403).json({error: 'Forbidden'});
         }
@@ -59,7 +58,7 @@ router.put('/:change', async (req, res) => {
     try {
         const db = await getDatabase();
         const requesterEmail = req["userEmail"];
-        const requesterUser = await db.collection('users').findOne({email: requesterEmail});
+        const requesterUser = req["requesterUser"];
         const userEmail = req.body.currentEmail;
 
         if (!userEmail) {
@@ -67,7 +66,7 @@ router.put('/:change', async (req, res) => {
             return res.status(400).json({error: 'Missing email'});
         }
 
-        if (!requesterUser || requesterUser.type !== 'admin' && requesterEmail !== userEmail) {
+        if (requesterUser.type !== 'admin' && requesterEmail !== userEmail) {
             logger.warn('Unauthorized access attempt');
             return res.status(403).json({error: 'Forbidden'});
         }
@@ -205,10 +204,9 @@ router.put('/:change', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const db = await getDatabase();
-        const requesterEmail = req["userEmail"];
-        const requesterUser = await db.collection('users').findOne({email: requesterEmail});
+        const requesterUser = req["requesterUser"];
 
-        if (!requesterUser || requesterUser.type !== 'admin') {
+        if (requesterUser.type !== 'admin') {
             logger.warn('Unauthorized access attempt');
             return res.status(403).json({error: 'Forbidden'});
         }
@@ -274,8 +272,7 @@ router.post('/', async (req, res) => {
 router.delete('/', async (req, res) => {
     try {
         const db = await getDatabase();
-        const requesterEmail = req["userEmail"];
-        const requesterUser = await db.collection('users').findOne({email: requesterEmail});
+        const requesterUser = req["requesterUser"];
         const userEmail = req.body.email;
 
         if (!userEmail) {
@@ -283,7 +280,7 @@ router.delete('/', async (req, res) => {
             return res.status(400).json({error: 'Missing email'});
         }
 
-        if (!requesterUser || requesterUser.type !== 'admin') {
+        if (requesterUser.type !== 'admin') {
             logger.warn('Unauthorized access attempt');
             return res.status(403).json({error: 'Forbidden'});
         }

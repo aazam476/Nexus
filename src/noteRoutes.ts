@@ -76,7 +76,9 @@ router.get('/', async (req, res) => {
             'student': ['admin', 'advisor', 'officer']
         };
 
-        if (!roleAccess[type].includes(requesterUser.type) && type === 'student' && requesterEmail !== memberEmail) {
+        if (type === 'personal' && requesterUser.type === 'student' && memberEmail !== requesterEmail ||
+            type === 'personal' && requesterUser.type === 'officer' && (memberEmail !== requesterEmail || club.members.students.includes(memberEmail)) ||
+            type !== 'personal' && !roleAccess[type].includes(requesterUser.type)) {
             logger.warn('Unauthorized access attempt');
             return res.status(403).json({error: 'Forbidden'});
         }
@@ -178,7 +180,9 @@ router.put('/', async (req, res) => {
             'student': ['admin', 'advisor', 'officer']
         };
 
-        if (!roleAccess[type].includes(requesterUser.type) && type === 'student' && requesterEmail !== memberEmail) {
+        if (type === 'personal' && requesterUser.type === 'student' && memberEmail !== requesterEmail ||
+            type === 'personal' && requesterUser.type === 'officer' && (memberEmail !== requesterEmail || club.members.students.includes(memberEmail)) ||
+            type !== 'personal' && !roleAccess[type].includes(requesterUser.type)) {
             logger.warn('Unauthorized access attempt');
             return res.status(403).json({error: 'Forbidden'});
         }
