@@ -1,0 +1,522 @@
+openapi: 3.0.0
+info:
+  title: Nexus
+  version: 1.0.0
+  description: A website where students and teachers alike can monitor school clubs
+paths:
+  /users:
+    get:
+      summary: Get a user
+      operationId: getUser
+      tags:
+        - Users
+      requestBody:
+        description: Email of the user to retrieve
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+      responses:
+        '200':
+          description: User retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Missing email
+        '403':
+          description: Forbidden
+        '404':
+          description: User not found
+        '500':
+          description: Internal Server Error
+    post:
+      summary: Create a new user
+      operationId: createUser
+      tags:
+        - Users
+      requestBody:
+        description: New user data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '201':
+          description: User created successfully
+        '400':
+          description: Missing or invalid fields
+        '403':
+          description: Forbidden
+        '500':
+          description: Internal Server Error
+
+    delete:
+      summary: Delete a user
+      operationId: deleteUser
+      tags:
+        - Users
+      requestBody:
+        description: Email of the user to delete
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+      responses:
+        '200':
+          description: User deleted successfully
+        '400':
+          description: Missing email
+        '403':
+          description: Forbidden
+        '404':
+          description: User not found
+        '500':
+          description: Internal Server Error
+
+  /users/all:
+    get:
+      summary: Get all users
+      operationId: getAllUsers
+      tags:
+        - Users
+      responses:
+        '200':
+          description: List of all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Forbidden
+        '500':
+          description: Internal Server Error
+
+  /users/{change}:
+    put:
+      summary: Update a user's information
+      operationId: updateUser
+      tags:
+        - Users
+      parameters:
+        - in: path
+          name: change
+          required: true
+          schema:
+            type: string
+            enum: [ firstName, lastName, email, type, schoolID ]
+      requestBody:
+        description: Fields to update
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - required:
+                  - currentEmail
+                  - firstName
+                  properties:
+                    currentEmail:
+                      type: string
+                    firstName:
+                      type: string
+                - required:
+                    - currentEmail
+                    - lastName
+                  properties:
+                    currentEmail:
+                      type: string
+                    lastName:
+                      type: string
+                - required:
+                    - currentEmail
+                    - newEmail
+                  properties:
+                    currentEmail:
+                      type: string
+                    newEmail:
+                      type: string
+                - required:
+                    - currentEmail
+                    - type
+                  properties:
+                      currentEmail:
+                          type: string
+                      type:
+                          type: string
+                          enum: [ student, teacher, admin ]
+                - required:
+                    - currentEmail
+                    - schoolID
+                  properties:
+                    currentEmail:
+                      type: string
+                    schoolID:
+                      type: string
+      responses:
+        '200':
+          description: User updated successfully
+        '400':
+          description: Missing or invalid fields
+        '403':
+          description: Forbidden
+        '404':
+          description: User not found
+        '500':
+          description: Internal Server Error
+
+  /clubs:
+    get:
+      summary: Get a club
+      operationId: getClubByName
+      tags:
+        - Clubs
+      requestBody:
+        description: Name of the club to retrieve
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          description: Club retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Club'
+        '400':
+          description: No name provided
+        '404':
+          description: Club not found
+        '500':
+          description: Internal Server Error
+    post:
+      summary: Create a new club
+      operationId: createClub
+      tags:
+        - Clubs
+      requestBody:
+        description: New club data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Club'
+      responses:
+        '201':
+          description: Club created successfully
+        '400':
+          description: Missing or invalid fields
+        '403':
+          description: Forbidden
+        '409':
+          description: Club already exists
+        '500':
+          description: Internal Server Error
+
+    delete:
+      summary: Delete a club
+      operationId: deleteClub
+      tags:
+        - Clubs
+      requestBody:
+        description: Name of the club to delete
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          description: Club deleted successfully
+        '400':
+          description: Missing name
+        '403':
+          description: Forbidden
+        '404':
+          description: Club not found
+        '500':
+          description: Internal Server Error
+
+  /clubs/all:
+    get:
+      summary: Get all clubs
+      operationId: getAllClubs
+      tags:
+        - Clubs
+      responses:
+        '200':
+          description: List of all clubs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Club'
+        '500':
+          description: Internal Server Error
+
+  /clubs/{change}:
+    put:
+      summary: Update a club's information
+      operationId: updateClub
+      tags:
+        - Clubs
+      parameters:
+        - in: path
+          name: change
+          required: true
+          schema:
+            type: string
+            enum: [ name, dates, picture, description, newMember, removeMember ]
+      requestBody:
+        description: Fields to update
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - required:
+                  - currentName
+                  - newName
+                  properties:
+                    currentName:
+                      type: string
+                    newName:
+                      type: string
+                - required:
+                  - currentName
+                  - dates
+                  properties:
+                    currentName:
+                      type: string
+                    dates:
+                      type: array
+                    items:
+                      type: string
+                - required:
+                  - currentName
+                  - picture
+                  properties:
+                    currentName:
+                      type: string
+                    picture:
+                      type: string
+                - required:
+                  - currentName
+                  - description
+                  properties:
+                      currentName:
+                        type: string
+                      description:
+                        type: string
+                - required:
+                  - currentName
+                  - email
+                  - type
+                  properties:
+                    currentName:
+                      type: string
+                    email:
+                      type: string
+                    type:
+                        type: string
+                        enum: [ student, officer, advisor ]
+                - required:
+                  - currentName
+                  - email
+                  properties:
+                    currentName:
+                      type: string
+                    email:
+                      type: string
+              properties:
+                currentName:
+                  type: string
+                newName:
+                  type: string
+                dates:
+                  type: array
+                  items:
+                    type: string
+                picture:
+                  type: string
+                description:
+                  type: string
+                type:
+                  type: string
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Club updated successfully
+        '400':
+          description: Missing or invalid fields
+        '403':
+          description: Forbidden
+        '404':
+          description: Club or user not found
+        '500':
+          description: Internal Server Error
+
+  /notes:
+    get:
+      summary: Get a note
+      operationId: getNote
+      tags:
+        - Notes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+      responses:
+        '200':
+          description: Note retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          description: Bad Request
+        '403':
+          description: Forbidden
+        '404':
+          description: Note not found
+        '500':
+          description: Internal Server Error
+    put:
+      summary: Update a note's information
+      operationId: updateNote
+      tags:
+        - Notes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModifyNote'
+      responses:
+        '200':
+          description: Note modified
+        '400':
+          description: Bad Request
+        '403':
+          description: Forbidden
+        '404':
+          description: Note not found
+        '500':
+          description: Internal Server Error
+
+components:
+  schemas:
+    User:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - email
+        - type
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        type:
+          type: string
+          enum: [ student, teacher, admin ]
+        schoolID:
+          type: string
+
+    Club:
+      type: object
+      required:
+        - name
+        - dates
+      properties:
+        name:
+          type: string
+        dates:
+          type: array
+          items:
+            type: string
+        picture:
+          type: string
+        description:
+          type: string
+
+    Note:
+      type: object
+      properties:
+        creatorEmail:
+          type: string
+        memberEmail:
+          type: string
+        clubName:
+          type: string
+        type:
+          type: string
+        note:
+          type: string
+    NoteRequest:
+      type: object
+      required:
+        - memberEmail
+        - clubName
+        - type
+      properties:
+        memberEmail:
+          type: string
+        clubName:
+          type: string
+        type:
+          type: string
+    ModifyNote:
+      type: object
+      required:
+        - memberEmail
+        - clubName
+        - type
+        - note
+      properties:
+        memberEmail:
+          type: string
+        clubName:
+          type: string
+        type:
+          type: string
+        note:
+          type: string
+
+security:
+  - bearerAuth: []
