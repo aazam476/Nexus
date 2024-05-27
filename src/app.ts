@@ -5,6 +5,7 @@ import http from 'http';
 import logger from './logger';
 import {closeDBConnection, establishDBConnection} from "./dbConnection";
 import {establishFirebaseConnection, firebaseMiddleware} from "./firebaseConnection";
+import authMiddleware from "./authMiddleware";
 import userRoutes from "./userRoutes";
 import clubRoutes from "./clubRoutes";
 import noteRoutes from "./noteRoutes";
@@ -27,6 +28,7 @@ async function startServer() {
 
     app.use(express.json());
     app.use(firebaseMiddleware);
+    app.use(authMiddleware);
 
     app.use('/users', userRoutes);
     app.use('/clubs', clubRoutes);

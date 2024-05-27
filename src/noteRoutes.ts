@@ -9,12 +9,7 @@ router.get('/', async (req, res) => {
     try {
         const db = await getDatabase();
         const requesterEmail = req["userEmail"];
-        const requesterUser = await db.collection('users').findOne({email: requesterEmail});
-
-        if (!requesterUser) {
-            logger.warn('Unauthorized access attempt');
-            return res.status(403).json({error: 'Forbidden'});
-        }
+        const requesterUser = req["requesterUser"];
 
         const {
             memberEmail,
@@ -112,12 +107,7 @@ router.put('/', async (req, res) => {
     try {
         const db = await getDatabase();
         const requesterEmail = req["userEmail"];
-        const requesterUser = await db.collection('users').findOne({email: requesterEmail});
-
-        if (!requesterUser) {
-            logger.warn('Unauthorized access attempt');
-            return res.status(403).json({error: 'Forbidden'});
-        }
+        const requesterUser = req["requesterUser"];
 
         const {
             memberEmail,
