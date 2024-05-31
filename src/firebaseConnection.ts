@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 
 // @ts-ignore
 import * as serviceAccount from '/usr/src/app/dist/firebaseServiceAccountKey.json';
+import logger from "./logger";
 
 async function establishFirebaseConnection() {
     if (!admin.apps.length) {
@@ -23,6 +24,7 @@ const firebaseMiddleware = async (req: any, res: any, next: any) => {
         req["userEmail"] = user.email;
     } catch (error) {
         if (error.code === 'auth/id-token-expired' || error.code === 'auth/argument-error') {
+            logger.warn('Invalid firebase token');
             return res.status(401).json();
         } else {
             throw error;
