@@ -2,22 +2,30 @@
 import type { Prisma } from '@prisma/client'
 import { db } from '../../db.ts'
 import type { ParsedMessage } from './parse.ts'
+import { sealedFields } from './private.ts'
 import { applyRules, classify, isSpam, type Category, type RuleInput } from './sorting.ts'
 
 export interface SortingContext {
   rules: RuleInput[]
   blocked: string[]
   spamThreshold: number
+  sealFor: string | null // the owner's public key when they use private storage
 }
 
 // Loaded once per sync run, not once per message.
 export async function loadSortingContext(userId: string): Promise<SortingContext> {
-  const [rules, blocked, preference] = await Promise.all([
+  const [rules, blocked, preference, user] = await Promise.all([
     db.rule.findMany({ where: { userId }, orderBy: { position: 'asc' } }),
     db.blockedSender.findMany({ where: { userId } }),
     db.preference.findUnique({ where: { userId } }),
+    db.user.findUnique({ where: { id: userId }, select: { privateStorage: true, storagePublicKey: true } }),
   ])
-  return { rules, blocked: blocked.map((b) => b.pattern), spamThreshold: preference?.spamThreshold ?? 5 }
+  return {
+    rules,
+    blocked: blocked.map((b) => b.pattern),
+    spamThreshold: preference?.spamThreshold ?? 5,
+    sealFor: user?.privateStorage ? user.storagePublicKey : null,
+  }
 }
 
 export interface SortDecision {
@@ -53,6 +61,7 @@ interface SaveInput {
   starred: boolean
   category: Category
   labels: string[]
+  sealFor?: string | null // seal before writing, so no readable copy ever reaches the database
 }
 
 // Inserts the message; returns false if it was already stored (same folder + UID, or same POP3 id).
@@ -81,6 +90,7 @@ export async function saveMessage(input: SaveInput): Promise<boolean> {
     security: parsed.security,
     event: (parsed.event ?? undefined) as Prisma.InputJsonValue | undefined,
     raw: Uint8Array.from(input.raw),
+    ...(input.sealFor && sealedFields({ raw: input.raw, html: parsed.html, text: parsed.text, preview: parsed.preview, attachments: parsed.attachments, event: parsed.event }, input.sealFor)),
   }
   try {
     await db.message.create({ data })

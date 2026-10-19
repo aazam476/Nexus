@@ -10,6 +10,7 @@ export interface Me {
   email: string
   role: 'admin' | 'user'
   totpEnabled: boolean
+  privateStorage: boolean
   recoveryCodesLeft: number
   preferences: { theme: 'system' | 'dark' | 'light'; layout: 'three-pane' | 'list'; spamThreshold: number }
 }

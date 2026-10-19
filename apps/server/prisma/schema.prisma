@@ -22,6 +22,10 @@ model User {
   totpSecret    String? // encrypted
   totpEnabled   Boolean  @default(false)
   recoveryCodes String[] // sha256 hashes, removed once used
+  // Private storage (see src/lib/sealed.ts). Keys are kept after it is turned off, so nothing becomes unreadable.
+  privateStorage    Boolean @default(false)
+  storagePublicKey  String?
+  storagePrivateKey String? // locked with the user's password
   createdAt     DateTime @default(now())
 
   sessions       Session[]
@@ -43,6 +47,7 @@ model Session {
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pending2fa Boolean  @default(false) // password checked, TOTP code not yet
+  storageKey String? // the user's private-storage key, locked with this session's cookie token
   userAgent  String?
   ip         String?
   createdAt  DateTime @default(now())
@@ -132,7 +137,10 @@ model Message {
   attachments Json // [{ id, filename, contentType, size }]; content stays in `raw`
   security    String?
   event       Json?
-  raw         Bytes // the full original message
+  raw         Bytes // the full original message (empty when sealed)
+  // Private storage: when set, raw/html/text/preview/attachments/event are inside these instead.
+  sealedSummary Bytes? // preview, attachments, event: small, opened for every list row
+  sealedBody    Bytes? // raw, html, text: opened only when the message is read
   createdAt   DateTime @default(now())
 
   // Full-text search: Postgres keeps this up to date from subject, sender and text (see the init migration).

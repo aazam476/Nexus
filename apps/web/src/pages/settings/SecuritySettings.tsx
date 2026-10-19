@@ -27,6 +27,7 @@ export function SecuritySettings() {
     <>
       <PasswordCard />
       <TwoFactorCard />
+      <PrivateStorageCard />
       <SessionsCard />
     </>
   )
@@ -162,6 +163,62 @@ function SessionsCard() {
           )
         })}
       </ul>
+    </Card>
+  )
+}
+
+function PrivateStorageCard() {
+  const me = useMe().data
+  const client = useQueryClient()
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const turningOn = !me?.privateStorage
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api('/auth/private-storage', { body: { enabled: turningOn, password: new FormData(event.currentTarget).get('password') } })
+      setAsking(false)
+      client.invalidateQueries()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card
+      title="Private storage"
+      description="Encrypt your mail in Nexus’s database with a key only your password unlocks. Backups, database dumps and other admins can’t read it."
+      actions={<Chip color={me?.privateStorage ? 'var(--news)' : 'var(--muted)'}>{me?.privateStorage ? 'On' : 'Off'}</Chip>}
+    >
+      <div className="grid gap-4">
+        {turningOn && (
+          <ul className="grid list-disc gap-1 pl-5 text-[13px] text-ink-2">
+            <li>Search finds sender and subject, not words inside messages.</li>
+            <li>Plugins and attachment saving work only while you’re signed in.</li>
+            <li>Forget your password and Nexus can’t read its copy: remove and re-add the account to download it again.</li>
+            <li>Not for POP3 accounts or accounts you share with others.</li>
+            <li>Drafts and scheduled messages stay unencrypted until they’re sent.</li>
+          </ul>
+        )}
+        {asking ? (
+          <form className="flex max-w-md flex-wrap items-end gap-2" onSubmit={submit}>
+            <div className="min-w-0 flex-1"><Field label="Confirm with your password"><Input name="password" type="password" autoComplete="current-password" required autoFocus /></Field></div>
+            <Button type="submit" variant={turningOn ? 'primary' : 'danger'} disabled={busy}>{busy ? (turningOn ? 'Encrypting mail…' : 'Decrypting mail…') : turningOn ? 'Turn on' : 'Turn off'}</Button>
+            <Button variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
+          </form>
+        ) : (
+          <Button variant={turningOn ? 'primary' : 'secondary'} className="justify-self-start" onClick={() => setAsking(true)}>
+            {turningOn ? 'Turn on private storage' : 'Turn off'}
+          </Button>
+        )}
+        {error && <p role="alert" className="text-[13px] text-danger">{error}</p>}
+      </div>
     </Card>
   )
 }

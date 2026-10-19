@@ -1,4 +1,5 @@
 // Reading and organising mail.
+import type { KeyObject } from 'node:crypto'
 import type { Folder, Message, OutgoingMessage, Prisma } from '@prisma/client'
 import type { FastifyInstance } from 'fastify'
 import { simpleParser } from 'mailparser'
@@ -7,7 +8,8 @@ import { db } from '../../db.ts'
 import { accessibleAccounts, requireMessage } from '../../lib/access.ts'
 import { decrypt as decryptSecret } from '../../lib/crypto.ts'
 import { notFound, parse } from '../../lib/http.ts'
-import { requireUser } from '../../lib/session.ts'
+import { requireUser, storageKey } from '../../lib/session.ts'
+import { openBody, openSummary } from './private.ts'
 import { toIcs } from '../../plugins/nextcloud.ts'
 import * as smime from '../send/smime.ts'
 import { deleteMessage, moveMessage, setFlags } from './actions.ts'
@@ -16,7 +18,8 @@ import { parseRaw } from './parse.ts'
 const FOLDERS = ['inbox', 'starred', 'scheduled', 'drafts', 'sent', 'archive', 'spam', 'trash'] as const
 
 // The shape the web app works with (see apps/web/src/types.ts).
-function toRow(message: Omit<Message, 'raw' | 'html' | 'text'> & { folder: Folder }) {
+function toRow(message: Omit<Message, 'raw' | 'html' | 'text' | 'sealedBody'> & { folder: Folder }, key: KeyObject | null) {
+  const summary = openSummary(message, key)
   return {
     id: message.id,
     accountId: message.accountId,
@@ -26,14 +29,14 @@ function toRow(message: Omit<Message, 'raw' | 'html' | 'text'> & { folder: Folde
     to: message.to,
     cc: message.cc,
     subject: message.subject,
-    preview: message.preview,
+    preview: summary.preview,
     date: message.date,
     unread: message.unread,
     starred: message.starred,
     labels: message.labels,
-    attachments: message.attachments,
+    attachments: summary.attachments,
     security: message.security,
-    event: message.event,
+    event: summary.event,
   }
 }
 
@@ -131,11 +134,12 @@ export async function mailRoutes(app: FastifyInstance) {
     const messages = await db.message.findMany({
       where,
       include: { folder: true },
-      omit: { raw: true, html: true, text: true },
+      omit: { raw: true, html: true, text: true, sealedBody: true },
       orderBy: { date: 'desc' },
       take: 200,
     })
-    const rows = messages.map(toRow)
+    const key = await storageKey(request)
+    const rows = messages.map((m) => toRow(m, key))
     // Drafts written in Nexus, plus drafts other mail apps saved to the server's Drafts folder.
     return query.folder === 'drafts' && !query.q ? [...(await outgoing('draft')), ...rows] : rows
   })
@@ -145,17 +149,19 @@ export async function mailRoutes(app: FastifyInstance) {
     if (outgoing) return outgoingToRow(outgoing, { name: request.user.name, email: request.user.email })
 
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
-    const detail = { ...toRow(message), messageId: message.messageId, html: message.html, text: message.text, signature: undefined as string | undefined }
+    const key = await storageKey(request)
+    const body = openBody(message, key)
+    const detail = { ...toRow(message, key), messageId: message.messageId, html: body.html, text: body.text, signature: undefined as string | undefined }
 
     if (message.security === 'smime-encrypted') {
       const cert = await db.smimeCert.findFirst({ where: { userId: request.user.id }, orderBy: { createdAt: 'desc' } })
       if (cert) {
-        const inner = await parseRaw(await smime.decrypt(Buffer.from(message.raw), cert.certPem, decryptSecret(cert.keyPem))).catch(() => null)
+        const inner = await parseRaw(await smime.decrypt(body.raw, cert.certPem, decryptSecret(cert.keyPem))).catch(() => null)
         if (inner) Object.assign(detail, { html: inner.html, text: inner.text, attachments: inner.attachments })
       }
     }
     if (message.security === 'smime-signed') {
-      const result = await smime.verify(Buffer.from(message.raw))
+      const result = await smime.verify(body.raw)
       detail.signature = result.status
       // Keep the sender's certificate so you can send them encrypted mail later. Self-signed certificates
       // are common on home servers, so intact-but-untrusted ones are kept too; the UI says which it is.
@@ -200,7 +206,7 @@ export async function mailRoutes(app: FastifyInstance) {
   // Attachments are cut out of the stored raw message on demand.
   app.get<{ Params: { id: string; attachmentId: string }; Querystring: { download?: string } }>('/messages/:id/attachments/:attachmentId', async (request, reply) => {
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
-    const mail = await simpleParser(Buffer.from(message.raw))
+    const mail = await simpleParser(openBody(message, await storageKey(request)).raw)
     const file = mail.attachments[Number(request.params.attachmentId)]
     if (!file) throw notFound('Attachment')
 
@@ -219,13 +225,14 @@ export async function mailRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>('/messages/:id/raw', async (request, reply) => {
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
-    return reply.header('content-type', 'message/rfc822').header('content-disposition', `attachment; filename="message-${message.id}.eml"`).send(message.raw)
+    return reply.header('content-type', 'message/rfc822').header('content-disposition', `attachment; filename="message-${message.id}.eml"`).send(openBody(message, await storageKey(request)).raw)
   })
 
   app.get<{ Params: { id: string } }>('/messages/:id/event.ics', async (request, reply) => {
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
-    if (!message.event) throw notFound('Event')
-    return reply.header('content-type', 'text/calendar; charset=utf-8').header('content-disposition', 'attachment; filename="event.ics"').send(toIcs(message.event as never, `${message.id}@nexus`))
+    const { event } = openSummary(message, await storageKey(request))
+    if (!event) throw notFound('Event')
+    return reply.header('content-type', 'text/calendar; charset=utf-8').header('content-disposition', 'attachment; filename="event.ics"').send(toIcs(event, `${message.id}@nexus`))
   })
 }
 

@@ -111,6 +111,8 @@ export function MessageView({ summary, readOnly, onBack, onRefresh, actions }: P
 
           {detail.isLoading ? (
             <p className="text-muted" aria-busy="true">Loading message…</p>
+          ) : detail.error ? (
+            <p role="alert" className="rounded-xl border border-line bg-raise px-4 py-3 text-ink-2">{detail.error.message}</p>
           ) : message.security === 'pgp-encrypted' ? (
             <EncryptedBody message={message} />
           ) : (

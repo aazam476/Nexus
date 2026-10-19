@@ -8,7 +8,9 @@ import { config } from '../../config.ts'
 import { db } from '../../db.ts'
 import { decrypt, encrypt, hashPassword, randomToken, sha256, verifyPassword } from '../../lib/crypto.ts'
 import { HttpError, badRequest, forbidden, parse } from '../../lib/http.ts'
-import { endSession, findSession, requireUser, startSession } from '../../lib/session.ts'
+import { lockWithPassword, newStorageKeys, unlockWithPassword, unlockWithToken } from '../../lib/sealed.ts'
+import { endSession, findSession, requireUser, sessionToken, setSessionStorageKey, startSession } from '../../lib/session.ts'
+import { sealAccounts, unsealAccounts } from '../mail/private.ts'
 
 // Accept the code before and after the current one: phone clocks drift and people type slowly.
 // shortcut: a code can be reused within its 30s window; store the last used step per user if that matters.
@@ -47,7 +49,9 @@ export async function authRoutes(app: FastifyInstance) {
     const valid = await verifyPassword(body.password, user?.passwordHash ?? (await dummyHash))
     if (!user || !valid) throw new HttpError(401, 'Wrong email or password')
 
-    await startSession(request, reply, user.id, user.totpEnabled)
+    // Private storage: the password is in hand only now, so unlock the key and hand it to the session.
+    const key = user.storagePrivateKey ? await unlockWithPassword(user.storagePrivateKey, body.password) : undefined
+    await startSession(request, reply, user.id, user.totpEnabled, key)
     return { twoFactorRequired: user.totpEnabled }
   })
 
@@ -71,8 +75,9 @@ export async function authRoutes(app: FastifyInstance) {
     if (!ok) throw new HttpError(401, 'That code is not valid')
 
     // Swap the half-signed-in session for a fresh one, so the old token is worthless.
+    const key = session.storageKey ? await unlockWithToken(session.storageKey, sessionToken(request)!) : undefined
     await db.session.delete({ where: { id: session.id } })
-    await startSession(request, reply, user.id, false)
+    await startSession(request, reply, user.id, false, key)
     return { ok: true }
   })
 
@@ -94,6 +99,7 @@ export async function authRoutes(app: FastifyInstance) {
         email: user.email,
         role: user.role,
         totpEnabled: user.totpEnabled,
+        privateStorage: user.privateStorage,
         recoveryCodesLeft: user.recoveryCodes.length,
         preferences: user.preference ?? { theme: 'system', layout: 'three-pane', spamThreshold: 5 },
       }
@@ -115,7 +121,9 @@ export async function authRoutes(app: FastifyInstance) {
       const body = parse(z.object({ current: z.string(), next: password }), request.body)
       const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
       if (!(await verifyPassword(body.current, user.passwordHash))) throw badRequest('Your current password is wrong')
-      await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(body.next) } })
+      // The private-storage key is locked with the password, so lock it again with the new one.
+      const storagePrivateKey = user.storagePrivateKey ? await lockWithPassword(await unlockWithPassword(user.storagePrivateKey, body.current), body.next) : undefined
+      await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(body.next), storagePrivateKey } })
       // Sign out every other device.
       await db.session.deleteMany({ where: { userId: user.id, NOT: { id: request.sessionId } } })
       return { ok: true }
@@ -152,6 +160,40 @@ export async function authRoutes(app: FastifyInstance) {
       if (!(await verifyPassword(current, user.passwordHash))) throw badRequest('Wrong password')
       if (!user.totpEnabled) throw badRequest('Turn on two-factor authentication first')
       return { recoveryCodes: await newRecoveryCodes(user.id) }
+    })
+
+    // Private storage on or off. See lib/sealed.ts and the README for what it does and doesn't protect.
+    signedIn.post('/private-storage', strict, async (request) => {
+      const body = parse(z.object({ enabled: z.boolean(), password: z.string() }), request.body)
+      const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
+      if (!(await verifyPassword(body.password, user.passwordHash))) throw badRequest('Wrong password')
+      const owned = await db.account.findMany({ where: { ownerId: user.id }, include: { _count: { select: { members: true } } } })
+      const accountIds = owned.map((a) => a.id)
+
+      if (body.enabled) {
+        const pop3 = owned.filter((a) => a.protocol === 'pop3').map((a) => a.email)
+        if (pop3.length) throw badRequest(`POP3 accounts can't use private storage, because Nexus holds the only copy of their mail: ${pop3.join(', ')}`)
+        const shared = owned.filter((a) => a._count.members > 0).map((a) => a.email)
+        if (shared.length) throw badRequest(`Stop sharing ${shared.join(', ')} first. People you share with couldn't read private mail.`)
+
+        // Reuse the old key if private storage was on before, so mail sealed back then still opens.
+        const keys = user.storagePrivateKey
+          ? { privateKey: await unlockWithPassword(user.storagePrivateKey, body.password), publicKey: user.storagePublicKey! }
+          : newStorageKeys()
+        await db.user.update({
+          where: { id: user.id },
+          data: { privateStorage: true, storagePublicKey: keys.publicKey, storagePrivateKey: await lockWithPassword(keys.privateKey, body.password) },
+        })
+        await setSessionStorageKey(request, keys.privateKey)
+        // shortcut: seals the whole mailbox inside this request; move it to the job queue if mailboxes get huge.
+        await sealAccounts(accountIds, keys.publicKey)
+      } else {
+        if (!user.storagePrivateKey) return { ok: true }
+        // Keys are kept: mail a running sync seals right now must still open later.
+        await db.user.update({ where: { id: user.id }, data: { privateStorage: false } })
+        await unsealAccounts(accountIds, await unlockWithPassword(user.storagePrivateKey, body.password))
+      }
+      return { ok: true }
     })
 
     signedIn.get('/sessions', async (request) => {

@@ -93,6 +93,9 @@ export async function accountRoutes(app: FastifyInstance) {
         }),
         request.body,
       )
+      if (body.protocol === 'pop3' && (await usesPrivateStorage(request.user.id))) {
+        throw badRequest('POP3 accounts can’t be added while private storage is on, because Nexus would hold the only copy of their mail.')
+      }
       const settings = { ...body, id: 'new', auth: 'password', secret: encrypt(body.password) }
       await testConnection(settings).catch((error: Error) => {
         throw badRequest(`Could not connect: ${error.message}`)
@@ -157,6 +160,7 @@ export async function accountRoutes(app: FastifyInstance) {
       await requireAccountRole(request.user.id, request.params.id, 'owner')
       const { userId, role } = parse(z.object({ userId: z.string(), role: z.enum(['editor', 'viewer']) }), request.body)
       if (userId === request.user.id) throw badRequest('You already own this account')
+      if (await usesPrivateStorage(request.user.id)) throw badRequest('Accounts can’t be shared while private storage is on: other people couldn’t read the mail.')
       await db.accountMember.upsert({
         where: { accountId_userId: { accountId: request.params.id, userId } },
         create: { accountId: request.params.id, userId, role },
@@ -172,3 +176,5 @@ export async function accountRoutes(app: FastifyInstance) {
     })
   })
 }
+
+const usesPrivateStorage = async (userId: string) => (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { privateStorage: true } })).privateStorage

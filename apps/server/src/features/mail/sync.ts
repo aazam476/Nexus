@@ -5,6 +5,7 @@ import type { ImapFlow, ListResponse } from 'imapflow'
 import { db } from '../../db.ts'
 import { openPop3, pop3Retrieve, withImap } from '../accounts/connect.ts'
 import { parseRaw } from './parse.ts'
+import { sealAccounts } from './private.ts'
 import { classify } from './sorting.ts'
 import { loadSortingContext, saveMessage, sortIncoming, type SortingContext } from './store.ts'
 
@@ -19,6 +20,8 @@ export async function syncAccount(accountId: string) {
     const context = await loadSortingContext(account.ownerId)
     if (account.protocol === 'imap') await syncImap(account, context)
     else await syncPop3(account, context)
+    // Catch mail a sync stored just before private storage was turned on.
+    if (context.sealFor) await sealAccounts([account.id], context.sealFor)
     await db.account.update({ where: { id: account.id }, data: { lastSyncAt: new Date(), syncError: null } })
   } catch (error) {
     await db.account.update({ where: { id: account.id }, data: { syncError: (error as Error).message } })
@@ -121,7 +124,7 @@ async function syncFolder(client: ImapFlow, account: Account, folder: Folder, fo
         labels = decision.labels
       }
 
-      await saveMessage({ accountId: account.id, folderId: folder.id, raw: message.source, parsed, uid, unread, starred: flags.has('\\Flagged'), category, labels })
+      await saveMessage({ accountId: account.id, folderId: folder.id, raw: message.source, parsed, uid, unread, starred: flags.has('\\Flagged'), category, labels, sealFor: context.sealFor })
     }
 
     // 2. Bring flags and deletions made in other mail apps into Nexus.

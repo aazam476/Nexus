@@ -33,6 +33,28 @@ Put Nexus behind HTTPS (a reverse proxy like Caddy or Traefik) before using it o
 
 Create an OAuth app with Google and/or Microsoft, set its redirect URL to `PUBLIC_URL/api/oauth/google/callback` (or `/microsoft/callback`), and put the client ID and secret in `.env`. Without them, those buttons explain what's missing; IMAP with an app password still works.
 
+### Encrypt the host disk
+
+Nexus keeps a copy of your mail in its database. Put that data on an encrypted disk, so a stolen or thrown-away disk (or a powered-off machine) gives away nothing:
+
+- **Linux:** install the host with full-disk encryption (LUKS, the "encrypt disk" option in most installers), or keep Docker's data directory (`/var/lib/docker`) on an encrypted volume or encrypted ZFS dataset.
+- **NAS appliances** (Synology, TrueNAS, Unraid): create an encrypted volume or pool and point Docker at it.
+
+This protects data at rest. It does not stop someone who gets into the running server; for your own mail, also turn on **Private storage** (below).
+
+### Private storage
+
+Each user can turn on **Settings → Password & 2FA → Private storage**. New and existing mail in Nexus's database is then encrypted with a key that only that user's password unlocks: a database dump, a backup, or another admin on the server can't read it.
+
+Good to know before turning it on:
+
+- Search covers sender and subject only, because Nexus can no longer read message bodies.
+- Plugins and attachment saving work only while you're signed in.
+- If you forget your password, Nexus can't read its copy any more; remove and re-add the account to download the mail again from your provider.
+- POP3 accounts and accounts shared with other users can't use it (POP3 mail exists only in Nexus, so a lost password would lose it).
+- Drafts and scheduled messages are stored unencrypted until they're sent, because scheduled mail must go out while you're signed out.
+- Someone who controls the running server can still capture your password the next time you sign in, and Nexus stores your mail-account password so it can sync. Private storage protects stored data, not a compromised server.
+
 ## Develop
 
 You need Node 24 or newer and Docker.

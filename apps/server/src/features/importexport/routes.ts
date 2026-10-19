@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { db } from '../../db.ts'
 import { accessibleAccounts, requireAccountRole } from '../../lib/access.ts'
 import { badRequest, parse } from '../../lib/http.ts'
-import { requireUser } from '../../lib/session.ts'
+import { requireUser, storageKey } from '../../lib/session.ts'
+import { openBody } from '../mail/private.ts'
 import { withImap } from '../accounts/connect.ts'
 import { parseRaw } from '../mail/parse.ts'
 import { classify } from '../mail/sorting.ts'
@@ -57,15 +58,16 @@ export async function importExportRoutes(app: FastifyInstance) {
     const query = parse(z.object({ account: z.string().optional(), folder: z.enum(['inbox', 'sent', 'archive', 'spam', 'trash']).optional() }), request.query)
     let accountIds = (await accessibleAccounts(request.user.id)).map((a) => a.account.id)
     if (query.account) accountIds = accountIds.filter((id) => id === query.account)
+    const key = await storageKey(request)
     // shortcut: builds the whole file in memory; stream it if people export mailboxes larger than a few GB.
     const messages = await db.message.findMany({
       where: { accountId: { in: accountIds }, ...(query.folder && { folder: { role: query.folder } }) },
-      select: { raw: true, fromEmail: true, date: true },
+      select: { raw: true, html: true, text: true, sealedBody: true, fromEmail: true, date: true },
       orderBy: { date: 'asc' },
     })
     return reply
       .header('content-type', 'application/mbox')
       .header('content-disposition', `attachment; filename="nexus-${query.folder ?? 'all'}.mbox"`)
-      .send(toMbox(messages.map((m) => ({ ...m, raw: Buffer.from(m.raw) }))))
+      .send(toMbox(messages.map((m) => ({ fromEmail: m.fromEmail, date: m.date, raw: openBody(m, key).raw }))))
   })
 }
