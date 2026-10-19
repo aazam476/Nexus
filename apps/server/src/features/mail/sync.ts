@@ -43,7 +43,7 @@ async function syncImap(account: Account, context: SortingContext) {
 }
 
 const specialUse: Record<string, (typeof ROLES)[number]> = {
-  '\\Inbox': 'inbox', '\\Sent': 'sent', '\\Drafts': 'drafts', '\\Archive': 'archive', '\\All': 'archive', '\\Junk': 'spam', '\\Trash': 'trash',
+  '\\Inbox': 'inbox', '\\Sent': 'sent', '\\Drafts': 'drafts', '\\Archive': 'archive', '\\Junk': 'spam', '\\Trash': 'trash',
 }
 const byName: [RegExp, (typeof ROLES)[number]][] = [
   [/^inbox$/i, 'inbox'], [/^sent/i, 'sent'], [/^drafts?$/i, 'drafts'], [/^archive/i, 'archive'], [/junk|spam/i, 'spam'], [/trash|deleted/i, 'trash'],

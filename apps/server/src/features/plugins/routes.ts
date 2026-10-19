@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { simpleParser } from 'mailparser'
 import { z } from 'zod'
 import { db } from '../../db.ts'
-import { requireMessage } from '../../lib/access.ts'
+import { loadBody, requireMessage } from '../../lib/access.ts'
 import { decrypt, encrypt } from '../../lib/crypto.ts'
 import { HttpError, badRequest, notFound, parse } from '../../lib/http.ts'
 import { requireUser, storageKey } from '../../lib/session.ts'
@@ -90,7 +90,7 @@ export async function pluginRoutes(app: FastifyInstance) {
     const { plugin, settings } = await enabledPlugin(request.user.id, request.params.id)
     if (!plugin.saveAttachment) throw badRequest(`${plugin.name} can't save attachments`)
     const message = await requireMessage(request.user.id, messageId, 'viewer')
-    const file = (await simpleParser(openBody(message, await storageKey(request)).raw)).attachments[Number(attachmentId)]
+    const file = (await simpleParser(openBody(await loadBody(message.id), await storageKey(request)).raw)).attachments[Number(attachmentId)]
     if (!file) throw notFound('Attachment')
     return runPlugin(plugin.name, () =>
       plugin.saveAttachment!({ filename: file.filename ?? 'attachment', contentType: file.contentType, content: file.content }, settings),

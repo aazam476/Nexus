@@ -60,6 +60,8 @@ export async function accountRoutes(app: FastifyInstance) {
     signedIn.get('/oauth/:provider/start', async (request) => {
       const { provider } = request.params as { provider: string }
       const state = randomToken()
+      // Drop sign-ins nobody finished, so the map can't grow forever.
+      for (const [old, pending] of pendingOAuth) if (pending.expires < Date.now()) pendingOAuth.delete(old)
       pendingOAuth.set(state, { userId: request.user.id, expires: Date.now() + 10 * 60_000 })
       return { url: authorizeUrl(provider, state) }
     })

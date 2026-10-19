@@ -12,6 +12,8 @@ import { useAccounts, useMessages, useRefreshMail } from '../lib/queries'
 import { useStore } from '../lib/store'
 import type { FolderRole, Message } from '../types'
 
+const PAGE = 200
+
 const folderTitles: Record<FolderRole, string> = {
   inbox: 'Inbox', starred: 'Starred', scheduled: 'Scheduled', drafts: 'Drafts',
   sent: 'Sent', archive: 'Archive', spam: 'Spam', trash: 'Trash',
@@ -28,6 +30,7 @@ export function MailPage() {
   const accounts = useAccounts().data ?? []
   const [query, setQuery] = useState('')
   const [searchText, setSearchText] = useState('')
+  const [limit, setLimit] = useState(PAGE)
   const [error, setError] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -41,7 +44,9 @@ export function MailPage() {
   const accountId = params.get('account')
   const label = params.get('label')
   const role = folder as FolderRole
-  const list = useMessages({ folder: role, account: accountId, label, q: query || undefined })
+  // Start from one page again whenever the view changes.
+  useEffect(() => setLimit(PAGE), [role, accountId, label, query])
+  const list = useMessages({ folder: role, account: accountId, label, q: query || undefined, limit })
   const visible = list.data ?? []
 
   const selected = visible.find((m) => m.id === messageId)
@@ -160,6 +165,8 @@ export function MailPage() {
       onQuery={setSearchText}
       onOpen={open}
       onOpenNav={openNav}
+      // A full page back means there may be more.
+      onLoadMore={visible.length >= limit ? () => setLimit(limit + PAGE) : undefined}
       onArchiveAll={(items) => {
         // Shared accounts you can only view are left alone.
         const archivable = items.filter((m) => canEdit(m))

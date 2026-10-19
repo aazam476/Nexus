@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify'
 import { simpleParser } from 'mailparser'
 import { z } from 'zod'
 import { db } from '../../db.ts'
-import { accessibleAccounts, requireMessage } from '../../lib/access.ts'
+import { accessibleAccounts, loadBody, requireMessage } from '../../lib/access.ts'
 import { decrypt as decryptSecret } from '../../lib/crypto.ts'
 import { notFound, parse } from '../../lib/http.ts'
 import { requireUser, storageKey } from '../../lib/session.ts'
@@ -101,7 +101,7 @@ export async function mailRoutes(app: FastifyInstance) {
         account: z.string().optional(),
         label: z.string().optional(),
         q: z.string().trim().optional(),
-        before: z.coerce.date().optional(), // paging: messages older than this
+        limit: z.coerce.number().int().min(1).max(5000).default(200), // the web app raises this for "Load older mail"
       }),
       request.query,
     )
@@ -119,7 +119,6 @@ export async function mailRoutes(app: FastifyInstance) {
       accountId: { in: accountIds },
       ...(query.folder === 'starred' ? { starred: true, folder: { role: { notIn: ['trash', 'spam'] } } } : { folder: { role: query.folder } }),
       ...(query.label && { labels: { has: query.label } }),
-      ...(query.before && { date: { lt: query.before } }),
     }
     if (query.q) {
       // Full-text search over subject, sender and body (Postgres tsvector, see the init migration).
@@ -136,7 +135,7 @@ export async function mailRoutes(app: FastifyInstance) {
       include: { folder: true },
       omit: { raw: true, html: true, text: true, sealedBody: true },
       orderBy: { date: 'desc' },
-      take: 200,
+      take: query.limit,
     })
     const key = await storageKey(request)
     const rows = messages.map((m) => toRow(m, key))
@@ -150,7 +149,7 @@ export async function mailRoutes(app: FastifyInstance) {
 
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
     const key = await storageKey(request)
-    const body = openBody(message, key)
+    const body = openBody(await loadBody(message.id), key)
     const detail = { ...toRow(message, key), messageId: message.messageId, html: body.html, text: body.text, signature: undefined as string | undefined }
 
     if (message.security === 'smime-encrypted') {
@@ -171,10 +170,8 @@ export async function mailRoutes(app: FastifyInstance) {
   })
 
   app.patch<{ Params: { id: string } }>('/messages/:id', async (request) => {
-    const body = parse(z.object({ unread: z.boolean().optional(), starred: z.boolean().optional(), labels: z.array(z.string()).optional() }), request.body)
+    const flags = parse(z.object({ unread: z.boolean().optional(), starred: z.boolean().optional() }), request.body)
     const message = await requireMessage(request.user.id, request.params.id, 'editor')
-    const { labels, ...flags } = body
-    if (labels) await db.message.update({ where: { id: message.id }, data: { labels } })
     if (Object.keys(flags).length) await setFlags(message, flags)
     return { ok: true }
   })
@@ -206,7 +203,7 @@ export async function mailRoutes(app: FastifyInstance) {
   // Attachments are cut out of the stored raw message on demand.
   app.get<{ Params: { id: string; attachmentId: string }; Querystring: { download?: string } }>('/messages/:id/attachments/:attachmentId', async (request, reply) => {
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
-    const mail = await simpleParser(openBody(message, await storageKey(request)).raw)
+    const mail = await simpleParser(openBody(await loadBody(message.id), await storageKey(request)).raw)
     const file = mail.attachments[Number(request.params.attachmentId)]
     if (!file) throw notFound('Attachment')
 
@@ -225,7 +222,7 @@ export async function mailRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>('/messages/:id/raw', async (request, reply) => {
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
-    return reply.header('content-type', 'message/rfc822').header('content-disposition', `attachment; filename="message-${message.id}.eml"`).send(openBody(message, await storageKey(request)).raw)
+    return reply.header('content-type', 'message/rfc822').header('content-disposition', `attachment; filename="message-${message.id}.eml"`).send(openBody(await loadBody(message.id), await storageKey(request)).raw)
   })
 
   app.get<{ Params: { id: string } }>('/messages/:id/event.ics', async (request, reply) => {

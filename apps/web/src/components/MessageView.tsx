@@ -308,7 +308,8 @@ function AttachmentTile({ messageId, file, outgoing, onPreview }: { messageId: s
   return (
     <div className="flex items-center gap-3 rounded-xl border border-line bg-raise p-2.5">
       <button type="button" onClick={onPreview} disabled={!previewable} aria-label={`Preview ${file.filename}`} className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-line/60 text-muted enabled:hover:text-ink">
-        {file.contentType.startsWith('image/') && previewable ? <img src={attachmentUrl(messageId, file)} alt="" className="h-full w-full object-cover" loading="lazy" /> : <Icon size={18} />}
+        {/* Each thumbnail makes the server re-read the whole email, so only small images get one. */}
+        {file.contentType.startsWith('image/') && previewable && file.size <= 1_000_000 ? <img src={attachmentUrl(messageId, file)} alt="" className="h-full w-full object-cover" loading="lazy" /> : <Icon size={18} />}
       </button>
       <div className="min-w-0 flex-1">
         <p className="truncate">{file.filename}</p>

@@ -39,10 +39,16 @@ export async function accessibleAccounts(userId: string) {
   }))
 }
 
-// Loads a message and checks the user's role on its account in one go.
+// The heavy columns (the full raw email can be many MB). Most actions only need the light ones.
+const BODY = { raw: true, html: true, text: true, sealedBody: true } as const
+
+// Loads a message (without its body) and checks the user's role on its account in one go.
 export async function requireMessage(userId: string, messageId: string, needed: AccountRole) {
-  const message = await db.message.findUnique({ where: { id: messageId }, include: { folder: true } })
+  const message = await db.message.findUnique({ where: { id: messageId }, include: { folder: true }, omit: BODY })
   if (!message) throw notFound('Message')
   await requireAccountRole(userId, message.accountId, needed)
   return message
 }
+
+// The body of a message already checked with requireMessage. Open it with openBody (mail/private.ts).
+export const loadBody = (messageId: string) => db.message.findUniqueOrThrow({ where: { id: messageId }, select: BODY })

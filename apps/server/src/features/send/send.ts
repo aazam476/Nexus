@@ -83,13 +83,17 @@ export async function sendNow(userId: string, payload: OutgoingPayload) {
     transport.close()
   }
 
-  await fileInSent(account, raw)
-  await rememberRecipients(userId, recipients)
+  // The mail is out. Problems from here on must not look like a failed send,
+  // or the user (or a retry) would send it a second time.
+  await fileInSent(account, raw).catch((error) => console.warn(`Sent, but could not file a copy in Sent for ${account.email}: ${error.message}`))
+  await rememberRecipients(userId, recipients).catch((error) => console.warn(`Sent, but could not update contacts: ${error.message}`))
 }
 
+// These providers put sent mail in Sent themselves; our own copy would show up twice.
+const filesSentMailItself = (smtpHost: string) => /(^|\.)(gmail\.com|googlemail\.com|office365\.com|outlook\.com)$/i.test(smtpHost)
+
 async function fileInSent(account: Account, raw: Buffer) {
-  // Gmail and Outlook file sent mail themselves; adding our own copy would show it twice.
-  if (account.auth !== 'password') return
+  if (filesSentMailItself(account.smtpHost)) return
   if (account.protocol === 'imap') {
     await withImap(account, async (client) => {
       const sent = (await discoverFolders(client, account.id)).get('sent')!
@@ -111,8 +115,9 @@ async function rememberRecipients(userId: string, emails: string[]) {
   }
 }
 
-// Called by the job queue when a scheduled message is due.
-export async function sendScheduled(outgoingId: string) {
+// Called by the job queue when a scheduled message is due. On failure it goes back to
+// "scheduled" so the queue's retry really retries; only the last attempt marks it failed.
+export async function sendScheduled(outgoingId: string, lastAttempt: boolean) {
   const outgoing = await db.outgoingMessage.findUnique({ where: { id: outgoingId } })
   if (!outgoing || outgoing.status !== 'scheduled') return // cancelled or already sent
   await db.outgoingMessage.update({ where: { id: outgoingId }, data: { status: 'sending' } })
@@ -120,7 +125,7 @@ export async function sendScheduled(outgoingId: string) {
     await sendNow(outgoing.userId, outgoingSchema.parse(outgoing.payload))
     await db.outgoingMessage.delete({ where: { id: outgoingId } })
   } catch (error) {
-    await db.outgoingMessage.update({ where: { id: outgoingId }, data: { status: 'failed', error: (error as Error).message } })
+    await db.outgoingMessage.update({ where: { id: outgoingId }, data: { status: lastAttempt ? 'failed' : 'scheduled', error: (error as Error).message } })
     throw error
   }
 }

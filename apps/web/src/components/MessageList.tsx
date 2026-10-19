@@ -26,10 +26,11 @@ interface Props {
   onOpen: (message: Message) => void
   onOpenNav: () => void
   onArchiveAll: (messages: Message[]) => void
+  onLoadMore?: () => void
 }
 
 export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageList(
-  { title, messages, loading, smart, selectedId, query, onQuery, onOpen, onOpenNav, onArchiveAll },
+  { title, messages, loading, smart, selectedId, query, onQuery, onOpen, onOpenNav, onArchiveAll, onLoadMore },
   searchRef,
 ) {
   const { layout, setLayout, openComposer } = useStore()
@@ -127,6 +128,11 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
               </div>
             )
           })}
+        {onLoadMore && (
+          <button type="button" onClick={onLoadMore} className="mx-auto mt-3 block rounded-lg px-3 py-1.5 text-[13px] text-muted hover:bg-raise hover:text-ink">
+            Load older mail
+          </button>
+        )}
       </div>
     </section>
   )

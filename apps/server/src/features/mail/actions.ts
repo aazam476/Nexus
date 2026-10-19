@@ -7,7 +7,8 @@ import { badRequest } from '../../lib/http.ts'
 import { openPop3, withImap } from '../accounts/connect.ts'
 import { discoverFolders, localFolders } from './sync.ts'
 
-type FullMessage = Message & { folder: Folder }
+// What requireMessage returns: the message without its (possibly huge) body.
+type FullMessage = Omit<Message, 'raw' | 'html' | 'text' | 'sealedBody'> & { folder: Folder }
 
 async function onServer(account: Account, message: FullMessage, work: (client: ImapFlow, uid: string) => Promise<void>) {
   if (account.protocol !== 'imap' || message.uid == null) return
@@ -28,24 +29,30 @@ export async function setFlags(message: FullMessage, change: { unread?: boolean;
     if (change.unread !== undefined) await update('\\Seen', !change.unread)
     if (change.starred !== undefined) await update('\\Flagged', change.starred)
   })
-  return db.message.update({ where: { id: message.id }, data: change })
+  // updateMany: a sync running at the same time may already have removed or replaced the row.
+  await db.message.updateMany({ where: { id: message.id }, data: change })
 }
 
 export async function moveMessage(message: FullMessage, role: string) {
-  if (message.folder.role === role) return message
+  if (message.folder.role === role) return
   const account = await db.account.findUniqueOrThrow({ where: { id: message.accountId } })
 
   if (account.protocol !== 'imap') {
     const target = (await localFolders(account.id)).get(role)
     if (!target) throw badRequest(`Unknown folder ${role}`)
-    return db.message.update({ where: { id: message.id }, data: { folderId: target.id } })
+    await db.message.updateMany({ where: { id: message.id }, data: { folderId: target.id } })
+    return
   }
 
+  // Sync keeps the folder table current, so asking the server for its folder list is only
+  // needed before an account's first sync.
+  const target =
+    (await db.folder.findUnique({ where: { accountId_role: { accountId: account.id, role } } })) ??
+    (await withImap(account, (client) => discoverFolders(client, account.id))).get(role)
+  if (!target) throw badRequest(`Unknown folder ${role}`)
+
   let newUid: number | undefined
-  let target: Folder | undefined
   await withImap(account, async (client) => {
-    target = (await discoverFolders(client, account.id)).get(role)
-    if (!target) throw badRequest(`Unknown folder ${role}`)
     const lock = await client.getMailboxLock(message.folder.path)
     try {
       const result = await client.messageMove(String(message.uid), target.path, { uid: true })
@@ -56,10 +63,10 @@ export async function moveMessage(message: FullMessage, role: string) {
   })
   // Servers without UIDPLUS don't tell us the new UID: drop our copy and let the next sync fetch it.
   if (newUid == null) {
-    await db.message.delete({ where: { id: message.id } })
-    return null
+    await db.message.deleteMany({ where: { id: message.id } })
+    return
   }
-  return db.message.update({ where: { id: message.id }, data: { folderId: target!.id, uid: newUid } })
+  await db.message.updateMany({ where: { id: message.id }, data: { folderId: target.id, uid: newUid } })
 }
 
 // Deleting from Trash removes it for good; deleting anywhere else moves it to Trash.
@@ -81,6 +88,5 @@ export async function deleteMessage(message: FullMessage) {
       await pop3.QUIT().catch(() => undefined)
     }
   }
-  await db.message.delete({ where: { id: message.id } })
-  return null
+  await db.message.deleteMany({ where: { id: message.id } })
 }

@@ -26,6 +26,7 @@ export interface MessageQuery {
   account?: string | null
   label?: string | null
   q?: string
+  limit?: number
 }
 
 const query = (params: Record<string, string | null | undefined>) => {
@@ -42,7 +43,7 @@ export const useCounts = () => useQuery({ queryKey: ['counts'], queryFn: () => a
 export const useLabels = () => useQuery({ queryKey: ['labels'], queryFn: () => api<{ name: string; color: string }[]>('/labels') })
 
 export const useMessages = (q: MessageQuery) =>
-  useQuery({ queryKey: ['messages', q], queryFn: () => api<Message[]>(`/messages${query({ ...q })}`), ...live, placeholderData: (previous) => previous })
+  useQuery({ queryKey: ['messages', q], queryFn: () => api<Message[]>(`/messages${query({ ...q, limit: q.limit ? String(q.limit) : undefined })}`), ...live, placeholderData: (previous) => previous })
 
 export const useMessage = (id: string | undefined) =>
   useQuery({ queryKey: ['message', id], queryFn: () => api<Message>(`/messages/${id}`), enabled: !!id })

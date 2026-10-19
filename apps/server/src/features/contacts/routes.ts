@@ -20,10 +20,15 @@ export async function contactRoutes(app: FastifyInstance) {
 
   app.get('/contacts', async (request) => {
     const { q } = parse(z.object({ q: z.string().trim().optional() }), request.query)
+    // Prisma can only match whole array items, so find address matches ("github", "okafor.dev") in SQL.
+    const byEmail = q
+      ? (await db.$queryRaw<{ id: string }[]>`
+          SELECT id FROM "Contact" WHERE "userId" = ${request.user.id} AND array_to_string(emails, ' ') ILIKE ${'%' + q + '%'}`).map((c) => c.id)
+      : []
     return db.contact.findMany({
       where: {
         userId: request.user.id,
-        ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { emails: { has: q.toLowerCase() } }, { company: { contains: q, mode: 'insensitive' } }] }),
+        ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { id: { in: byEmail } }, { company: { contains: q, mode: 'insensitive' } }] }),
       },
       orderBy: [{ messageCount: 'desc' }, { name: 'asc' }],
       take: q ? 10 : 2000,
