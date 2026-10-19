@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/* Theme switch: data-theme="dark" | "light" on <html>. "system" sets it from prefers-color-scheme. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Colour tokens. Components use them through Tailwind classes like bg-panel, text-muted. */
+:root,
+[data-theme="dark"] {
+  --ground: #0e0f12;
+  --side: #131418;
+  --panel: #17181d;
+  --read: #1b1c22;
+  --raise: #22232a;
+  --hover: #1e1f25;
+  --line: #2a2b33;
+  --ink: #ececf1;
+  --ink-2: #d7d7e0;
+  --muted: #a3a3af;
+  --faint: #8a8a96;
+  --sel: #222440;
+  --sel-line: #363a6e;
+  --accent: #5b63f0;
+  --accent-ink: #ffffff;
+  --accent-text: #a3a9ff;
+  --people: #6ea8ff;
+  --travel: #c79bff;
+  --notif: #f5b544;
+  --news: #4fd1a1;
+  --danger: #ff6b6b;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -8px rgb(0 0 0 / 0.55);
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --ground: #f3f3f6;
+  --side: #ececf1;
+  --panel: #ffffff;
+  --read: #ffffff;
+  --raise: #f1f1f5;
+  --hover: #f6f6f9;
+  --line: #e3e3ea;
+  --ink: #16161b;
+  --ink-2: #2b2b33;
+  --muted: #5f5f6b;
+  --faint: #6e6e79;
+  --sel: #ecedff;
+  --sel-line: #c9ccff;
+  --accent: #4b55f0;
+  --accent-ink: #ffffff;
+  --accent-text: #3f47d6;
+  --people: #2f6fdb;
+  --travel: #7a4fe0;
+  --notif: #a86a0c;
+  --news: #1a8a64;
+  --danger: #d23b3b;
+  --shadow: 0 1px 2px rgb(20 20 40 / 0.06), 0 12px 32px -8px rgb(20 20 40 / 0.18);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-side: var(--side);
+  --color-panel: var(--panel);
+  --color-read: var(--read);
+  --color-raise: var(--raise);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-sel: var(--sel);
+  --color-sel-line: var(--sel-line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-text: var(--accent-text);
+  --color-people: var(--people);
+  --color-travel: var(--travel);
+  --color-notif: var(--notif);
+  --color-news: var(--news);
+  --color-danger: var(--danger);
+  --shadow-pop: var(--shadow);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.accent-gradient {
+  background: linear-gradient(135deg, #5b65f5, #2e30b8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
