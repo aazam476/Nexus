@@ -200,14 +200,16 @@ export function Composer() {
             </button>
             <input ref={fileInput} type="file" multiple hidden onChange={(e) => setFiles([...files, ...Array.from(e.target.files ?? [])])} />
 
-            <label className="flex items-center gap-2 text-[13px] text-ink-2" title="Encrypt with recipients’ PGP keys, in your browser">
-              <Toggle checked={encrypt} onChange={setEncrypt} label="Encrypt with PGP" />
-              <Lock size={14} className={encrypt ? 'text-news' : 'text-muted'} /> Encrypt
-            </label>
-            <label className="flex items-center gap-2 text-[13px] text-ink-2" title="Sign with your PGP key">
-              <Toggle checked={sign} onChange={setSign} label="Sign" />
-              <ShieldCheck size={14} className={sign ? 'text-news' : 'text-muted'} /> Sign
-            </label>
+            <div className="flex items-center divide-x divide-line rounded-lg border border-line text-[13px] text-ink-2">
+              <label className="flex items-center gap-2 px-3 py-1.5" title="Encrypt with recipients’ PGP keys, in your browser">
+                <Lock size={14} className={encrypt ? 'text-news' : 'text-muted'} /> Encrypt
+                <Toggle checked={encrypt} onChange={setEncrypt} label="Encrypt with PGP" />
+              </label>
+              <label className="flex items-center gap-2 px-3 py-1.5" title="Sign with your PGP key">
+                <ShieldCheck size={14} className={sign ? 'text-news' : 'text-muted'} /> Sign
+                <Toggle checked={sign} onChange={setSign} label="Sign with PGP" />
+              </label>
+            </div>
 
             <button type="button" aria-label="Discard draft" title="Discard draft" onClick={closeComposer} className="ml-auto rounded-md p-1.5 text-muted hover:bg-raise hover:text-danger">
               <Trash2 size={16} />
