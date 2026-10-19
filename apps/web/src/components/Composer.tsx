@@ -1,10 +1,10 @@
-import {
-  Bold, ChevronDown, Clock, Italic, Link2, List, ListOrdered, Lock, Maximize2, Minimize2, Paperclip, Quote, Send, ShieldCheck, Trash2, Underline, X,
-} from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, Clock, Lock, Maximize2, Minimize2, Paperclip, Send, ShieldCheck, Trash2, X } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { accounts, me } from '../mock/data'
 import { formatFullDate, formatSize } from '../lib/format'
 import { useStore } from '../lib/store'
+import { htmlToText, quoteReply, textToHtml, withHtmlSignature, withPlainSignature, type BodyMode } from '../lib/compose'
+import { BodyEditor } from './BodyEditor'
 import { RecipientField, hasPgpKey } from './RecipientField'
 import { Button, Toggle } from './ui'
 
@@ -40,19 +40,46 @@ export function Composer() {
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [error, setError] = useState('')
   const [sent, setSent] = useState('')
-  const body = useRef<HTMLDivElement>(null)
+  const signatureOf = (accountId: string) => accounts.find((a) => a.id === accountId)?.signature ?? ''
+  // New mail starts as plain text; the user can switch to rich text or raw HTML.
+  const [mode, setMode] = useState<BodyMode>('plain')
+  const [content, setContent] = useState(() => {
+    const original = draft?.replyTo
+    const quote = original ? quoteReply('plain', `On ${formatFullDate(original.date)}, ${original.from.name} wrote:`, original.text ?? original.preview) : ''
+    return withPlainSignature(quote, signatureOf(fromId))
+  })
+  const [version, setVersion] = useState(0)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const recipients = [...to, ...cc, ...bcc]
   const missingKeys = encrypt ? recipients.filter((email) => !hasPgpKey(email)) : []
   const bccOnly = to.length === 0 && cc.length === 0 && bcc.length > 0
 
-  useEffect(() => {
-    if (draft?.replyTo && body.current) {
-      const original = draft.replyTo
-      body.current.innerHTML = `<p><br></p><blockquote>On ${formatFullDate(original.date)}, ${original.from.name} wrote:<br>${original.preview}</blockquote>`
+  function replaceContent(next: string) {
+    setContent(next)
+    setVersion((v) => v + 1)
+  }
+
+  function changeMode(next: BodyMode) {
+    if (next === mode) return
+    const signature = signatureOf(fromId)
+    if (mode === 'plain') {
+      replaceContent(withHtmlSignature(textToHtml(withPlainSignature(content, '')), signature))
+    } else if (next === 'plain') {
+      const html = withHtmlSignature(content, '')
+      if (/<(img|a|b|strong|i|em|u|ul|ol|table)\b/i.test(html) && !confirm('Switching to plain text removes formatting, links and inline images. Continue?')) return
+      replaceContent(withPlainSignature(htmlToText(html), signature))
+    } else {
+      replaceContent(content) // rich <-> HTML source share the same HTML
     }
-  }, [draft?.replyTo])
+    setMode(next)
+  }
+
+  function changeAccount(accountId: string) {
+    setFromId(accountId)
+    const signature = signatureOf(accountId)
+    replaceContent(mode === 'plain' ? withPlainSignature(content, signature) : withHtmlSignature(content, signature))
+  }
 
   function send(scheduledFor?: Date) {
     if (recipients.length === 0) return setError('Add at least one recipient in To, Cc or Bcc.')
@@ -60,12 +87,6 @@ export function Composer() {
     setError('')
     setSent(scheduledFor ? `Scheduled for ${formatFullDate(scheduledFor.toISOString())}` : 'Message sent')
     setTimeout(closeComposer, 1200)
-  }
-
-  // shortcut: execCommand is deprecated but still supported everywhere; replace with a small editor lib if formatting needs grow.
-  const format = (command: string, value?: string) => {
-    document.execCommand(command, false, value)
-    body.current?.focus()
   }
 
   const placement = {
@@ -106,7 +127,7 @@ export function Composer() {
         <>
           <div className="flex items-center gap-2 border-b border-line px-4 py-2">
             <span className="w-9 text-[13px] text-muted">From</span>
-            <select value={fromId} onChange={(e) => setFromId(e.target.value)} aria-label="Send from" className="bg-transparent text-ink focus:outline-none">
+            <select value={fromId} onChange={(e) => changeAccount(e.target.value)} aria-label="Send from" className="bg-transparent text-ink focus:outline-none">
               {accounts.map((a) => <option key={a.id} value={a.id} className="bg-panel">{me.name} &lt;{a.email}&gt;</option>)}
             </select>
             {!showCopies && (
@@ -133,33 +154,7 @@ export function Composer() {
             className="border-b border-line bg-transparent px-4 py-2.5 font-semibold placeholder:font-normal placeholder:text-muted focus:outline-none"
           />
 
-          <div className="flex items-center gap-0.5 border-b border-line px-3 py-1 text-muted" role="toolbar" aria-label="Formatting">
-            {[
-              { icon: Bold, label: 'Bold', run: () => format('bold') },
-              { icon: Italic, label: 'Italic', run: () => format('italic') },
-              { icon: Underline, label: 'Underline', run: () => format('underline') },
-              { icon: Link2, label: 'Link', run: () => { const url = prompt('Link address'); if (url) format('createLink', url) } },
-              { icon: List, label: 'Bulleted list', run: () => format('insertUnorderedList') },
-              { icon: ListOrdered, label: 'Numbered list', run: () => format('insertOrderedList') },
-              { icon: Quote, label: 'Quote', run: () => format('formatBlock', 'blockquote') },
-            ].map(({ icon: Icon, label, run }) => (
-              <button key={label} type="button" title={label} aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={run} className="rounded-md p-1.5 hover:bg-raise hover:text-ink">
-                <Icon size={15} />
-              </button>
-            ))}
-          </div>
-
-          <div
-            ref={body}
-            contentEditable
-            spellCheck
-            lang="en"
-            role="textbox"
-            aria-multiline="true"
-            aria-label="Message body"
-            data-placeholder="Write your message…"
-            className="flex-1 overflow-y-auto px-4 py-3 text-[15px] leading-relaxed focus:outline-none empty:before:text-muted empty:before:content-[attr(data-placeholder)] [&_blockquote]:mt-3 [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6 [&_a]:text-accent-text [&_a]:underline"
-          />
+          <BodyEditor mode={mode} content={content} version={version} onChange={setContent} onModeChange={changeMode} />
 
           {files.length > 0 && (
             <ul className="flex flex-wrap gap-2 px-4 pb-2">

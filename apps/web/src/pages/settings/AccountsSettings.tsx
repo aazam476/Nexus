@@ -32,6 +32,29 @@ export function AccountsSettings() {
       </Card>
 
       {adding && <AddAccount onDone={() => setAdding(false)} />}
+
+      <Card title="Signatures" description="Added to the end of new messages. Formatting is kept in rich-text mail and turned into plain text otherwise.">
+        <div className="grid gap-4">
+          {accounts.map((account) => (
+            <div key={account.id} className="grid gap-1.5">
+              <span className="flex items-center gap-2 text-[12.5px] font-medium text-ink-2">
+                <i className="h-2 w-2 rounded-full" style={{ background: account.color }} />
+                {account.email}
+              </span>
+              {/* Signatures are the user's own HTML, edited in place; sanitised again on send. */}
+              <div
+                contentEditable
+                role="textbox"
+                aria-multiline="true"
+                aria-label={`Signature for ${account.email}`}
+                spellCheck
+                className="min-h-16 rounded-lg border border-line bg-raise px-3 py-2 text-[13.5px] focus:border-accent focus:outline-none"
+                dangerouslySetInnerHTML={{ __html: account.signature }}
+              />
+            </div>
+          ))}
+        </div>
+      </Card>
     </>
   )
 }

@@ -4,9 +4,9 @@ import type { Account, Contact, Message, Plugin, Rule } from '../types'
 export const me = { name: 'Ali Azam', email: 'ali@azam.email' }
 
 export const accounts: Account[] = [
-  { id: 'a1', email: 'ali@azam.email', name: 'Personal', color: '#ff7f6e', protocol: 'imap', auth: 'password', unread: 8, role: 'owner' },
-  { id: 'a2', email: 'home@fastmail.com', name: 'Household', color: '#4fd1a1', protocol: 'imap', auth: 'password', unread: 3, role: 'owner' },
-  { id: 'a3', email: 'ali.azam@outlook.com', name: 'Work', color: '#6ea8ff', protocol: 'imap', auth: 'oauth-microsoft', unread: 1, role: 'editor' },
+  { id: 'a1', email: 'ali@azam.email', name: 'Personal', color: '#ff7f6e', protocol: 'imap', auth: 'password', unread: 8, role: 'owner', signature: '<b>Ali Azam</b><br>ali@azam.email' },
+  { id: 'a2', email: 'home@fastmail.com', name: 'Household', color: '#4fd1a1', protocol: 'imap', auth: 'password', unread: 3, role: 'owner', signature: 'Ali &amp; Sana' },
+  { id: 'a3', email: 'ali.azam@outlook.com', name: 'Work', color: '#6ea8ff', protocol: 'imap', auth: 'oauth-microsoft', unread: 1, role: 'editor', signature: '<b>Ali Azam</b> · Infrastructure<br>Contoso Ltd.' },
 ]
 
 const today = (h: number, m: number) => {

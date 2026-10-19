@@ -13,6 +13,7 @@ export interface Account {
   auth: 'password' | 'oauth-google' | 'oauth-microsoft'
   unread: number
   role: 'owner' | 'editor' | 'viewer'
+  signature: string // HTML; plain-text mode converts it
 }
 
 export interface Person {
