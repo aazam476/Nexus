@@ -1,0 +1,249 @@
+// Nexus database. Read top to bottom: people, their mail accounts, the mail, then everything around it.
+// Secrets (mail passwords, OAuth tokens, TOTP secrets, plugin settings, S/MIME keys) are stored
+// encrypted with APP_SECRET; see src/lib/crypto.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- People ----------
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  passwordHash  String
+  role          String   @default("user") // "admin" | "user"
+  totpSecret    String? // encrypted
+  totpEnabled   Boolean  @default(false)
+  recoveryCodes String[] // sha256 hashes, removed once used
+  createdAt     DateTime @default(now())
+
+  sessions       Session[]
+  accounts       Account[]        @relation("owner")
+  sharedAccounts AccountMember[]
+  contacts       Contact[]
+  rules          Rule[]
+  blockedSenders BlockedSender[]
+  labels         Label[]
+  pgpKeys        PgpKey[]
+  smimeCerts     SmimeCert[]
+  plugins        PluginSetting[]
+  outgoing       OutgoingMessage[]
+  preference     Preference?
+}
+
+model Session {
+  id         String   @id // sha256 of the cookie token, so a database leak can't be replayed
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pending2fa Boolean  @default(false) // password checked, TOTP code not yet
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+}
+
+// ---------- Mail accounts ----------
+
+model Account {
+  id         String    @id @default(cuid())
+  ownerId    String
+  owner      User      @relation("owner", fields: [ownerId], references: [id], onDelete: Cascade)
+  email      String
+  name       String
+  color      String
+  protocol   String // "imap" | "pop3"
+  auth       String // "password" | "oauth-google" | "oauth-microsoft"
+  inHost     String
+  inPort     Int
+  inTls      Boolean // true = TLS from the start, false = STARTTLS
+  smtpHost   String
+  smtpPort   Int
+  smtpTls    Boolean
+  username   String
+  secret     String // encrypted password, or OAuth refresh token
+  signature  String    @default("")
+  lastSyncAt DateTime?
+  syncError  String?
+  createdAt  DateTime  @default(now())
+
+  members  AccountMember[]
+  folders  Folder[]
+  messages Message[]
+}
+
+// Sharing: other users who can use this account. The owner is not listed here.
+model AccountMember {
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String // "editor" | "viewer"
+
+  @@id([accountId, userId])
+}
+
+model Folder {
+  id          String  @id @default(cuid())
+  accountId   String
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  path        String // name on the IMAP server; POP3 accounts use local paths
+  role        String // "inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"
+  uidValidity BigInt?
+  lastUid     Int     @default(0)
+
+  messages Message[]
+
+  @@unique([accountId, path])
+  @@unique([accountId, role])
+}
+
+// ---------- Mail ----------
+
+model Message {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  folderId    String
+  folder      Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  uid         Int? // IMAP UID inside the folder
+  remoteId    String? // POP3 UIDL
+  messageId   String? // the Message-ID header
+  fromName    String
+  fromEmail   String
+  to          Json // [{ name, email }]
+  cc          Json
+  subject     String
+  preview     String
+  text        String?
+  html        String?
+  date        DateTime
+  unread      Boolean  @default(true)
+  starred     Boolean  @default(false)
+  category    String // "people" | "travel" | "notifications" | "newsletters"
+  labels      String[]
+  attachments Json // [{ id, filename, contentType, size }]; content stays in `raw`
+  security    String?
+  event       Json?
+  raw         Bytes // the full original message
+  createdAt   DateTime @default(now())
+
+  // Full-text search: Postgres keeps this up to date from subject, sender and text (see the init migration).
+  search Unsupported("tsvector")? @default(dbgenerated("((setweight(to_tsvector('simple'::regconfig, COALESCE(subject, ''::text)), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, ((COALESCE(\"fromName\", ''::text) || ' '::text) || COALESCE(\"fromEmail\", ''::text))), 'B'::\"char\")) || setweight(to_tsvector('simple'::regconfig, COALESCE(text, ''::text)), 'C'::\"char\"))"))
+
+  @@unique([folderId, uid])
+  @@unique([accountId, remoteId])
+  @@index([accountId, folderId, date])
+  @@index([search], type: Gin)
+}
+
+// Mail written in Nexus that is not on the server yet: drafts and scheduled sends.
+model OutgoingMessage {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId    String
+  status       String // "draft" | "scheduled" | "sending" | "sent" | "failed"
+  payload      Json // what the composer sent: recipients, subject, html, attachments, security options
+  scheduledFor DateTime?
+  error        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// ---------- Around the mail ----------
+
+model Contact {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  emails         String[]
+  phone          String?
+  company        String?
+  pgpPublicKey   String?
+  pgpFingerprint String?
+  smimeCert      String? // PEM, collected from their signed mail
+  messageCount   Int      @default(0)
+  createdAt      DateTime @default(now())
+}
+
+model Rule {
+  id       String  @id @default(cuid())
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name     String
+  field    String // "from" | "to" | "subject" | "body"
+  contains String
+  action   String // "label" | "move" | "category" | "mark-read" | "spam"
+  value    String?
+  enabled  Boolean @default(true)
+  position Int     @default(0)
+}
+
+model BlockedSender {
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pattern String // an address or a whole domain
+
+  @@id([userId, pattern])
+}
+
+model Label {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name   String
+  color  String
+
+  @@id([userId, name])
+}
+
+model PgpKey {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fingerprint         String
+  userIds             String[]
+  publicKey           String
+  encryptedPrivateKey String // armored and passphrase-locked in the browser; the server can't open it
+  isDefault           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+}
+
+model SmimeCert {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String
+  subject   String
+  certPem   String
+  keyPem    String // encrypted
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model PluginSetting {
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pluginId String
+  enabled  Boolean @default(false)
+  settings String // encrypted JSON
+
+  @@id([userId, pluginId])
+}
+
+// One row of user preferences that don't deserve their own table.
+model Preference {
+  userId        String @id
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme         String @default("system")
+  layout        String @default("three-pane")
+  spamThreshold Float  @default(5)
+}

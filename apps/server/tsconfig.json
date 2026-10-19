@@ -1,0 +1,17 @@
+{
+  // Node runs these .ts files directly (type stripping), so there is no build step.
+  // That is why imports end in .ts and only "erasable" TypeScript is allowed (no enums, no namespaces).
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
