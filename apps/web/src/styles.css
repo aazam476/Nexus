@@ -109,6 +109,18 @@ body {
   border-radius: 6px;
 }
 
+/* Text fields show focus by turning their border accent instead of an extra ring. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible {
+  outline: none;
+}
+
+select:focus-visible {
+  border-color: var(--accent);
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
