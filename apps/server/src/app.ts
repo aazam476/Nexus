@@ -36,11 +36,18 @@ const csp = [
 ].join('; ')
 
 export async function buildApp() {
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true, bodyLimit: 2 * 1024 * 1024 })
+  const app = Fastify({
+    logger: { level: process.env.LOG_LEVEL ?? 'info' },
+    // Only believe X-Forwarded-For from a reverse proxy on this machine or the local network;
+    // trusting it from anyone would let attackers fake their IP and dodge the login rate limit.
+    trustProxy: 'loopback,linklocal,uniquelocal',
+    bodyLimit: 2 * 1024 * 1024,
+  })
 
   await app.register(cookie)
   await app.register(rateLimit, { global: false })
-  await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024, files: 50 } })
+  // Uploads are held in memory while they are imported, so cap them.
+  await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 10 } })
 
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-content-type-options', 'nosniff')

@@ -52,3 +52,13 @@ export function buildSafeEmailDocument(dirtyHtml: string, allowRemoteImages: boo
 
   return { html, blockedImages }
 }
+
+// For HTML shown directly in the app (not in the sandbox): signatures and drafts loaded into an editor.
+// A shared account's signature can be edited by other people, so it is never trusted as-is.
+export function sanitizeForEditor(dirtyHtml: string): string {
+  return DOMPurify.sanitize(dirtyHtml, {
+    FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'iframe', 'object', 'embed', 'link', 'meta', 'base'],
+    ALLOW_DATA_ATTR: false,
+    ADD_ATTR: ['data-signature'], // marks where the signature starts, see compose.ts
+  })
+}

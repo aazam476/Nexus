@@ -30,3 +30,14 @@ describe('buildSafeEmailDocument', () => {
     expect(html).not.toMatch(/<form|<input/i)
   })
 })
+
+describe('sanitizeForEditor', () => {
+  it('drops event handlers but keeps formatting, inline images and the signature marker', async () => {
+    const { sanitizeForEditor } = await import('./sanitize')
+    const clean = sanitizeForEditor('<b onclick="x()">Ali</b><img src="x" onerror="steal()"><img src="data:image/png;base64,AAAA"><div data-signature="">-- </div><script>bad()</script>')
+    expect(clean).not.toMatch(/onclick|onerror|<script/)
+    expect(clean).toContain('<b>Ali</b>')
+    expect(clean).toContain('src="data:image/png;base64,AAAA"')
+    expect(clean).toContain('data-signature=""')
+  })
+})

@@ -1,7 +1,7 @@
 import { Bold, ImagePlus, Italic, Link2, List, ListOrdered, Quote, Underline } from 'lucide-react'
 import { useEffect, useMemo, useRef, type ClipboardEvent, type DragEvent } from 'react'
 import type { BodyMode } from '../lib/compose'
-import { buildSafeEmailDocument } from '../lib/sanitize'
+import { buildSafeEmailDocument, sanitizeForEditor } from '../lib/sanitize'
 
 // Fonts that render the same in nearly every mail client.
 const fonts = [
@@ -123,7 +123,7 @@ function RichEditor({ content, version, onChange }: { content: string; version: 
 
   // Load content only when the composer replaces it; otherwise the browser owns the DOM while typing.
   useEffect(() => {
-    if (editor.current) editor.current.innerHTML = content
+    if (editor.current) editor.current.innerHTML = sanitizeForEditor(content)
   }, [version])
 
   function onPaste(event: ClipboardEvent<HTMLDivElement>) {

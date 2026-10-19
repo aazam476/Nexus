@@ -91,4 +91,10 @@ apps/web/               React + Vite + Tailwind web app
 
 ## Security
 
+Things to know as an admin:
+
+- Every user can connect Nexus to mail servers and plugin services of their choosing, including addresses on your local network (that is how homelab services are reached). Only give accounts to people you trust with that.
+- Plugins run with full access to Nexus. Install only ones you trust (see [docs/plugins.md](docs/plugins.md)).
+- `MAIL_ALLOW_INSECURE_TLS=true` turns off certificate checks for every mail server. Use it only for a server on your own network.
+
 Found a vulnerability? Please report it privately to ali@azam.email instead of opening a public issue.

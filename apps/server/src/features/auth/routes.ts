@@ -11,6 +11,7 @@ import { HttpError, badRequest, forbidden, parse } from '../../lib/http.ts'
 import { endSession, findSession, requireUser, startSession } from '../../lib/session.ts'
 
 // Accept the code before and after the current one: phone clocks drift and people type slowly.
+// shortcut: a code can be reused within its 30s window; store the last used step per user if that matters.
 authenticator.options = { window: 1 }
 
 const email = z.string().trim().toLowerCase().email()

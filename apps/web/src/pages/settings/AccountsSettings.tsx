@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router'
 import { Button, Card, Chip, Field, Input } from '../../components/ui'
 import { api, del, patch } from '../../lib/api'
 import { timeAgo } from '../../lib/format'
+import { sanitizeForEditor } from '../../lib/sanitize'
 import { useAccounts } from '../../lib/queries'
 import type { Account } from '../../types'
 
@@ -61,7 +62,7 @@ export function AccountsSettings() {
                   suppressContentEditableWarning
                   onBlur={(e) => { if (e.currentTarget.innerHTML !== account.signature) patch(`/accounts/${account.id}`, { signature: e.currentTarget.innerHTML }).then(refresh) }}
                   className="min-h-16 rounded-lg border border-line bg-raise px-3 py-2 text-[13.5px] focus:border-accent focus:outline-none"
-                  dangerouslySetInnerHTML={{ __html: account.signature }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeForEditor(account.signature) }}
                 />
               </div>
             ))}

@@ -185,7 +185,7 @@ export async function mailRoutes(app: FastifyInstance) {
     const { spam } = parse(z.object({ spam: z.boolean() }), request.body)
     const message = await requireMessage(request.user.id, request.params.id, 'editor')
     const key = { userId: request.user.id, pattern: message.fromEmail }
-    if (spam) await db.blockedSender.upsert({ where: { userId_pattern: key }, create: key, update: {} })
+    if (spam && message.fromEmail) await db.blockedSender.upsert({ where: { userId_pattern: key }, create: key, update: {} })
     else await db.blockedSender.deleteMany({ where: key })
     await moveMessage(message, spam ? 'spam' : 'inbox')
     return { ok: true }
