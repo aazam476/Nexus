@@ -27,6 +27,7 @@ export const outgoingSchema = z.object({
     .array(z.object({ filename: z.string(), contentType: z.string(), content: z.string() })) // content is base64
     .default([]),
   inReplyTo: z.string().optional(), // Message-ID of the mail being answered, for threading
+  forwardOf: z.string().optional(), // id of a message whose attachments go along (forwarding); expanded by the send route
   smime: z.object({ sign: z.boolean(), encrypt: z.boolean() }).default({ sign: false, encrypt: false }),
 })
 export type OutgoingPayload = z.infer<typeof outgoingSchema>

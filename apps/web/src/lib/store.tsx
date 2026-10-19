@@ -16,6 +16,7 @@ export interface Draft {
   subject: string
   html?: string
   replyTo?: Message
+  forwardOf?: string // id of the message whose attachments go along
 }
 
 interface Store {

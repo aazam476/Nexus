@@ -1,4 +1,4 @@
-// Decides where a new message goes: its smart-inbox category, labels, and whether it is spam.
+// Decides where a new message goes (its smart-inbox category, labels, spam) and whether a sync can skip work.
 // Pure functions, so they are easy to test and reason about.
 
 export type Category = 'people' | 'travel' | 'notifications' | 'newsletters'
@@ -84,4 +84,17 @@ export function isSpam(message: { fromEmail: string; spamFlag: boolean; spamScor
   if (isBlocked(message.fromEmail, blocked)) return true
   if (message.spamScore != null) return message.spamScore >= threshold
   return message.spamFlag
+}
+
+// ---------- Sync ----------
+
+// Re-reading every flag is costly in big folders. Skip it when the server says nothing changed:
+// any flag change or new message raises its change counter (CONDSTORE), and a deletion lowers the
+// message count. Servers without CONDSTORE report no counter, so they always get the full check.
+export function nothingChanged(
+  saved: { highestModseq: bigint | null; lastExists: number | null },
+  now: { highestModseq: bigint | null; exists: number },
+  newMessages: number,
+): boolean {
+  return now.highestModseq != null && saved.highestModseq === now.highestModseq && saved.lastExists === now.exists && newMessages === 0
 }

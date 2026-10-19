@@ -42,7 +42,7 @@ function toRow(message: Omit<Message, 'raw' | 'html' | 'text' | 'sealedBody'> & 
 
 // Drafts and scheduled mail live in OutgoingMessage until sent; show them like messages.
 function outgoingToRow(outgoing: OutgoingMessage, me: { name: string; email: string }) {
-  const p = outgoing.payload as { accountId: string; to: string[]; cc: string[]; subject: string; text: string; html?: string; attachments: { filename: string; contentType: string; content: string }[] }
+  const p = outgoing.payload as { accountId: string; to: string[]; cc: string[]; subject: string; text: string; html?: string; forwardOf?: string; attachments: { filename: string; contentType: string; content: string }[] }
   return {
     id: outgoing.id,
     accountId: outgoing.accountId,
@@ -61,6 +61,7 @@ function outgoingToRow(outgoing: OutgoingMessage, me: { name: string; email: str
     labels: [],
     attachments: p.attachments.map((a, i) => ({ id: String(i), filename: a.filename, contentType: a.contentType, size: Math.floor((a.content.length * 3) / 4) })),
     scheduledFor: outgoing.scheduledFor,
+    forwardOf: p.forwardOf,
     error: outgoing.error,
     outgoing: true,
   }

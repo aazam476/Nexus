@@ -32,13 +32,23 @@ export async function authRoutes(app: FastifyInstance) {
   // The first person to sign up becomes the admin. After that, only if ALLOW_SIGNUP=true.
   app.post('/signup', strict, async (request, reply) => {
     const body = parse(z.object({ name: z.string().trim().min(1), email, password }), request.body)
-    const isFirst = (await db.user.count()) === 0
-    if (!isFirst && !config.ALLOW_SIGNUP) throw forbidden('Sign-up is closed. Ask an admin to add you.')
-    if (await db.user.findUnique({ where: { email: body.email } })) throw badRequest('That email is already registered')
-
-    const user = await db.user.create({
-      data: { name: body.name, email: body.email, passwordHash: await hashPassword(body.password), role: isFirst ? 'admin' : 'user' },
-    })
+    const passwordHash = await hashPassword(body.password)
+    // Count and create in one serializable transaction: two people setting up at the same moment
+    // must not both become admin. The one that loses the race gets an error and can try again.
+    const user = await db
+      .$transaction(
+        async (tx) => {
+          const isFirst = (await tx.user.count()) === 0
+          if (!isFirst && !config.ALLOW_SIGNUP) throw forbidden('Sign-up is closed. Ask an admin to add you.')
+          if (await tx.user.findUnique({ where: { email: body.email } })) throw badRequest('That email is already registered')
+          return tx.user.create({ data: { name: body.name, email: body.email, passwordHash, role: isFirst ? 'admin' : 'user' } })
+        },
+        { isolationLevel: 'Serializable' },
+      )
+      .catch((error) => {
+        if ((error as { code?: string }).code === 'P2034') throw new HttpError(409, 'Someone else is signing up at the same moment. Try again.')
+        throw error
+      })
     await startSession(request, reply, user.id, false)
     return { ok: true }
   })
@@ -185,6 +195,8 @@ export async function authRoutes(app: FastifyInstance) {
           data: { privateStorage: true, storagePublicKey: keys.publicKey, storagePrivateKey: await lockWithPassword(keys.privateKey, body.password) },
         })
         await setSessionStorageKey(request, keys.privateKey)
+        // Other devices have no key and couldn't read anything; signing in again gives them one.
+        await db.session.deleteMany({ where: { userId: user.id, NOT: { id: request.sessionId } } })
         // shortcut: seals the whole mailbox inside this request; move it to the job queue if mailboxes get huge.
         await sealAccounts(accountIds, keys.publicKey)
       } else {

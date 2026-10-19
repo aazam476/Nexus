@@ -103,6 +103,9 @@ model Folder {
   role        String // "inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"
   uidValidity BigInt?
   lastUid     Int     @default(0)
+  // Change counter (IMAP CONDSTORE) and message count at the last sync; if neither moved, nothing changed.
+  highestModseq BigInt?
+  lastExists    Int?
 
   messages Message[]
 

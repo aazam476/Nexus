@@ -70,6 +70,7 @@ export interface Message {
   // Only on drafts and scheduled mail written in Nexus:
   outgoing?: boolean
   scheduledFor?: string | null
+  forwardOf?: string
   error?: string | null
 }
 

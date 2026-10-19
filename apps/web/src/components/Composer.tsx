@@ -60,6 +60,7 @@ export function Composer() {
 
   const account = accounts.find((a) => a.id === fromId) ?? accounts[0]
   const recipients = [...to, ...cc, ...bcc]
+  const forwarded = draft?.forwardOf ? (draft.replyTo?.attachments ?? []) : []
   const bccOnly = to.length === 0 && cc.length === 0 && bcc.length > 0
   // S/MIME when there's a certificate for this address, otherwise PGP.
   const method = account && smimeCerts.some((c) => c.email === account.email) ? 'S/MIME' : 'PGP'
@@ -87,13 +88,15 @@ export function Composer() {
 
   async function payload() {
     const attachments = await Promise.all(files.map(async (f) => ({ filename: f.name, contentType: f.type || 'application/octet-stream', content: await fileToBase64(f) })))
-    const base = { accountId: account!.id, to, cc, bcc, subject, html: content, text: htmlToText(content), attachments, inReplyTo: draft?.replyTo?.messageId ?? undefined }
+    const base = { accountId: account!.id, to, cc, bcc, subject, html: content, text: htmlToText(content), attachments, inReplyTo: draft?.replyTo?.messageId ?? undefined, forwardOf: draft?.forwardOf }
     if (!encrypt && !sign) return base
     if (method === 'S/MIME') return { ...base, smime: { encrypt, sign } }
 
     // PGP runs here in the browser. PGP mail is plain text, so the HTML version is not sent.
     const signingKey = sign ? await pgp.unlock(passphrase) : undefined
     if (encrypt) {
+      // Only the text is encrypted with PGP here; files would go out readable, so refuse rather than leak.
+      if (attachments.length || draft?.forwardOf) throw new Error('PGP encryption covers the message text only. Remove the attachments, or use S/MIME for encrypted attachments.')
       const { keys, ownKey } = await api<{ keys: Record<string, string | null>; ownKey: string | null }>('/pgp/recipients', { body: { emails: recipients } })
       const missing = recipients.filter((email) => !keys[email])
       if (missing.length) throw new Error(`No PGP key for ${missing.join(', ')}. Add their key to the contact, or turn off encryption.`)
@@ -127,7 +130,7 @@ export function Composer() {
     const hasContent = recipients.length || subject.trim() || htmlToText(withHtmlSignature(content, '')).trim()
     if (account && hasContent && !sent) {
       try {
-        const saved = await put<{ id: string }>('/drafts', { id: draftId, accountId: account.id, to, cc, bcc, subject, html: content, text: htmlToText(content) })
+        const saved = await put<{ id: string }>('/drafts', { id: draftId, accountId: account.id, to, cc, bcc, subject, html: content, text: htmlToText(content), forwardOf: draft?.forwardOf })
         setDraftId(saved.id)
         refresh()
       } catch (e) {
@@ -220,6 +223,12 @@ export function Composer() {
 
           <BodyEditor mode={mode} content={content} version={version} onChange={setContent} onModeChange={setMode} />
 
+          {forwarded.length > 0 && (
+            <p className="px-4 pb-1 text-[12.5px] text-muted">
+              <Paperclip size={12} className="mr-1 inline" />
+              Forwarding {forwarded.map((a) => a.filename).join(', ')}
+            </p>
+          )}
           {files.length > 0 && (
             <ul className="flex flex-wrap gap-2 px-4 pb-2">
               {files.map((file) => (

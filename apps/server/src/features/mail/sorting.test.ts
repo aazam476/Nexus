@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyRules, classify, isBlocked, isSpam } from './sorting.ts'
+import { applyRules, classify, isBlocked, isSpam, nothingChanged } from './sorting.ts'
 import { extractEvent, fromIcs } from './events.ts'
 import { makePreview } from './parse.ts'
 
@@ -77,5 +77,19 @@ describe('makePreview', () => {
   it('strips markup and styles', () => {
     expect(makePreview('<style>p{}</style><p>Hello&nbsp;<b>there</b></p>')).toBe('Hello there')
     expect(makePreview('<head><title>Ignore me</title></head><h1>Your trip</h1><p>Tom &amp; Jerry &lt;3</p>')).toBe('Your trip Tom & Jerry <3')
+  })
+})
+
+describe('nothingChanged (sync shortcut)', () => {
+  const saved = { highestModseq: 100n, lastExists: 50 }
+  it('skips only when counter, count and new mail all match', () => {
+    expect(nothingChanged(saved, { highestModseq: 100n, exists: 50 }, 0)).toBe(true)
+    expect(nothingChanged(saved, { highestModseq: 101n, exists: 50 }, 0)).toBe(false) // a flag changed
+    expect(nothingChanged(saved, { highestModseq: 100n, exists: 49 }, 0)).toBe(false) // a message was deleted
+    expect(nothingChanged(saved, { highestModseq: 100n, exists: 50 }, 1)).toBe(false) // new mail
+  })
+  it('never skips on servers without CONDSTORE or on the first sync', () => {
+    expect(nothingChanged(saved, { highestModseq: null, exists: 50 }, 0)).toBe(false)
+    expect(nothingChanged({ highestModseq: null, lastExists: null }, { highestModseq: 100n, exists: 50 }, 0)).toBe(false)
   })
 })

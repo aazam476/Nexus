@@ -14,9 +14,13 @@ const syncQueue = new Queue('sync', { connection })
 const sendQueue = new Queue('send', { connection })
 
 const done = { removeOnComplete: true, removeOnFail: 100 }
+// Sync jobs reuse one id per account, and BullMQ ignores a new job while it still keeps one with the
+// same id, even a failed one. Keeping failures would stop that account syncing for good.
+// The error is still logged and saved on the account (syncError).
+const syncDone = { removeOnComplete: true, removeOnFail: true }
 
 // The job id makes this a no-op while a sync for the same account is already waiting.
-export const queueSync = (accountId: string) => syncQueue.add('account', { accountId }, { jobId: `sync-${accountId}`, ...done })
+export const queueSync = (accountId: string) => syncQueue.add('account', { accountId }, { jobId: `sync-${accountId}`, ...syncDone })
 
 export async function scheduleSend(outgoingId: string, at: Date) {
   await sendQueue.add('send', { outgoingId }, { jobId: outgoingId, delay: Math.max(0, at.getTime() - Date.now()), attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, ...done })
@@ -54,6 +58,9 @@ export async function startWorkers() {
     if (outgoing.status === 'sending') await db.outgoingMessage.update({ where: { id: outgoing.id }, data: { status: 'scheduled' } })
     await scheduleSend(outgoing.id, outgoing.scheduledFor ?? new Date())
   }
+
+  // Failed sync jobs kept by older versions would still block their accounts (see syncDone).
+  await syncQueue.clean(0, 10_000, 'failed')
 
   await syncQueue.upsertJobScheduler('every-2-minutes', { every: 2 * 60_000 }, { name: 'all', opts: done })
 }

@@ -79,7 +79,7 @@ export function MailPage() {
     // Drafts written in Nexus open in the composer.
     if (message.outgoing && message.folder === 'drafts') {
       const draft = await api<Message>(`/messages/${message.id}`)
-      openComposer({ id: draft.id, accountId: draft.accountId, to: draft.to.map((p) => p.email).join(', '), cc: draft.cc.map((p) => p.email).join(', '), subject: draft.subject, html: draft.html ?? '' })
+      openComposer({ id: draft.id, accountId: draft.accountId, to: draft.to.map((p) => p.email).join(', '), cc: draft.cc.map((p) => p.email).join(', '), subject: draft.subject, html: draft.html ?? '', forwardOf: draft.forwardOf })
       return
     }
     navigate(`/mail/${folder}/${message.id}${search}`)
@@ -89,6 +89,7 @@ export function MailPage() {
     }
   }
   const close = () => navigate(`/mail/${folder}${search}`)
+  const full = (message: Message) => client.getQueryData<Message>(['message', message.id]) ?? message
 
   // After moving the open message away, show the next one, like most mail apps do.
   function openNext() {
@@ -139,8 +140,9 @@ export function MailPage() {
         case '!': if (editable) actions.spam(selected.folder !== 'spam'); break
         case 's': if (editable) actions.star(selected); break
         case 'u': if (editable) actions.markUnread(selected); break
-        case 'r': if (selected) openComposer({ accountId: selected.accountId, to: selected.from.email, subject: replySubject(selected.subject), replyTo: selected }); break
-        case 'f': if (selected) openComposer({ accountId: selected.accountId, subject: replySubject(selected.subject, 'Fwd'), replyTo: selected }); break
+        // The reader has the full message (Message-ID for threading, full text to quote); list rows don't.
+        case 'r': if (selected) openComposer({ accountId: selected.accountId, to: selected.from.email, subject: replySubject(selected.subject), replyTo: full(selected) }); break
+        case 'f': if (selected) openComposer({ accountId: selected.accountId, subject: replySubject(selected.subject, 'Fwd'), replyTo: full(selected), forwardOf: selected.id }); break
         case 'Escape': if (selected) close(); break
       }
     }

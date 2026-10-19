@@ -6,7 +6,7 @@ import { db } from '../../db.ts'
 import { openPop3, pop3Retrieve, withImap } from '../accounts/connect.ts'
 import { parseRaw } from './parse.ts'
 import { sealAccounts } from './private.ts'
-import { classify } from './sorting.ts'
+import { classify, nothingChanged } from './sorting.ts'
 import { loadSortingContext, saveMessage, sortIncoming, type SortingContext } from './store.ts'
 
 // shortcut: the first sync of a folder only fetches its newest messages; add a "load older mail" job for full history.
@@ -127,8 +127,10 @@ async function syncFolder(client: ImapFlow, account: Account, folder: Folder, fo
       await saveMessage({ accountId: account.id, folderId: folder.id, raw: message.source, parsed, uid, unread, starred: flags.has('\\Flagged'), category, labels, sealFor: context.sealFor })
     }
 
-    // 2. Bring flags and deletions made in other mail apps into Nexus.
-    const local = await db.message.findMany({ where: { folderId: folder.id }, select: { id: true, uid: true, unread: true, starred: true } })
+    // 2. Bring flags and deletions made in other mail apps into Nexus (skipped when nothing changed).
+    const modseq = mailbox.highestModseq ?? null
+    const unchanged = nothingChanged(folder, { highestModseq: modseq, exists: mailbox.exists }, newUids.length)
+    const local = unchanged ? [] : await db.message.findMany({ where: { folderId: folder.id }, select: { id: true, uid: true, unread: true, starred: true } })
     if (local.length) {
       const remote = new Map<number, Set<string>>()
       if (mailbox.exists > 0) {
@@ -149,7 +151,7 @@ async function syncFolder(client: ImapFlow, account: Account, folder: Folder, fo
 
     await db.folder.update({
       where: { id: folder.id },
-      data: { uidValidity: mailbox.uidValidity, lastUid: Math.max(lastUid, ...newUids, 0) },
+      data: { uidValidity: mailbox.uidValidity, lastUid: Math.max(lastUid, ...newUids, 0), highestModseq: modseq, lastExists: mailbox.exists },
     })
   } finally {
     lock.release()

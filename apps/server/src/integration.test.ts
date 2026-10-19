@@ -20,15 +20,16 @@ const servicesUp = !!process.env.DATABASE_URL && (await reachable(5432)) && (awa
 
 // Loaded only when the services are up: importing config without them would stop the process.
 const load = async () => {
-  const [{ db }, crypto, { buildApp }, { syncAccount }, { withImap }] = await Promise.all([
+  const [{ db }, crypto, { buildApp }, { syncAccount }, { withImap }, { sendScheduled }] = await Promise.all([
     import('./db.ts'),
     import('./lib/crypto.ts'),
     import('./app.ts'),
     import('./features/mail/sync.ts'),
     import('./features/accounts/connect.ts'),
+    import('./features/send/send.ts'),
   ])
   crypto.setEncryptionSecret(process.env.APP_SECRET!)
-  return { db, crypto, buildApp, syncAccount, withImap }
+  return { db, crypto, buildApp, syncAccount, withImap, sendScheduled }
 }
 
 const unique = () => Math.random().toString(36).slice(2, 10)
@@ -141,5 +142,101 @@ describe.skipIf(!servicesUp)('IMAP sync', () => {
     await env.syncAccount(accountId)
     const after = await inbox()
     expect(after.map((m) => [m.subject, m.unread])).toEqual([['Message 1', false], ['Message 3', true]])
+  })
+})
+
+// A user with one account and one message, signed in through the real login route.
+async function seedUser(env: Awaited<ReturnType<typeof load>>, app: Awaited<ReturnType<Awaited<ReturnType<typeof load>>['buildApp']>>, password: string) {
+  const { db, crypto } = env
+  const user = await db.user.create({ data: { name: 'U', email: `u-${unique()}@test.local`, passwordHash: await crypto.hashPassword(password) } })
+  const account = await db.account.create({
+    data: {
+      ownerId: user.id, email: `u-${unique()}@test.local`, name: 'U', color: '#000000', protocol: 'imap', auth: 'password',
+      inHost: 'localhost', inPort: 1, inTls: true, smtpHost: 'localhost', smtpPort: 1, smtpTls: true, username: 'x', secret: crypto.encrypt('x'),
+    },
+  })
+  const folder = await db.folder.create({ data: { accountId: account.id, path: 'INBOX', role: 'inbox' } })
+  const message = await db.message.create({
+    data: {
+      accountId: account.id, folderId: folder.id, fromName: 'A', fromEmail: 'a@test.local', to: [], cc: [], subject: 'Diary', preview: 'Secret preview',
+      text: 'Dear diary', html: null, date: new Date(), category: 'people', labels: [], attachments: [], raw: Buffer.from('Subject: Diary\r\n\r\nDear diary\r\n'),
+    },
+  })
+  const signIn = async (pw: string) => String((await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: user.email, password: pw } })).headers['set-cookie']).split(';')[0]
+  return { user, account, message, signIn }
+}
+
+describe.skipIf(!servicesUp)('private storage', () => {
+  let env: Awaited<ReturnType<typeof load>>
+  let app: Awaited<ReturnType<Awaited<ReturnType<typeof load>>['buildApp']>>
+  let userId = ''
+
+  beforeAll(async () => {
+    env = await load()
+    app = await env.buildApp()
+  })
+  afterAll(async () => {
+    await env?.db.user.deleteMany({ where: { id: userId } })
+    await app?.close()
+  })
+
+  it('seals stored mail, opens it after sign-in and a password change, and unseals when turned off', async () => {
+    const { user, message, signIn } = await seedUser(env, app, 'first password 1')
+    userId = user.id
+    const read = (cookie: string) => app.inject({ method: 'GET', url: `/api/messages/${message.id}`, headers: { cookie } })
+    const post = (cookie: string, url: string, payload: object) => app.inject({ method: 'POST', url, payload, headers: { cookie } })
+
+    const phone = await signIn('first password 1')
+    const laptop = await signIn('first password 1')
+    expect((await post(laptop, '/api/auth/private-storage', { enabled: true, password: 'first password 1' })).statusCode).toBe(200)
+
+    const stored = await env.db.message.findUniqueOrThrow({ where: { id: message.id } })
+    expect(stored.sealedBody).not.toBeNull()
+    expect([stored.text, stored.html, stored.preview, stored.raw.length]).toEqual([null, null, '', 0])
+
+    expect((await read(laptop)).json().text).toBe('Dear diary')
+    expect((await read(phone)).statusCode).toBe(401) // other devices are signed out, so they can sign in and get the key
+
+    expect((await post(laptop, '/api/auth/password', { current: 'first password 1', next: 'second password 2' })).statusCode).toBe(200)
+    const again = await signIn('second password 2')
+    expect((await read(again)).json().text).toBe('Dear diary')
+
+    expect((await post(again, '/api/auth/private-storage', { enabled: false, password: 'second password 2' })).statusCode).toBe(200)
+    const unsealed = await env.db.message.findUniqueOrThrow({ where: { id: message.id } })
+    expect([unsealed.sealedBody, unsealed.text]).toEqual([null, 'Dear diary'])
+  })
+})
+
+describe.skipIf(!servicesUp)('scheduled send', () => {
+  let env: Awaited<ReturnType<typeof load>>
+  let userId = ''
+
+  beforeAll(async () => {
+    env = await load()
+  })
+  afterAll(async () => {
+    await env?.db.user.deleteMany({ where: { id: userId } })
+  })
+
+  it('goes back to scheduled after a failed attempt, and is marked failed only after the last', async () => {
+    const { db, crypto } = env
+    const user = await db.user.create({ data: { name: 'S', email: `s-${unique()}@test.local`, passwordHash: 'x' } })
+    userId = user.id
+    // SMTP port 1: every attempt fails.
+    const account = await db.account.create({
+      data: {
+        ownerId: user.id, email: 's@test.local', name: 'S', color: '#000000', protocol: 'imap', auth: 'password',
+        inHost: 'localhost', inPort: 1, inTls: true, smtpHost: 'localhost', smtpPort: 1, smtpTls: true, username: 'x', secret: crypto.encrypt('x'),
+      },
+    })
+    const outgoing = await db.outgoingMessage.create({
+      data: { userId: user.id, accountId: account.id, status: 'scheduled', scheduledFor: new Date(), payload: { accountId: account.id, to: ['x@test.local'], subject: 'x', text: 'x' } },
+    })
+    const status = async () => (await db.outgoingMessage.findUniqueOrThrow({ where: { id: outgoing.id } })).status
+
+    await expect(env.sendScheduled(outgoing.id, false)).rejects.toThrow()
+    expect(await status()).toBe('scheduled')
+    await expect(env.sendScheduled(outgoing.id, true)).rejects.toThrow()
+    expect(await status()).toBe('failed')
   })
 })

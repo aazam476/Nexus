@@ -1,12 +1,14 @@
 // Sending, scheduling, and drafts.
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
+import { simpleParser } from 'mailparser'
 import { z } from 'zod'
 import { db } from '../../db.ts'
 import { cancelSend, scheduleSend } from '../../jobs/queue.ts'
-import { requireAccountRole } from '../../lib/access.ts'
+import { loadBody, requireAccountRole, requireMessage } from '../../lib/access.ts'
 import { badRequest, notFound, parse } from '../../lib/http.ts'
-import { requireUser } from '../../lib/session.ts'
-import { outgoingSchema, sendNow } from './send.ts'
+import { requireUser, storageKey } from '../../lib/session.ts'
+import { openBody } from '../mail/private.ts'
+import { outgoingSchema, sendNow, type OutgoingPayload } from './send.ts'
 
 export async function sendRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireUser)
@@ -14,8 +16,9 @@ export async function sendRoutes(app: FastifyInstance) {
   // Send now, or later when `scheduledFor` is in the future. `draftId` removes the draft it came from.
   app.post('/send', { bodyLimit: 30 * 1024 * 1024 }, async (request) => {
     const body = parse(outgoingSchema.extend({ scheduledFor: z.coerce.date().optional(), draftId: z.string().optional() }), request.body)
-    const { scheduledFor, draftId, ...payload } = body
-    await requireAccountRole(request.user.id, payload.accountId, 'editor')
+    const { scheduledFor, draftId, ...fields } = body
+    await requireAccountRole(request.user.id, fields.accountId, 'editor')
+    const payload = await withForwardedAttachments(request, fields)
 
     if (scheduledFor && scheduledFor.getTime() > Date.now() + 30_000) {
       const outgoing = await db.outgoingMessage.create({ data: { userId: request.user.id, accountId: payload.accountId, status: 'scheduled', payload, scheduledFor } })
@@ -63,4 +66,16 @@ export async function sendRoutes(app: FastifyInstance) {
     await db.outgoingMessage.delete({ where: { id: outgoing.id } })
     return { sent: true }
   })
+}
+
+// Forwarding: copy the original message's attachments into the new one. Done here, while the
+// user is signed in (private storage needs their key), so scheduled sends carry them too.
+async function withForwardedAttachments(request: FastifyRequest, payload: OutgoingPayload): Promise<OutgoingPayload> {
+  if (!payload.forwardOf) return payload
+  const original = await requireMessage(request.user.id, payload.forwardOf, 'viewer')
+  const mail = await simpleParser(openBody(await loadBody(original.id), await storageKey(request)).raw)
+  const files = mail.attachments
+    .filter((a) => !a.related && !/pkcs7-(signature|mime)/.test(a.contentType)) // the same files the reader lists
+    .map((a) => ({ filename: a.filename ?? 'attachment', contentType: a.contentType, content: a.content.toString('base64') }))
+  return { ...payload, forwardOf: undefined, attachments: [...payload.attachments, ...files] }
 }

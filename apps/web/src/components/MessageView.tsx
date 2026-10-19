@@ -45,7 +45,7 @@ export function MessageView({ summary, readOnly, onBack, onRefresh, actions }: P
       subject: replySubject(message.subject),
       replyTo: message,
     })
-  const forward = () => openComposer({ accountId: message.accountId, subject: replySubject(message.subject, 'Fwd'), replyTo: message })
+  const forward = () => openComposer({ accountId: message.accountId, subject: replySubject(message.subject, 'Fwd'), replyTo: message, forwardOf: message.id })
   const inSpam = message.folder === 'spam'
 
   return (

@@ -1,5 +1,5 @@
 import { ImageOff } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildSafeEmailDocument } from '../lib/sanitize'
 import { Button } from './ui'
 
@@ -11,10 +11,20 @@ export function SafeHtml({ html }: { html: string }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const safe = useMemo(() => buildSafeEmailDocument(html, allowImages), [html, allowImages])
 
+  const watcher = useRef<ResizeObserver | null>(null)
+
+  // Size the frame to its content, and keep doing so: rotating a phone or narrowing the window
+  // re-wraps the text, and the frame hides its own scrollbar, so a stale height would cut the end off.
   function fitHeight() {
-    const root = frame.current?.contentDocument?.documentElement
-    if (root) setHeight(root.scrollHeight)
+    const doc = frame.current?.contentDocument
+    if (!doc?.body) return
+    const fit = () => setHeight(doc.documentElement.scrollHeight)
+    watcher.current?.disconnect()
+    watcher.current = new ResizeObserver(fit)
+    watcher.current.observe(doc.body)
+    fit()
   }
+  useEffect(() => () => watcher.current?.disconnect(), [])
 
   return (
     <div className="grid gap-3">
