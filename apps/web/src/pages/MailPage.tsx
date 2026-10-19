@@ -1,13 +1,15 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { Inbox } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useOutletContext, useParams } from 'react-router'
-import { MessageList } from '../components/MessageList'
+import { MessageList, sections } from '../components/MessageList'
 import { MessageView } from '../components/MessageView'
 import type { ShellContext } from '../components/AppShell'
-import { accounts } from '../mock/data'
-import { isTyping } from '../lib/keyboard'
-import { useStore } from '../lib/store'
+import { api, patch } from '../lib/api'
 import { replySubject } from '../lib/format'
+import { isTyping } from '../lib/keyboard'
+import { useAccounts, useMessages, useRefreshMail } from '../lib/queries'
+import { useStore } from '../lib/store'
 import type { FolderRole, Message } from '../types'
 
 const folderTitles: Record<FolderRole, string> = {
@@ -20,61 +22,120 @@ export function MailPage() {
   const { search } = useLocation()
   const navigate = useNavigate()
   const { openNav } = useOutletContext<ShellContext>()
-  const { messages, updateMessage, layout, openComposer } = useStore()
+  const { layout, openComposer } = useStore()
+  const client = useQueryClient()
+  const refresh = useRefreshMail()
+  const accounts = useAccounts().data ?? []
   const [query, setQuery] = useState('')
+  const [searchText, setSearchText] = useState('')
+  const [error, setError] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+
+  // Wait until typing pauses before asking the server to search.
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(searchText.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchText])
 
   const params = new URLSearchParams(search)
   const accountId = params.get('account')
   const label = params.get('label')
   const role = folder as FolderRole
-
-  const visible = messages
-    .filter((m) => (role === 'starred' ? m.starred && m.folder !== 'trash' : m.folder === role))
-    .filter((m) => !accountId || m.accountId === accountId)
-    .filter((m) => !label || m.labels.includes(label))
-    .filter((m) => !query || `${m.subject} ${m.from.name} ${m.from.email} ${m.preview}`.toLowerCase().includes(query.toLowerCase()))
-    .sort((a, b) => b.date.localeCompare(a.date))
+  const list = useMessages({ folder: role, account: accountId, label, q: query || undefined })
+  const visible = list.data ?? []
 
   const selected = visible.find((m) => m.id === messageId)
-  const title = label ?? accounts.find((a) => a.id === accountId)?.email ?? folderTitles[role] ?? 'Mail'
+  const title = query ? 'Search' : label ?? accounts.find((a) => a.id === accountId)?.email ?? folderTitles[role] ?? 'Mail'
   // Smart sections only make sense for the inbox; other folders stay chronological.
   const smart = role === 'inbox' && !query
+  const canEdit = (message: Message) => accounts.find((a) => a.id === message.accountId)?.role !== 'viewer'
 
   // The order rows appear on screen, so j/k walk the list the way the user sees it.
-  const ordered = smart
-    ? ['people', 'travel', 'notifications', 'newsletters'].flatMap((c) => visible.filter((m) => m.category === c))
-    : visible
+  const ordered = smart ? sections.flatMap((s) => visible.filter((m) => m.category === s.category)) : visible
 
-  const open = (message: Message) => {
-    if (message.unread) updateMessage(message.id, { unread: false })
+  // Change a message in every cached list right away; the server catches up in the background.
+  function updateLocally(id: string, change: Partial<Message>) {
+    client.setQueriesData<Message[]>({ queryKey: ['messages'] }, (rows) => rows?.map((m) => (m.id === id ? { ...m, ...change } : m)))
+    client.setQueryData<Message>(['message', id], (m) => (m ? { ...m, ...change } : m))
+  }
+
+  async function run(action: () => Promise<unknown>) {
+    setError('')
+    try {
+      await action()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      refresh()
+    }
+  }
+
+  async function open(message: Message) {
+    // Drafts written in Nexus open in the composer.
+    if (message.outgoing && message.folder === 'drafts') {
+      const draft = await api<Message>(`/messages/${message.id}`)
+      openComposer({ id: draft.id, accountId: draft.accountId, to: draft.to.map((p) => p.email).join(', '), cc: draft.cc.map((p) => p.email).join(', '), subject: draft.subject, html: draft.html ?? '' })
+      return
+    }
     navigate(`/mail/${folder}/${message.id}${search}`)
+    if (message.unread && !message.outgoing && canEdit(message)) {
+      updateLocally(message.id, { unread: false })
+      run(() => patch(`/messages/${message.id}`, { unread: false }))
+    }
   }
   const close = () => navigate(`/mail/${folder}${search}`)
 
-  const moveTo = (target: FolderRole) => {
+  // After moving the open message away, show the next one, like most mail apps do.
+  function openNext() {
     if (!selected) return
     const next = ordered[ordered.indexOf(selected) + 1] ?? ordered[ordered.indexOf(selected) - 1]
-    updateMessage(selected.id, { folder: target })
     if (next) open(next)
     else close()
+  }
+
+  const actions = {
+    move: (to: FolderRole) => {
+      if (!selected) return
+      openNext()
+      run(() => api(`/messages/${selected.id}/move`, { body: { to } }))
+    },
+    remove: () => {
+      if (!selected) return
+      openNext()
+      run(() => api(`/messages/${selected.id}`, { method: 'DELETE' }))
+    },
+    spam: (spam: boolean) => {
+      if (!selected) return
+      openNext()
+      run(() => api(`/messages/${selected.id}/spam`, { body: { spam } }))
+    },
+    star: (message: Message) => {
+      updateLocally(message.id, { starred: !message.starred })
+      run(() => patch(`/messages/${message.id}`, { starred: !message.starred }))
+    },
+    markUnread: (message: Message) => {
+      updateLocally(message.id, { unread: true })
+      run(() => patch(`/messages/${message.id}`, { unread: true }))
+      close()
+    },
   }
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (isTyping(event)) return
       const index = selected ? ordered.indexOf(selected) : -1
+      const editable = selected && !selected.outgoing && canEdit(selected)
       switch (event.key) {
         case 'j': if (ordered[index + 1]) open(ordered[index + 1]); break
         case 'k': if (index > 0) open(ordered[index - 1]); break
         case '/': event.preventDefault(); searchRef.current?.focus(); break
-        case 'e': moveTo('archive'); break
-        case '#': moveTo('trash'); break
-        case '!': moveTo('spam'); break
-        case 's': if (selected) updateMessage(selected.id, { starred: !selected.starred }); break
-        case 'u': if (selected) { updateMessage(selected.id, { unread: true }); close() } break
-        case 'r': if (selected) openComposer({ to: selected.from.email, subject: replySubject(selected.subject), replyTo: selected }); break
-        case 'f': if (selected) openComposer({ subject: replySubject(selected.subject, 'Fwd'), replyTo: selected }); break
+        case 'e': if (editable) actions.move('archive'); break
+        case '#': if (editable) actions.remove(); break
+        case '!': if (editable) actions.spam(selected.folder !== 'spam'); break
+        case 's': if (editable) actions.star(selected); break
+        case 'u': if (editable) actions.markUnread(selected); break
+        case 'r': if (selected) openComposer({ accountId: selected.accountId, to: selected.from.email, subject: replySubject(selected.subject), replyTo: selected }); break
+        case 'f': if (selected) openComposer({ accountId: selected.accountId, subject: replySubject(selected.subject, 'Fwd'), replyTo: selected }); break
         case 'Escape': if (selected) close(); break
       }
     }
@@ -87,33 +148,40 @@ export function MailPage() {
     document.querySelector(`[data-message-id="${messageId}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [messageId])
 
-  const list = (
+  const listPane = (
     <MessageList
       ref={searchRef}
       title={title}
       messages={visible}
+      loading={list.isLoading}
       smart={smart}
       selectedId={messageId}
-      query={query}
-      onQuery={setQuery}
+      query={searchText}
+      onQuery={setSearchText}
       onOpen={open}
       onOpenNav={openNav}
     />
   )
   const reader = selected && (
-    <MessageView key={selected.id} message={selected} onBack={close} onArchive={() => moveTo('archive')} onDelete={() => moveTo('trash')} onSpam={() => moveTo('spam')} />
+    <MessageView key={selected.id} summary={selected} readOnly={!canEdit(selected)} onBack={close} actions={actions} onRefresh={refresh} />
   )
 
   // Phone, or the "list" layout: one pane at a time.
   // Desktop three-pane: list and reader side by side.
   return (
-    <div className="flex h-full">
+    <div className="relative flex h-full">
       <div className={`h-full border-r border-line ${selected ? 'hidden' : 'w-full'} ${layout === 'three-pane' ? 'md:block md:w-[400px] md:shrink-0' : ''}`}>
-        {list}
+        {listPane}
       </div>
       <div className={`h-full min-w-0 flex-1 ${selected ? '' : 'hidden'} ${layout === 'three-pane' ? 'md:block' : ''}`}>
         {reader ?? <EmptyReader count={visible.filter((m) => m.unread).length} />}
       </div>
+      {error && (
+        <div role="alert" className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-line bg-panel px-4 py-2.5 shadow-pop">
+          <span className="text-danger">{error}</span>
+          <button type="button" className="text-muted hover:text-ink" onClick={() => setError('')}>Dismiss</button>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { ChevronDown, Clock, Columns2, Lock, Menu, Paperclip, Rows3, Search, Star } from 'lucide-react'
 import { forwardRef, useState } from 'react'
-import { accounts } from '../mock/data'
+import { Link } from 'react-router'
+import { useAccounts } from '../lib/queries'
 import { formatListDate } from '../lib/format'
 import { useStore } from '../lib/store'
 import type { Category, Message } from '../types'
@@ -14,11 +15,10 @@ export const sections: { category: Category; title: string; color: string; bundl
   { category: 'newsletters', title: 'Newsletters', color: 'var(--news)', bundled: true },
 ]
 
-const accountColor = (id: string) => accounts.find((a) => a.id === id)?.color
-
 interface Props {
   title: string
   messages: Message[]
+  loading: boolean
   smart: boolean
   selectedId?: string
   query: string
@@ -28,15 +28,17 @@ interface Props {
 }
 
 export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageList(
-  { title, messages, smart, selectedId, query, onQuery, onOpen, onOpenNav },
+  { title, messages, loading, smart, selectedId, query, onQuery, onOpen, onOpenNav },
   searchRef,
 ) {
   const { layout, setLayout } = useStore()
+  const accounts = useAccounts().data
+  const accountColor = (id: string) => accounts?.find((a) => a.id === id)?.color
   const [expanded, setExpanded] = useState<Category[]>([])
   const unread = messages.filter((m) => m.unread).length
 
   const row = (message: Message) => (
-    <MessageRow key={message.id} message={message} selected={message.id === selectedId} onOpen={() => onOpen(message)} />
+    <MessageRow key={message.id} message={message} accountColor={accountColor(message.accountId)} selected={message.id === selectedId} onOpen={() => onOpen(message)} />
   )
 
   return (
@@ -73,12 +75,23 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
       </header>
 
       <div className="flex-1 overflow-y-auto pb-6">
-        {messages.length === 0 && (
+        {messages.length === 0 && !loading && (
           <div className="px-6 py-16 text-center">
-            <p className="font-semibold">{query ? 'No messages match' : 'Nothing here'}</p>
-            <p className="mt-1 text-muted">{query ? `Nothing found for “${query}”.` : 'New mail will show up here.'}</p>
+            {accounts?.length === 0 ? (
+              <>
+                <p className="font-semibold">Connect your first mail account</p>
+                <p className="mt-1 text-muted">Nexus works with any IMAP or POP3 provider, plus Gmail and Outlook.</p>
+                <Link to="/settings/accounts" className="mt-4 inline-block rounded-lg bg-accent px-3 py-1.5 font-semibold text-accent-ink">Add account</Link>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold">{query ? 'No messages match' : 'Nothing here'}</p>
+                <p className="mt-1 text-muted">{query ? `Nothing found for “${query}”.` : 'New mail will show up here.'}</p>
+              </>
+            )}
           </div>
         )}
+        {loading && messages.length === 0 && <p className="px-6 py-16 text-center text-muted" aria-busy="true">Loading mail…</p>}
 
         {!smart && messages.map(row)}
 
@@ -109,7 +122,7 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
   )
 })
 
-function MessageRow({ message, selected, onOpen }: { message: Message; selected: boolean; onOpen: () => void }) {
+function MessageRow({ message, accountColor, selected, onOpen }: { message: Message; accountColor?: string; selected: boolean; onOpen: () => void }) {
   const sender = message.folder === 'sent' || message.folder === 'scheduled' ? `To: ${message.to.map((p) => p.name).join(', ')}` : message.from.name
   return (
     <button
@@ -122,7 +135,7 @@ function MessageRow({ message, selected, onOpen }: { message: Message; selected:
       }`}
     >
       <span className="row-span-3 pt-0.5">
-        <Avatar name={message.from.name} accountColor={accountColor(message.accountId)} />
+        <Avatar name={message.from.name} accountColor={accountColor} />
       </span>
       <span className={`truncate ${message.unread ? 'font-bold text-ink' : 'font-medium text-ink-2'}`}>{sender}</span>
       <span className={`text-[12px] whitespace-nowrap ${message.unread ? 'font-semibold text-accent-text' : 'text-muted'}`}>
@@ -134,6 +147,7 @@ function MessageRow({ message, selected, onOpen }: { message: Message; selected:
         {message.attachments.length > 0 && <Paperclip size={13} className="shrink-0 text-muted" aria-label="Has attachments" />}
         {message.security?.endsWith('encrypted') && <Lock size={13} className="shrink-0 text-news" aria-label="Encrypted" />}
         {message.scheduledFor && <Clock size={13} className="shrink-0 text-notif" aria-label="Scheduled" />}
+        {message.error && <span className="shrink-0 text-[12px] font-semibold text-danger">Failed</span>}
       </span>
       <span className="col-span-2 truncate text-[12.5px] text-muted">{message.preview}</span>
     </button>

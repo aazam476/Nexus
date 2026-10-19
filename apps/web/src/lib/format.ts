@@ -41,3 +41,10 @@ export function avatarColor(seed: string): string {
 export function replySubject(subject: string, prefix: 'Re' | 'Fwd' = 'Re'): string {
   return new RegExp(`^${prefix}:`, 'i').test(subject) ? subject : `${prefix}: ${subject}`
 }
+
+export function timeAgo(iso: string): string {
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  return formatListDate(iso)
+}

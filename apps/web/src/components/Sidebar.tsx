@@ -1,8 +1,9 @@
 import { Archive, BookUser, Clock, FileText, Inbox, PenLine, Send, Settings, ShieldAlert, Star, Trash2, type LucideIcon } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router'
-import { accounts, labels } from '../mock/data'
+import { useAccounts, useCounts, useLabels } from '../lib/queries'
 import { useStore } from '../lib/store'
-import type { FolderRole } from '../types'
+import { timeAgo } from '../lib/format'
+import type { Account, FolderRole } from '../types'
 import { Kbd, Logo } from './ui'
 
 const folders: { role: FolderRole; name: string; icon: LucideIcon }[] = [
@@ -24,12 +25,14 @@ function Count({ value }: { value: number }) {
 }
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const { messages, openComposer } = useStore()
+  const { openComposer } = useStore()
   const { pathname, search } = useLocation()
   const accountFilter = new URLSearchParams(search).get('account')
+  const accounts = useAccounts().data ?? []
+  const labels = useLabels().data ?? []
+  const counts = useCounts().data
 
-  const unreadIn = (role: FolderRole) =>
-    messages.filter((m) => (role === 'starred' ? m.starred : m.folder === role) && (role === 'scheduled' || m.unread)).length
+  const unreadIn = (role: FolderRole) => counts?.folders[role] ?? 0
 
   return (
     <nav aria-label="Mailboxes" className="flex h-full flex-col gap-4 overflow-y-auto bg-gradient-to-b from-side to-ground px-2.5 py-3.5">
@@ -70,21 +73,21 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           >
             <i className="mx-1 h-2 w-2 shrink-0 rounded-full" style={{ background: account.color }} />
             <span className="truncate">{account.email}</span>
-            <Count value={messages.filter((m) => m.accountId === account.id && m.folder === 'inbox' && m.unread).length} />
+            <Count value={counts?.accounts[account.id] ?? 0} />
           </NavLink>
         ))}
       </div>
 
-      <div className="grid gap-0.5">
+      {labels.length > 0 && <div className="grid gap-0.5">
         <h2 className="px-2 pb-1 text-[12px] font-semibold text-faint">Labels</h2>
         {labels.map((label) => (
           <NavLink key={label.name} to={`/mail/inbox?label=${label.name}`} onClick={onNavigate} className={() => itemClass(search.includes(`label=${label.name}`))}>
             <i className="mx-1 h-2 w-2 shrink-0 rounded-sm" style={{ background: label.color }} />
             {label.name}
-            <Count value={messages.filter((m) => m.labels.includes(label.name) && m.unread).length} />
+            <Count value={counts?.labels[label.name] ?? 0} />
           </NavLink>
         ))}
-      </div>
+      </div>}
 
       <div className="mt-auto grid gap-0.5 border-t border-line pt-3">
         <NavLink to="/contacts" onClick={onNavigate} className={({ isActive }) => itemClass(isActive)}>
@@ -93,12 +96,23 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink to="/settings" onClick={onNavigate} className={({ isActive }) => itemClass(isActive)}>
           <Settings size={16} strokeWidth={1.8} /> Settings
         </NavLink>
-        <div className="flex items-center gap-2 px-2 pt-2 text-[12px] text-muted">
-          <i className="h-[7px] w-[7px] rounded-full bg-news" />
-          Synced just now
-          <span className="ml-auto"><Kbd>?</Kbd></span>
-        </div>
+        <SyncStatus accounts={accounts} />
       </div>
     </nav>
+  )
+}
+
+function SyncStatus({ accounts }: { accounts: Account[] }) {
+  const failing = accounts.filter((a) => a.syncError)
+  const last = accounts.map((a) => a.lastSyncAt).filter(Boolean).sort().at(-1)
+  const text = failing.length
+    ? `Can’t sync ${failing.map((a) => a.email).join(', ')}`
+    : accounts.length === 0 ? 'No accounts yet' : last ? `Synced ${timeAgo(last)}` : 'Syncing…'
+  return (
+    <div className="flex items-center gap-2 px-2 pt-2 text-[12px] text-muted" title={failing.map((a) => `${a.email}: ${a.syncError}`).join('\n') || undefined}>
+      <i className={`h-[7px] w-[7px] shrink-0 rounded-full ${failing.length ? 'bg-danger' : 'bg-news'}`} />
+      <span className="truncate">{text}</span>
+      <span className="ml-auto"><Kbd>?</Kbd></span>
+    </div>
   )
 }

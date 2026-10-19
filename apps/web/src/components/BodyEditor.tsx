@@ -124,7 +124,6 @@ function RichEditor({ content, version, onChange }: { content: string; version: 
   // Load content only when the composer replaces it; otherwise the browser owns the DOM while typing.
   useEffect(() => {
     if (editor.current) editor.current.innerHTML = content
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version])
 
   function onPaste(event: ClipboardEvent<HTMLDivElement>) {

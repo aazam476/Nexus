@@ -1,4 +1,4 @@
-// Shapes the web app works with. The server API will return these same shapes.
+// Shapes the web app works with. These match what the server's API returns.
 
 export type Category = 'people' | 'travel' | 'notifications' | 'newsletters'
 
@@ -11,9 +11,18 @@ export interface Account {
   color: string
   protocol: 'imap' | 'pop3'
   auth: 'password' | 'oauth-google' | 'oauth-microsoft'
-  unread: number
   role: 'owner' | 'editor' | 'viewer'
-  signature: string // HTML; plain-text mode converts it
+  signature: string // HTML
+  lastSyncAt: string | null
+  syncError: string | null
+  // Server settings, only sent to the account's owner.
+  inHost?: string
+  inPort?: number
+  inTls?: boolean
+  smtpHost?: string
+  smtpPort?: number
+  smtpTls?: boolean
+  username?: string
 }
 
 export interface Person {
@@ -43,29 +52,35 @@ export interface Message {
   category: Category
   from: Person
   to: Person[]
-  cc?: Person[]
+  cc: Person[]
   subject: string
   preview: string
-  html?: string
-  text?: string
   date: string
   unread: boolean
   starred: boolean
   labels: string[]
   attachments: Attachment[]
-  event?: CalendarEvent
-  security?: 'pgp-encrypted' | 'pgp-signed' | 'smime-signed' | 'smime-encrypted'
-  scheduledFor?: string
-  hasRemoteImages?: boolean
+  event?: CalendarEvent | null
+  security?: 'pgp-encrypted' | 'pgp-signed' | 'smime-signed' | 'smime-encrypted' | null
+  // Only on the full message (GET /messages/:id):
+  messageId?: string | null
+  html?: string | null
+  text?: string | null
+  signature?: 'trusted' | 'untrusted' | 'invalid' // S/MIME signature check
+  // Only on drafts and scheduled mail written in Nexus:
+  outgoing?: boolean
+  scheduledFor?: string | null
+  error?: string | null
 }
 
 export interface Contact {
   id: string
   name: string
   emails: string[]
-  phone?: string
-  company?: string
-  pgpKey?: { fingerprint: string; created: string }
+  phone?: string | null
+  company?: string | null
+  pgpPublicKey?: string | null
+  pgpFingerprint?: string | null
   messageCount: number
 }
 
@@ -77,13 +92,15 @@ export interface Plugin {
   builtIn: boolean
   enabled: boolean
   capabilities: ('save-attachment' | 'create-event')[]
-  settings: { key: string; label: string; type: 'text' | 'password' | 'url'; value: string; placeholder?: string }[]
+  settings: { key: string; label: string; type: 'text' | 'password' | 'url'; value: string; placeholder?: string; required?: boolean }[]
 }
 
 export interface Rule {
   id: string
   name: string
-  when: { field: 'from' | 'to' | 'subject' | 'body'; contains: string }
-  then: { action: 'label' | 'move' | 'category' | 'mark-read' | 'spam'; value?: string }
+  field: 'from' | 'to' | 'subject' | 'body'
+  contains: string
+  action: 'label' | 'move' | 'category' | 'mark-read' | 'spam'
+  value?: string | null
   enabled: boolean
 }

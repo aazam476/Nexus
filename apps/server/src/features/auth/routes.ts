@@ -10,6 +10,9 @@ import { decrypt, encrypt, hashPassword, randomToken, sha256, verifyPassword } f
 import { HttpError, badRequest, forbidden, parse } from '../../lib/http.ts'
 import { endSession, findSession, requireUser, startSession } from '../../lib/session.ts'
 
+// Accept the code before and after the current one: phone clocks drift and people type slowly.
+authenticator.options = { window: 1 }
+
 const email = z.string().trim().toLowerCase().email()
 const password = z.string().min(12, 'Use at least 12 characters').max(200)
 const strict = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }
@@ -117,21 +120,20 @@ export async function authRoutes(app: FastifyInstance) {
       return { ok: true }
     })
 
-    // 2FA setup: create a secret, show it as a QR code, and only turn 2FA on once a code checks out.
+    // 2FA setup: create a secret and show it as a QR code. Nothing is saved until a code from it checks out,
+    // so moving to a new phone can be cancelled halfway without breaking the old one.
     signedIn.post('/2fa/setup', async (request) => {
       const secret = authenticator.generateSecret()
-      await db.user.update({ where: { id: request.user.id }, data: { totpSecret: encrypt(secret) } })
       const otpauthUrl = authenticator.keyuri(request.user.email, 'Nexus', secret)
       return { secret, otpauthUrl, qrCode: await QRCode.toDataURL(otpauthUrl, { margin: 1, width: 240 }) }
     })
 
     signedIn.post('/2fa/enable', strict, async (request) => {
-      const { code } = parse(z.object({ code: z.string() }), request.body)
-      const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
-      if (!user.totpSecret || !authenticator.verify({ token: code.replace(/\s/g, ''), secret: decrypt(user.totpSecret) })) {
+      const { code, secret } = parse(z.object({ code: z.string(), secret: z.string().regex(/^[A-Z2-7]{16,}$/) }), request.body)
+      if (!authenticator.verify({ token: code.replace(/\s/g, ''), secret })) {
         throw badRequest('That code is not valid. Check the time on your phone and try again.')
       }
-      const recoveryCodes = await newRecoveryCodes(user.id, { totpEnabled: true })
+      const recoveryCodes = await newRecoveryCodes(request.user.id, { totpEnabled: true, totpSecret: encrypt(secret) })
       return { recoveryCodes }
     })
 
@@ -164,7 +166,7 @@ export async function authRoutes(app: FastifyInstance) {
 }
 
 // Ten single-use codes, shown once. Only their hashes are kept.
-async function newRecoveryCodes(userId: string, extra: { totpEnabled?: boolean } = {}) {
+async function newRecoveryCodes(userId: string, extra: { totpEnabled?: boolean; totpSecret?: string } = {}) {
   const codes = Array.from({ length: 10 }, () => randomBytes(5).toString('hex').replace(/(.{5})/, '$1-')) // e.g. "3f9a1-0c7d2"
   await db.user.update({ where: { id: userId }, data: { ...extra, recoveryCodes: codes.map((c) => sha256(normalizeCode(c))) } })
   return codes

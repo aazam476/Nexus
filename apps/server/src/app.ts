@@ -32,7 +32,7 @@ const csp = [
   "frame-src 'self' blob:",
   "object-src 'none'",
   "form-action 'self'",
-  "frame-ancestors 'none'",
+  "frame-ancestors 'self'",
 ].join('; ')
 
 export async function buildApp() {
@@ -45,7 +45,8 @@ export async function buildApp() {
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-content-type-options', 'nosniff')
     reply.header('referrer-policy', 'no-referrer')
-    reply.header('x-frame-options', 'DENY')
+    // SAMEORIGIN, not DENY: Nexus itself shows attachment previews (PDF, text) in frames. Other sites still can't.
+    reply.header('x-frame-options', 'SAMEORIGIN')
     if (request.url.startsWith('/api/')) checkOrigin(request)
   })
 

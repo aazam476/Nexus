@@ -1,28 +1,29 @@
-// App-wide state: messages, theme, layout and the composer.
-// shortcut: state lives in memory on mock data; swap for API calls + react-query when the server lands.
+// UI state shared across the app: theme, layout and the open composer.
+// Mail itself comes from the server through the hooks in queries.ts.
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { messages as mockMessages } from '../mock/data'
 import type { Message } from '../types'
+import { put } from './api'
 
 export type Theme = 'system' | 'dark' | 'light'
 export type Layout = 'three-pane' | 'list'
 
 export interface Draft {
+  id?: string // set when editing a saved draft
+  accountId?: string
   to: string
   cc: string
   bcc: string
   subject: string
-  body: string
+  html?: string
   replyTo?: Message
 }
 
 interface Store {
-  messages: Message[]
-  updateMessage: (id: string, change: Partial<Message>) => void
   theme: Theme
   setTheme: (theme: Theme) => void
   layout: Layout
   setLayout: (layout: Layout) => void
+  applyPreferences: (preferences: { theme: Theme; layout: Layout }) => void
   draft: Draft | null
   openComposer: (draft?: Partial<Draft>) => void
   closeComposer: () => void
@@ -30,7 +31,8 @@ interface Store {
 
 const StoreContext = createContext<Store | null>(null)
 
-function readSetting<T extends string>(key: string, fallback: T): T {
+// The theme is also kept in localStorage so the first paint is right before the server answers.
+function readLocal<T extends string>(key: string, fallback: T): T {
   try {
     return (localStorage.getItem(key) as T) ?? fallback
   } catch {
@@ -38,18 +40,17 @@ function readSetting<T extends string>(key: string, fallback: T): T {
   }
 }
 
-function saveSetting(key: string, value: string) {
+function saveLocal(key: string, value: string) {
   try {
     localStorage.setItem(key, value)
   } catch {
-    // Private mode or blocked storage: the setting just won't persist.
+    // Private mode or blocked storage: the server copy still has it.
   }
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [messages, setMessages] = useState(mockMessages)
-  const [theme, setThemeState] = useState<Theme>(() => readSetting('nexus.theme', 'system'))
-  const [layout, setLayoutState] = useState<Layout>(() => readSetting('nexus.layout', 'three-pane'))
+  const [theme, setThemeState] = useState<Theme>(() => readLocal('nexus.theme', 'system'))
+  const [layout, setLayoutState] = useState<Layout>(() => readLocal('nexus.layout', 'three-pane'))
   const [draft, setDraft] = useState<Draft | null>(null)
 
   useEffect(() => {
@@ -65,20 +66,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [theme])
 
   const store: Store = {
-    messages,
-    updateMessage: (id, change) => setMessages((all) => all.map((m) => (m.id === id ? { ...m, ...change } : m))),
     theme,
     setTheme: (value) => {
       setThemeState(value)
-      saveSetting('nexus.theme', value)
+      saveLocal('nexus.theme', value)
+      put('/auth/me/preferences', { theme: value }).catch(() => undefined)
     },
     layout,
     setLayout: (value) => {
       setLayoutState(value)
-      saveSetting('nexus.layout', value)
+      saveLocal('nexus.layout', value)
+      put('/auth/me/preferences', { layout: value }).catch(() => undefined)
+    },
+    applyPreferences: (preferences) => {
+      setThemeState(preferences.theme)
+      setLayoutState(preferences.layout)
+      saveLocal('nexus.theme', preferences.theme)
+      saveLocal('nexus.layout', preferences.layout)
     },
     draft,
-    openComposer: (partial) => setDraft({ to: '', cc: '', bcc: '', subject: '', body: '', ...partial }),
+    openComposer: (partial) => setDraft({ to: '', cc: '', bcc: '', subject: '', ...partial }),
     closeComposer: () => setDraft(null),
   }
 

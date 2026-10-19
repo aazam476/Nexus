@@ -1,10 +1,8 @@
 import { KeyRound, X } from 'lucide-react'
-import { useState, type KeyboardEvent } from 'react'
-import { contacts } from '../mock/data'
+import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useContacts } from '../lib/queries'
 
 const looksLikeEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
-
-export const hasPgpKey = (email: string) => contacts.some((c) => c.pgpKey && c.emails.includes(email))
 
 // A "To/Cc/Bcc" line: typed addresses become chips, with contact suggestions.
 export function RecipientField({ label, value, onChange, autoFocus }: {
@@ -14,12 +12,19 @@ export function RecipientField({ label, value, onChange, autoFocus }: {
   autoFocus?: boolean
 }) {
   const [text, setText] = useState('')
+  const [search, setSearch] = useState('')
   const [active, setActive] = useState(0)
+  // Ask the server once typing pauses; contacts are ranked by how often you write to them.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(text.trim()), 150)
+    return () => clearTimeout(timer)
+  }, [text])
+  const contacts = useContacts(search).data ?? []
 
-  const suggestions = text
+  const suggestions = search
     ? contacts
-        .flatMap((c) => c.emails.map((email) => ({ name: c.name, email })))
-        .filter((s) => !value.includes(s.email) && `${s.name} ${s.email}`.toLowerCase().includes(text.toLowerCase()))
+        .flatMap((c) => c.emails.map((email) => ({ name: c.name, email, hasKey: !!c.pgpPublicKey })))
+        .filter((s) => !value.includes(s.email) && `${s.name} ${s.email}`.toLowerCase().includes(search.toLowerCase()))
         .slice(0, 5)
     : []
 
@@ -49,8 +54,7 @@ export function RecipientField({ label, value, onChange, autoFocus }: {
           className={`flex items-center gap-1 rounded-full py-0.5 pr-1 pl-2.5 text-[13px] ${looksLikeEmail(email) ? 'bg-raise text-ink' : 'bg-[color-mix(in_srgb,var(--danger)_15%,transparent)] text-danger'}`}
           title={looksLikeEmail(email) ? email : 'This does not look like an email address'}
         >
-          {hasPgpKey(email) && <KeyRound size={11} className="text-news" aria-label="Has PGP key" />}
-          {contacts.find((c) => c.emails.includes(email))?.name ?? email}
+          {email}
           <button type="button" aria-label={`Remove ${email}`} onClick={() => onChange(value.filter((e) => e !== email))} className="rounded-full p-0.5 text-muted hover:text-ink">
             <X size={12} />
           </button>
@@ -74,7 +78,7 @@ export function RecipientField({ label, value, onChange, autoFocus }: {
                 onMouseDown={(e) => { e.preventDefault(); add(s.email) }}
                 className={`flex w-full flex-col rounded-lg px-2.5 py-1.5 text-left ${i === active ? 'bg-raise' : ''}`}
               >
-                <span>{s.name}</span>
+                <span className="flex items-center gap-1.5">{s.name}{s.hasKey && <KeyRound size={11} className="text-news" aria-label="Has PGP key" />}</span>
                 <span className="text-[12px] text-muted">{s.email}</span>
               </button>
             </li>

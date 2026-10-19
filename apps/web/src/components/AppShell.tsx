@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Outlet, useNavigate } from 'react-router'
-import { useStore } from '../lib/store'
+import { Navigate, Outlet, useNavigate } from 'react-router'
+import { ApiError } from '../lib/api'
 import { isTyping } from '../lib/keyboard'
+import { useMe } from '../lib/queries'
+import { useStore } from '../lib/store'
 import { Composer } from './Composer'
 import { ShortcutsHelp } from './ShortcutsHelp'
 import { Sidebar } from './Sidebar'
+import { Logo } from './ui'
 
 // Pages read this with useOutletContext() to open the mobile sidebar.
 export interface ShellContext {
@@ -12,10 +15,16 @@ export interface ShellContext {
 }
 
 export function AppShell() {
-  const { draft, openComposer } = useStore()
+  const me = useMe()
+  const { draft, openComposer, applyPreferences } = useStore()
   const navigate = useNavigate()
   const [navOpen, setNavOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+
+  // Use the theme and layout saved on the server, so they follow the user between devices.
+  useEffect(() => {
+    if (me.data) applyPreferences(me.data.preferences)
+  }, [me.data?.id])
 
   // Shortcuts that work everywhere. Mail-specific keys live in MailPage.
   useEffect(() => {
@@ -29,6 +38,15 @@ export function AppShell() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [openComposer, navigate])
+
+  if (me.error instanceof ApiError && me.error.status === 401) return <Navigate to="/login" replace />
+  if (!me.data) {
+    return (
+      <div className="grid h-full place-items-center" aria-busy="true">
+        {me.error ? <p className="text-danger">Can’t reach the Nexus server. {me.error.message}</p> : <Logo size={40} />}
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -49,7 +67,7 @@ export function AppShell() {
         <Outlet context={{ openNav: () => setNavOpen(true) } satisfies ShellContext} />
       </main>
 
-      {draft && <Composer />}
+      {draft && <Composer key={draft.id ?? 'new'} />}
       {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
     </div>
   )

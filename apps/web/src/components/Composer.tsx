@@ -1,12 +1,15 @@
+import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, Clock, Lock, Maximize2, Minimize2, Paperclip, Send, ShieldCheck, Trash2, X } from 'lucide-react'
-import { useRef, useState } from 'react'
-import { accounts, me } from '../mock/data'
+import { useEffect, useRef, useState } from 'react'
+import { api, del, fileToBase64, put } from '../lib/api'
+import { htmlToText, quoteReply, withHtmlSignature, type BodyMode } from '../lib/compose'
 import { formatFullDate, formatSize } from '../lib/format'
+import * as pgp from '../lib/pgp'
+import { useAccounts, useMe, useRefreshMail } from '../lib/queries'
 import { useStore } from '../lib/store'
-import { quoteReply, withHtmlSignature, type BodyMode } from '../lib/compose'
 import { BodyEditor } from './BodyEditor'
-import { RecipientField, hasPgpKey } from './RecipientField'
-import { Button, Toggle } from './ui'
+import { RecipientField } from './RecipientField'
+import { Button, Input, Toggle } from './ui'
 
 const splitEmails = (value: string) => value.split(',').map((e) => e.trim()).filter(Boolean)
 
@@ -27,50 +30,117 @@ function scheduleOptions() {
 
 export function Composer() {
   const { draft, closeComposer } = useStore()
+  const me = useMe().data
+  const refresh = useRefreshMail()
+  // Viewers of a shared account can read it but not send from it.
+  const accounts = (useAccounts().data ?? []).filter((a) => a.role !== 'viewer')
+  const smimeCerts = useQuery({ queryKey: ['smime'], queryFn: () => api<{ email: string }[]>('/smime') }).data ?? []
+
+  const [draftId, setDraftId] = useState(draft?.id)
   const [to, setTo] = useState(splitEmails(draft?.to ?? ''))
   const [cc, setCc] = useState(splitEmails(draft?.cc ?? ''))
   const [bcc, setBcc] = useState(splitEmails(draft?.bcc ?? ''))
-  const [showCopies, setShowCopies] = useState(cc.length > 0)
+  const [showCopies, setShowCopies] = useState(cc.length + bcc.length > 0)
   const [subject, setSubject] = useState(draft?.subject ?? '')
-  const [fromId, setFromId] = useState(draft?.replyTo?.accountId ?? accounts[0].id)
+  const [fromId, setFromId] = useState(draft?.accountId ?? draft?.replyTo?.accountId ?? '')
   const [files, setFiles] = useState<File[]>([])
   const [encrypt, setEncrypt] = useState(false)
-  const [sign, setSign] = useState(true)
+  const [sign, setSign] = useState(false)
+  const [passphrase, setPassphrase] = useState('')
   const [size, setSize] = useState<'normal' | 'max' | 'min'>('normal')
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState('')
-  const signatureOf = (accountId: string) => accounts.find((a) => a.id === accountId)?.signature ?? ''
   // Mail is written as rich text; the user can switch to editing the raw HTML.
   const [mode, setMode] = useState<BodyMode>('rich')
-  const [content, setContent] = useState(() => {
-    const original = draft?.replyTo
-    const quote = original ? quoteReply(`On ${formatFullDate(original.date)}, ${original.from.name} wrote:`, original.text ?? original.preview) : '<p><br></p>'
-    return withHtmlSignature(quote, signatureOf(fromId))
-  })
+  const [content, setContent] = useState('')
   const [version, setVersion] = useState(0)
   const fileInput = useRef<HTMLInputElement>(null)
 
+  const account = accounts.find((a) => a.id === fromId) ?? accounts[0]
   const recipients = [...to, ...cc, ...bcc]
-  const missingKeys = encrypt ? recipients.filter((email) => !hasPgpKey(email)) : []
   const bccOnly = to.length === 0 && cc.length === 0 && bcc.length > 0
+  // S/MIME when there's a certificate for this address, otherwise PGP.
+  const method = account && smimeCerts.some((c) => c.email === account.email) ? 'S/MIME' : 'PGP'
+  const needsPassphrase = method === 'PGP' && sign && !pgp.isUnlocked()
 
   function replaceContent(next: string) {
     setContent(next)
     setVersion((v) => v + 1)
   }
 
+  // Fill the body once the account (and so its signature) is known.
+  useEffect(() => {
+    if (!account || version > 0) return
+    if (!fromId) setFromId(account.id)
+    if (draft?.html) return replaceContent(draft.html)
+    const original = draft?.replyTo
+    const quote = original ? quoteReply(`On ${formatFullDate(original.date)}, ${original.from.name} wrote:`, original.text ?? original.preview) : '<p><br></p>'
+    replaceContent(withHtmlSignature(quote, account.signature))
+  }, [account?.id])
+
   function changeAccount(accountId: string) {
     setFromId(accountId)
-    replaceContent(withHtmlSignature(content, signatureOf(accountId)))
+    replaceContent(withHtmlSignature(content, accounts.find((a) => a.id === accountId)?.signature ?? ''))
   }
 
-  function send(scheduledFor?: Date) {
+  async function payload() {
+    const attachments = await Promise.all(files.map(async (f) => ({ filename: f.name, contentType: f.type || 'application/octet-stream', content: await fileToBase64(f) })))
+    const base = { accountId: account!.id, to, cc, bcc, subject, html: content, text: htmlToText(content), attachments, inReplyTo: draft?.replyTo?.messageId ?? undefined }
+    if (!encrypt && !sign) return base
+    if (method === 'S/MIME') return { ...base, smime: { encrypt, sign } }
+
+    // PGP runs here in the browser. PGP mail is plain text, so the HTML version is not sent.
+    const signingKey = sign ? await pgp.unlock(passphrase) : undefined
+    if (encrypt) {
+      const { keys, ownKey } = await api<{ keys: Record<string, string | null>; ownKey: string | null }>('/pgp/recipients', { body: { emails: recipients } })
+      const missing = recipients.filter((email) => !keys[email])
+      if (missing.length) throw new Error(`No PGP key for ${missing.join(', ')}. Add their key to the contact, or turn off encryption.`)
+      // Also encrypt to yourself, or you couldn't read your own Sent copy.
+      const armored = await pgp.encryptText(base.text, [...Object.values(keys).filter(Boolean), ownKey].filter(Boolean) as string[], signingKey)
+      return { ...base, html: undefined, text: armored }
+    }
+    return { ...base, html: undefined, text: await pgp.signText(base.text, signingKey!) }
+  }
+
+  async function send(scheduledFor?: Date) {
+    setScheduleOpen(false)
+    if (!account) return setError('Add a mail account in Settings first.')
     if (recipients.length === 0) return setError('Add at least one recipient in To, Cc or Bcc.')
-    if (missingKeys.length) return setError(`No PGP key for ${missingKeys.join(', ')}. Remove them or turn off encryption.`)
+    setBusy(true)
     setError('')
-    setSent(scheduledFor ? `Scheduled for ${formatFullDate(scheduledFor.toISOString())}` : 'Message sent')
-    setTimeout(closeComposer, 1200)
+    try {
+      await api('/send', { body: { ...(await payload()), scheduledFor: scheduledFor?.toISOString(), draftId } })
+      setSent(scheduledFor ? `Scheduled for ${formatFullDate(scheduledFor.toISOString())}` : 'Message sent')
+      refresh()
+      setTimeout(closeComposer, 1200)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Closing keeps unfinished mail as a draft; the bin discards it.
+  async function close() {
+    const hasContent = recipients.length || subject.trim() || htmlToText(withHtmlSignature(content, '')).trim()
+    if (account && hasContent && !sent) {
+      try {
+        const saved = await put<{ id: string }>('/drafts', { id: draftId, accountId: account.id, to, cc, bcc, subject, html: content, text: htmlToText(content) })
+        setDraftId(saved.id)
+        refresh()
+      } catch (e) {
+        return setError(`Could not save the draft: ${(e as Error).message}`)
+      }
+    }
+    closeComposer()
+  }
+
+  async function discard() {
+    if (draftId) await del(`/outgoing/${draftId}`).catch(() => undefined)
+    refresh()
+    closeComposer()
   }
 
   const placement = {
@@ -86,7 +156,7 @@ export function Composer() {
       onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') send() }}
     >
       <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-        <h2 className="font-semibold">{subject || 'New message'}</h2>
+        <h2 className="truncate font-semibold">{subject || 'New message'}</h2>
         <div className="ml-auto flex items-center gap-0.5 text-muted">
           <button type="button" aria-label={size === 'min' ? 'Restore' : 'Minimize'} onClick={() => setSize(size === 'min' ? 'normal' : 'min')} className="hidden rounded-md p-1.5 hover:bg-raise md:block">
             <Minimize2 size={15} />
@@ -94,7 +164,7 @@ export function Composer() {
           <button type="button" aria-label={size === 'max' ? 'Restore' : 'Expand'} onClick={() => setSize(size === 'max' ? 'normal' : 'max')} className="hidden rounded-md p-1.5 hover:bg-raise md:block">
             <Maximize2 size={15} />
           </button>
-          <button type="button" aria-label="Close and keep draft" onClick={closeComposer} className="rounded-md p-1.5 hover:bg-raise">
+          <button type="button" aria-label="Close and keep draft" title="Close and keep draft" onClick={close} className="rounded-md p-1.5 hover:bg-raise">
             <X size={16} />
           </button>
         </div>
@@ -111,15 +181,19 @@ export function Composer() {
         <>
           <div className="flex items-center gap-2 border-b border-line px-4 py-2">
             <span className="w-9 text-[13px] text-muted">From</span>
-            {/* The native select stays for keyboard and screen readers, but is invisible and laid over
-                the label, so the caret sits right after the selected address instead of the longest one. */}
-            <label className="relative flex items-center gap-1 rounded-md px-1 text-ink focus-within:ring-2 focus-within:ring-accent hover:bg-raise">
-              {me.name} &lt;{accounts.find((a) => a.id === fromId)?.email}&gt;
-              <ChevronDown size={14} className="text-muted" />
-              <select value={fromId} onChange={(e) => changeAccount(e.target.value)} aria-label="Send from" className="absolute inset-0 cursor-pointer opacity-0">
-                {accounts.map((a) => <option key={a.id} value={a.id}>{me.name} &lt;{a.email}&gt;</option>)}
-              </select>
-            </label>
+            {account ? (
+              // The native select stays for keyboard and screen readers, but is invisible and laid over
+              // the label, so the caret sits right after the selected address instead of the longest one.
+              <label className="relative flex min-w-0 items-center gap-1 rounded-md px-1 text-ink focus-within:ring-2 focus-within:ring-accent hover:bg-raise">
+                <span className="truncate">{me?.name} &lt;{account.email}&gt;</span>
+                <ChevronDown size={14} className="shrink-0 text-muted" />
+                <select value={account.id} onChange={(e) => changeAccount(e.target.value)} aria-label="Send from" className="absolute inset-0 cursor-pointer opacity-0">
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{me?.name} &lt;{a.email}&gt;</option>)}
+                </select>
+              </label>
+            ) : (
+              <span className="text-muted">No account to send from yet</span>
+            )}
             {!showCopies && (
               <button type="button" onClick={() => setShowCopies(true)} className="ml-auto text-[13px] text-muted hover:text-ink">Cc / Bcc</button>
             )}
@@ -158,14 +232,23 @@ export function Composer() {
             </ul>
           )}
 
+          {needsPassphrase && (
+            <div className="flex items-center gap-2 border-t border-line px-4 py-2">
+              <span className="shrink-0 text-[13px] text-muted">PGP passphrase to sign</span>
+              <Input type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} aria-label="PGP key passphrase" autoComplete="off" />
+            </div>
+          )}
+          {(encrypt || sign) && method === 'PGP' && (
+            <p className="px-4 pb-1 text-[12.5px] text-muted">PGP mail is sent as plain text; formatting and inline images are left out.</p>
+          )}
           {error && <p role="alert" className="px-4 pb-2 text-[13px] text-danger">{error}</p>}
 
           <footer className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-2.5">
             <div className="relative flex">
-              <Button variant="primary" className="rounded-r-none" onClick={() => send()} title="Send (⌘↵)">
-                <Send size={15} /> Send
+              <Button variant="primary" className="rounded-r-none" onClick={() => send()} disabled={busy} title="Send (⌘↵)">
+                <Send size={15} /> {busy ? 'Sending…' : 'Send'}
               </Button>
-              <Button variant="primary" className="rounded-l-none border-l border-black/15 px-2" aria-label="Schedule send" aria-expanded={scheduleOpen} onClick={() => setScheduleOpen(!scheduleOpen)}>
+              <Button variant="primary" className="rounded-l-none border-l border-black/15 px-2" aria-label="Schedule send" aria-expanded={scheduleOpen} disabled={busy} onClick={() => setScheduleOpen(!scheduleOpen)}>
                 <ChevronDown size={15} />
               </Button>
               {scheduleOpen && (
@@ -177,10 +260,11 @@ export function Composer() {
                       <span className="text-[12px] text-muted">{date.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                     </button>
                   ))}
-                  <label className="flex items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-raise">
-                    <Clock size={14} className="text-muted" />
-                    <input type="datetime-local" aria-label="Pick date and time" className="flex-1 bg-transparent text-ink focus:outline-none" onChange={(e) => e.target.value && send(new Date(e.target.value))} />
-                  </label>
+                  <form className="flex items-center gap-2 rounded-lg px-2.5 py-2" onSubmit={(e) => { e.preventDefault(); const at = new FormData(e.currentTarget).get('at'); if (at) send(new Date(String(at))) }}>
+                    <Clock size={14} className="shrink-0 text-muted" />
+                    <input name="at" type="datetime-local" required aria-label="Pick date and time" className="min-w-0 flex-1 bg-transparent text-ink focus:outline-none" />
+                    <Button type="submit" variant="ghost" className="px-2">Set</Button>
+                  </form>
                 </div>
               )}
             </div>
@@ -188,26 +272,24 @@ export function Composer() {
             <button type="button" aria-label="Attach files" title="Attach files" onClick={() => fileInput.current?.click()} className="rounded-md p-1.5 text-muted hover:bg-raise hover:text-ink">
               <Paperclip size={16} />
             </button>
-            <input ref={fileInput} type="file" multiple hidden onChange={(e) => setFiles([...files, ...Array.from(e.target.files ?? [])])} />
+            <input ref={fileInput} type="file" multiple hidden onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])]); e.target.value = '' }} />
 
             <div className="flex items-center divide-x divide-line rounded-lg border border-line text-[13px] text-ink-2">
-              <label className="flex items-center gap-2 px-3 py-1.5" title="Encrypt with recipients’ PGP keys, in your browser">
+              <label className="flex items-center gap-2 px-3 py-1.5" title={`Encrypt with ${method}`}>
                 <Lock size={14} className={encrypt ? 'text-news' : 'text-muted'} /> Encrypt
-                <Toggle checked={encrypt} onChange={setEncrypt} label="Encrypt with PGP" />
+                <Toggle checked={encrypt} onChange={setEncrypt} label={`Encrypt with ${method}`} />
               </label>
-              <label className="flex items-center gap-2 px-3 py-1.5" title="Sign with your PGP key">
+              <label className="flex items-center gap-2 px-3 py-1.5" title={`Sign with ${method}`}>
                 <ShieldCheck size={14} className={sign ? 'text-news' : 'text-muted'} /> Sign
-                <Toggle checked={sign} onChange={setSign} label="Sign with PGP" />
+                <Toggle checked={sign} onChange={setSign} label={`Sign with ${method}`} />
               </label>
+              {(encrypt || sign) && <span className="px-2.5 py-1.5 text-[12px] text-muted">{method}</span>}
             </div>
 
-            <button type="button" aria-label="Discard draft" title="Discard draft" onClick={closeComposer} className="ml-auto rounded-md p-1.5 text-muted hover:bg-raise hover:text-danger">
+            <button type="button" aria-label="Discard draft" title="Discard draft" onClick={discard} className="ml-auto rounded-md p-1.5 text-muted hover:bg-raise hover:text-danger">
               <Trash2 size={16} />
             </button>
           </footer>
-          {encrypt && missingKeys.length > 0 && !error && (
-            <p className="px-4 pb-2.5 text-[12.5px] text-notif">No PGP key for {missingKeys.join(', ')}. They can’t read an encrypted message.</p>
-          )}
         </>
       )}
     </section>
