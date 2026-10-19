@@ -5,6 +5,8 @@ import { db } from '../../db.ts'
 import { notFound, parse } from '../../lib/http.ts'
 import { requireUser } from '../../lib/session.ts'
 
+const LABEL_COLORS = ['#4fd1a1', '#f5b544', '#c79bff', '#6ea8ff', '#ff8fb1', '#5fc6e8']
+
 const ruleFields = z.object({
   name: z.string().trim().min(1),
   field: z.enum(['from', 'to', 'subject', 'body']),
@@ -24,6 +26,12 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.post('/rules', async (request) => {
     const body = parse(ruleFields, request.body)
     const position = await db.rule.count({ where: { userId: request.user.id } })
+    // A rule that labels mail creates the label too, so it shows up in the sidebar.
+    if (body.action === 'label' && body.value) {
+      const key = { userId: request.user.id, name: body.value }
+      const color = LABEL_COLORS[(await db.label.count({ where: { userId: request.user.id } })) % LABEL_COLORS.length]
+      await db.label.upsert({ where: { userId_name: key }, create: { ...key, color }, update: {} })
+    }
     return db.rule.create({ data: { ...body, userId: request.user.id, position } })
   })
 

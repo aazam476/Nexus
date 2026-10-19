@@ -39,7 +39,7 @@ export function RulesSettings() {
     <>
       <Card title="Rules" description="Run on new mail as it arrives, top to bottom." actions={!adding && <Button variant="primary" onClick={() => setAdding(true)}><Plus size={15} /> New rule</Button>}>
         <div className="grid gap-2">
-          {adding && <NewRule onDone={() => { setAdding(false); refresh('rules') }} />}
+          {adding && <NewRule onDone={() => { setAdding(false); refresh('rules'); refresh('labels') }} />}
           {rules.length === 0 && !adding && <p className="text-muted">No rules yet. Rules can label, move, mark as read or send mail to spam.</p>}
           <ul className="grid gap-2">
             {rules.map((rule) => (
