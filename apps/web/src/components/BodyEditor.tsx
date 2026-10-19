@@ -3,10 +3,18 @@ import { useEffect, useMemo, useRef, type ClipboardEvent, type DragEvent } from 
 import type { BodyMode } from '../lib/compose'
 import { buildSafeEmailDocument } from '../lib/sanitize'
 
-// Plain text is the default; these switch HTML on. Clicking the active one goes back to plain text.
-const modes: { id: BodyMode; label: string }[] = [
-  { id: 'rich', label: 'Rich text' },
-  { id: 'source', label: 'HTML' },
+// Fonts that render the same in nearly every mail client.
+const fonts = [
+  { label: 'Sans serif', value: 'Arial, Helvetica, sans-serif' },
+  { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
+  { label: 'Monospace', value: '"Courier New", Courier, monospace' },
+  { label: 'Arial', value: 'Arial, sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Helvetica', value: 'Helvetica, Arial, sans-serif' },
+  { label: 'Tahoma', value: 'Tahoma, sans-serif' },
+  { label: 'Times New Roman', value: '"Times New Roman", serif' },
+  { label: 'Trebuchet MS', value: '"Trebuchet MS", sans-serif' },
+  { label: 'Verdana', value: 'Verdana, sans-serif' },
 ]
 
 interface Props {
@@ -24,33 +32,17 @@ export function BodyEditor({ mode, content, version, onChange, onModeChange }: P
     <>
       <div className="flex items-center gap-0.5 border-b border-line px-3 py-1 text-muted">
         {mode === 'rich' && <RichToolbar />}
-        <div role="group" aria-label="Message format" className="ml-auto flex rounded-lg bg-raise p-0.5 text-[12px]">
-          {modes.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={mode === id}
-              title={mode === id ? 'Back to plain text' : `Switch to ${label}`}
-              onClick={() => onModeChange(mode === id ? 'plain' : id)}
-              className={`rounded-md px-2.5 py-1 ${mode === id ? 'bg-panel font-semibold text-ink shadow-sm' : 'hover:text-ink'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          aria-pressed={mode === 'source'}
+          title={mode === 'source' ? 'Back to rich text' : 'Edit the HTML source'}
+          onClick={() => onModeChange(mode === 'source' ? 'rich' : 'source')}
+          className={`ml-auto rounded-md px-2.5 py-1 text-[12px] ${mode === 'source' ? 'bg-raise font-semibold text-ink' : 'hover:bg-raise hover:text-ink'}`}
+        >
+          HTML
+        </button>
       </div>
 
-      {mode === 'plain' && (
-        <textarea
-          value={content}
-          onChange={(e) => onChange(e.target.value)}
-          spellCheck
-          lang="en"
-          aria-label="Message body"
-          placeholder="Write your message…"
-          className="flex-1 resize-none bg-transparent px-4 py-3 text-[15px] leading-relaxed placeholder:text-muted focus:outline-none"
-        />
-      )}
       {mode === 'rich' && <RichEditor content={content} version={version} onChange={onChange} />}
       {mode === 'source' && <SourceEditor content={content} onChange={onChange} />}
     </>
@@ -59,6 +51,27 @@ export function BodyEditor({ mode, content, version, onChange, onModeChange }: P
 
 // shortcut: execCommand is deprecated but still supported everywhere; replace with a small editor lib if formatting needs grow.
 const run = (command: string, value?: string) => document.execCommand(command, false, value)
+
+// Opening a native <select> moves focus out of the editor, so remember the selection and put it back.
+let savedRange: Range | null = null
+
+const editorAround = (range: Range) => {
+  const node = range.commonAncestorContainer
+  return (node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>('[contenteditable]')
+}
+
+function saveSelection() {
+  const selection = window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  savedRange = range && editorAround(range) ? range : null
+}
+
+function restoreSelection() {
+  if (!savedRange) return
+  editorAround(savedRange)?.focus()
+  window.getSelection()?.removeAllRanges()
+  window.getSelection()?.addRange(savedRange)
+}
 
 function insertImages(files: Iterable<File>) {
   for (const file of files) {
@@ -84,6 +97,16 @@ function RichToolbar() {
   ]
   return (
     <div role="toolbar" aria-label="Formatting" className="flex items-center gap-0.5">
+      <select
+        aria-label="Font"
+        defaultValue=""
+        onFocus={saveSelection}
+        onChange={(e) => { restoreSelection(); run('styleWithCSS', 'true'); run('fontName', e.target.value); e.target.value = '' }}
+        className="mr-1 rounded-md bg-transparent px-1.5 py-1 text-[12.5px] hover:bg-raise hover:text-ink"
+      >
+        <option value="" disabled>Font</option>
+        {fonts.map((font) => <option key={font.label} value={font.value} style={{ fontFamily: font.value }}>{font.label}</option>)}
+      </select>
       {tools.map(({ icon: Icon, label, action }) => (
         // preventDefault on mousedown keeps the text selection in the editor.
         <button key={label} type="button" title={label} aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={action} className="rounded-md p-1.5 hover:bg-raise hover:text-ink">

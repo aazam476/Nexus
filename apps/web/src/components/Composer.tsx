@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import { accounts, me } from '../mock/data'
 import { formatFullDate, formatSize } from '../lib/format'
 import { useStore } from '../lib/store'
-import { htmlToText, quoteReply, textToHtml, withHtmlSignature, withPlainSignature, type BodyMode } from '../lib/compose'
+import { quoteReply, withHtmlSignature, type BodyMode } from '../lib/compose'
 import { BodyEditor } from './BodyEditor'
 import { RecipientField, hasPgpKey } from './RecipientField'
 import { Button, Toggle } from './ui'
@@ -41,12 +41,12 @@ export function Composer() {
   const [error, setError] = useState('')
   const [sent, setSent] = useState('')
   const signatureOf = (accountId: string) => accounts.find((a) => a.id === accountId)?.signature ?? ''
-  // New mail starts as plain text; the user can switch to rich text or raw HTML.
-  const [mode, setMode] = useState<BodyMode>('plain')
+  // Mail is written as rich text; the user can switch to editing the raw HTML.
+  const [mode, setMode] = useState<BodyMode>('rich')
   const [content, setContent] = useState(() => {
     const original = draft?.replyTo
-    const quote = original ? quoteReply('plain', `On ${formatFullDate(original.date)}, ${original.from.name} wrote:`, original.text ?? original.preview) : ''
-    return withPlainSignature(quote, signatureOf(fromId))
+    const quote = original ? quoteReply(`On ${formatFullDate(original.date)}, ${original.from.name} wrote:`, original.text ?? original.preview) : '<p><br></p>'
+    return withHtmlSignature(quote, signatureOf(fromId))
   })
   const [version, setVersion] = useState(0)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -60,25 +60,9 @@ export function Composer() {
     setVersion((v) => v + 1)
   }
 
-  function changeMode(next: BodyMode) {
-    if (next === mode) return
-    const signature = signatureOf(fromId)
-    if (mode === 'plain') {
-      replaceContent(withHtmlSignature(textToHtml(withPlainSignature(content, '')), signature))
-    } else if (next === 'plain') {
-      const html = withHtmlSignature(content, '')
-      if (/<(img|a|b|strong|i|em|u|ul|ol|table)\b/i.test(html) && !confirm('Switching to plain text removes formatting, links and inline images. Continue?')) return
-      replaceContent(withPlainSignature(htmlToText(html), signature))
-    } else {
-      replaceContent(content) // rich <-> HTML source share the same HTML
-    }
-    setMode(next)
-  }
-
   function changeAccount(accountId: string) {
     setFromId(accountId)
-    const signature = signatureOf(accountId)
-    replaceContent(mode === 'plain' ? withPlainSignature(content, signature) : withHtmlSignature(content, signature))
+    replaceContent(withHtmlSignature(content, signatureOf(accountId)))
   }
 
   function send(scheduledFor?: Date) {
@@ -127,9 +111,15 @@ export function Composer() {
         <>
           <div className="flex items-center gap-2 border-b border-line px-4 py-2">
             <span className="w-9 text-[13px] text-muted">From</span>
-            <select value={fromId} onChange={(e) => changeAccount(e.target.value)} aria-label="Send from" className="bg-transparent text-ink focus:outline-none">
-              {accounts.map((a) => <option key={a.id} value={a.id} className="bg-panel">{me.name} &lt;{a.email}&gt;</option>)}
-            </select>
+            {/* The native select stays for keyboard and screen readers, but is invisible and laid over
+                the label, so the caret sits right after the selected address instead of the longest one. */}
+            <label className="relative flex items-center gap-1 rounded-md px-1 text-ink focus-within:ring-2 focus-within:ring-accent hover:bg-raise">
+              {me.name} &lt;{accounts.find((a) => a.id === fromId)?.email}&gt;
+              <ChevronDown size={14} className="text-muted" />
+              <select value={fromId} onChange={(e) => changeAccount(e.target.value)} aria-label="Send from" className="absolute inset-0 cursor-pointer opacity-0">
+                {accounts.map((a) => <option key={a.id} value={a.id}>{me.name} &lt;{a.email}&gt;</option>)}
+              </select>
+            </label>
             {!showCopies && (
               <button type="button" onClick={() => setShowCopies(true)} className="ml-auto text-[13px] text-muted hover:text-ink">Cc / Bcc</button>
             )}
@@ -154,7 +144,7 @@ export function Composer() {
             className="border-b border-line bg-transparent px-4 py-2.5 font-semibold placeholder:font-normal placeholder:text-muted focus:outline-none"
           />
 
-          <BodyEditor mode={mode} content={content} version={version} onChange={setContent} onModeChange={changeMode} />
+          <BodyEditor mode={mode} content={content} version={version} onChange={setContent} onModeChange={setMode} />
 
           {files.length > 0 && (
             <ul className="flex flex-wrap gap-2 px-4 pb-2">

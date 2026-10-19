@@ -1,19 +1,12 @@
-// Helpers for the composer: switching between plain text and HTML, and managing signatures.
+// Helpers for the composer: quoting, signatures and the plain-text copy of an HTML message.
 
-export type BodyMode = 'plain' | 'rich' | 'source'
+export type BodyMode = 'rich' | 'source'
 
 export function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-// Blank lines become paragraphs, single newlines become <br>.
-export function textToHtml(text: string): string {
-  return text
-    .split(/\n{2,}/)
-    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`)
-    .join('')
-}
-
+// Plain-text alternative sent alongside the HTML, for clients that can't show HTML.
 export function htmlToText(html: string): string {
   const withBreaks = html
     .replace(/<br\s*\/?>/gi, '\n')
@@ -25,21 +18,12 @@ export function htmlToText(html: string): string {
   return text.replace(/\n{3,}/g, '\n\n').trim()
 }
 
-// "-- " on its own line is the standard signature separator (RFC 3676); mail clients recognise it.
-const PLAIN_SEPARATOR = '\n\n-- \n'
-
-export function withPlainSignature(text: string, signatureHtml: string): string {
-  const body = text.split(PLAIN_SEPARATOR)[0]
-  return signatureHtml ? `${body}${PLAIN_SEPARATOR}${htmlToText(signatureHtml)}` : body
-}
-
+// "-- " before the signature is the standard separator (RFC 3676); mail clients recognise it.
 export function withHtmlSignature(html: string, signatureHtml: string): string {
   const body = html.replace(/<div data-signature="">[\s\S]*<\/div>$/, '')
   return signatureHtml ? `${body}<div data-signature="">-- <br>${signatureHtml}</div>` : body
 }
 
-// Quote the message being replied to, in the format of the current mode.
-export function quoteReply(mode: BodyMode, header: string, original: string): string {
-  if (mode === 'plain') return `\n\n${header}\n${original.split('\n').map((line) => `> ${line}`).join('\n')}`
-  return `<p><br></p><blockquote>${escapeHtml(header)}<br>${escapeHtml(original)}</blockquote>`
+export function quoteReply(header: string, original: string): string {
+  return `<p><br></p><blockquote>${escapeHtml(header)}<br>${escapeHtml(original).replace(/\n/g, '<br>')}</blockquote>`
 }
