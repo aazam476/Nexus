@@ -160,6 +160,13 @@ export function MailPage() {
       onQuery={setSearchText}
       onOpen={open}
       onOpenNav={openNav}
+      onArchiveAll={(items) => {
+        // Shared accounts you can only view are left alone.
+        const archivable = items.filter((m) => canEdit(m))
+        archivable.forEach((m) => updateLocally(m.id, { folder: 'archive' }))
+        // One at a time: each move opens an IMAP connection, and providers cap how many you may hold.
+        run(async () => { for (const m of archivable) await api(`/messages/${m.id}/move`, { body: { to: 'archive' } }) })
+      }}
     />
   )
   const reader = selected && (

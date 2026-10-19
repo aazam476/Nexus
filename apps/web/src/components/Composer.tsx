@@ -152,7 +152,7 @@ export function Composer() {
   return (
     <section
       aria-label="New message"
-      className={`fixed inset-0 z-30 flex flex-col overflow-hidden border border-line bg-panel shadow-pop md:inset-auto ${placement}`}
+      className={`fixed inset-0 z-30 flex flex-col overflow-hidden border-line bg-panel md:border shadow-pop md:inset-auto ${placement}`}
       onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') send() }}
     >
       <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">

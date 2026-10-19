@@ -70,7 +70,7 @@ export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
     date: mail.date ?? new Date(),
     text,
     html,
-    preview: makePreview(text ?? html ?? ''),
+    preview: makePreview(html ?? text ?? ''),
     attachments,
     security: detectSecurity(headers, text),
     event: extractEvent({ html, icsTexts }),
@@ -83,9 +83,14 @@ export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
 
 export function makePreview(content: string): string {
   return content
-    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<(head|style|script)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
     .replace(/-----BEGIN PGP[\s\S]*/g, 'Encrypted message')
     .replace(/\s+/g, ' ')
     .trim()

@@ -37,7 +37,7 @@ export function BodyEditor({ mode, content, version, onChange, onModeChange }: P
           aria-pressed={mode === 'source'}
           title={mode === 'source' ? 'Back to rich text' : 'Edit the HTML source'}
           onClick={() => onModeChange(mode === 'source' ? 'rich' : 'source')}
-          className={`ml-auto rounded-md px-2.5 py-1 text-[12px] ${mode === 'source' ? 'bg-raise font-semibold text-ink' : 'hover:bg-raise hover:text-ink'}`}
+          className={`ml-auto shrink-0 rounded-md px-2.5 py-1 text-[12px] ${mode === 'source' ? 'bg-raise font-semibold text-ink' : 'hover:bg-raise hover:text-ink'}`}
         >
           HTML
         </button>
@@ -96,7 +96,7 @@ function RichToolbar() {
     { icon: ImagePlus, label: 'Insert image', action: () => picker.current?.click() },
   ]
   return (
-    <div role="toolbar" aria-label="Formatting" className="flex items-center gap-0.5">
+    <div role="toolbar" aria-label="Formatting" className="flex min-w-0 items-center gap-0.5 overflow-x-auto [&>*]:shrink-0">
       <select
         aria-label="Font"
         defaultValue=""

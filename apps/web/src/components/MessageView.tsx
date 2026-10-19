@@ -83,12 +83,6 @@ export function MessageView({ summary, readOnly, onBack, onRefresh, actions }: P
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto grid max-w-[820px] grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6 md:px-10">
-          <div className="flex flex-wrap gap-1.5">
-            {section && !message.outgoing && <Chip color={section.color}>{section.title}</Chip>}
-            {message.labels.filter((label) => label !== section?.title).map((label) => <Chip key={label} color="var(--muted)">{label}</Chip>)}
-            <SecurityChip message={message} />
-          </div>
-
           <h1 className="text-[23px] leading-tight font-bold tracking-tight text-balance">{message.subject}</h1>
 
           <div className="flex items-center gap-3">
@@ -102,8 +96,15 @@ export function MessageView({ summary, readOnly, onBack, onRefresh, actions }: P
                 to {message.to.map((p) => p.name || p.email).join(', ') || 'undisclosed recipients'}
                 {account && <> · <i className="inline-block h-1.5 w-1.5 rounded-full align-middle" style={{ background: account.color }} /> {account.email}</>}
               </div>
+              <time className="block text-[12.5px] text-muted sm:hidden" dateTime={message.date}>{formatFullDate(message.date)}</time>
             </div>
             <time className="ml-auto hidden shrink-0 text-[12.5px] text-muted sm:block" dateTime={message.date}>{formatFullDate(message.date)}</time>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 empty:hidden">
+            {section && !message.outgoing && <Chip color={section.color}>{section.title}</Chip>}
+            {message.labels.filter((label) => label !== section?.title).map((label) => <Chip key={label} color="var(--muted)">{label}</Chip>)}
+            <SecurityChip message={message} />
           </div>
 
           {message.outgoing && message.scheduledFor && <ScheduledBar message={message} onDone={() => { onRefresh(); onBack() }} />}

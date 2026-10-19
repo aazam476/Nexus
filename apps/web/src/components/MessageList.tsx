@@ -1,4 +1,4 @@
-import { ChevronDown, Clock, Columns2, Lock, Menu, Paperclip, Rows3, Search, Star } from 'lucide-react'
+import { Archive, ChevronDown, Clock, Columns2, Lock, Menu, Paperclip, PenLine, Rows3, Search, Star } from 'lucide-react'
 import { forwardRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useAccounts } from '../lib/queries'
@@ -25,13 +25,14 @@ interface Props {
   onQuery: (query: string) => void
   onOpen: (message: Message) => void
   onOpenNav: () => void
+  onArchiveAll: (messages: Message[]) => void
 }
 
 export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageList(
-  { title, messages, loading, smart, selectedId, query, onQuery, onOpen, onOpenNav },
+  { title, messages, loading, smart, selectedId, query, onQuery, onOpen, onOpenNav, onArchiveAll },
   searchRef,
 ) {
-  const { layout, setLayout } = useStore()
+  const { layout, setLayout, openComposer } = useStore()
   const accounts = useAccounts().data
   const accountColor = (id: string) => accounts?.find((a) => a.id === id)?.color
   const [expanded, setExpanded] = useState<Category[]>([])
@@ -59,6 +60,10 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
           >
             {layout === 'three-pane' ? <Rows3 size={16} /> : <Columns2 size={16} />}
           </button>
+          {/* Phones have no C key, and the sidebar's button is behind the menu. */}
+          <button type="button" aria-label="New message" onClick={() => openComposer()} className="rounded-lg bg-accent p-1.5 text-accent-ink md:hidden">
+            <PenLine size={16} />
+          </button>
         </div>
         <label className="flex items-center gap-2 rounded-[9px] border border-line bg-raise px-2.5 py-1.5 text-muted focus-within:border-accent">
           <Search size={15} />
@@ -70,7 +75,7 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
             aria-label="Search mail"
             className="min-w-0 flex-1 bg-transparent text-ink placeholder:text-muted focus:outline-none"
           />
-          <Kbd>/</Kbd>
+          <span className="hidden md:inline"><Kbd>/</Kbd></span>
         </label>
       </header>
 
@@ -107,7 +112,12 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
                   {title}
                   <span className="font-medium text-muted">{items.length}</span>
                   {bundled && (
-                    <button type="button" onClick={toggle} className="ml-auto flex items-center gap-1 font-medium text-muted hover:text-ink">
+                    <button type="button" onClick={() => onArchiveAll(items)} className="ml-auto flex items-center gap-1 font-medium text-muted hover:text-ink" title={`Archive all ${title.toLowerCase()}`}>
+                      <Archive size={13} /> Archive all
+                    </button>
+                  )}
+                  {bundled && (
+                    <button type="button" onClick={toggle} className="flex items-center gap-1 font-medium text-muted hover:text-ink">
                       {isOpen ? 'Collapse' : 'Show all'}
                       <ChevronDown size={14} className={isOpen ? 'rotate-180' : ''} />
                     </button>

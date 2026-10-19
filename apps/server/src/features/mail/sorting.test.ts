@@ -76,5 +76,6 @@ describe('events', () => {
 describe('makePreview', () => {
   it('strips markup and styles', () => {
     expect(makePreview('<style>p{}</style><p>Hello&nbsp;<b>there</b></p>')).toBe('Hello there')
+    expect(makePreview('<head><title>Ignore me</title></head><h1>Your trip</h1><p>Tom &amp; Jerry &lt;3</p>')).toBe('Your trip Tom & Jerry <3')
   })
 })
