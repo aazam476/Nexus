@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, type ClipboardEvent, type DragEvent } from 
 import type { BodyMode } from '../lib/compose'
 import { buildSafeEmailDocument } from '../lib/sanitize'
 
+// Plain text is the default; these switch HTML on. Clicking the active one goes back to plain text.
 const modes: { id: BodyMode; label: string }[] = [
-  { id: 'plain', label: 'Plain text' },
   { id: 'rich', label: 'Rich text' },
   { id: 'source', label: 'HTML' },
 ]
@@ -24,14 +24,14 @@ export function BodyEditor({ mode, content, version, onChange, onModeChange }: P
     <>
       <div className="flex items-center gap-0.5 border-b border-line px-3 py-1 text-muted">
         {mode === 'rich' && <RichToolbar />}
-        <div role="radiogroup" aria-label="Message format" className="ml-auto flex rounded-lg bg-raise p-0.5 text-[12px]">
+        <div role="group" aria-label="Message format" className="ml-auto flex rounded-lg bg-raise p-0.5 text-[12px]">
           {modes.map(({ id, label }) => (
             <button
               key={id}
               type="button"
-              role="radio"
-              aria-checked={mode === id}
-              onClick={() => onModeChange(id)}
+              aria-pressed={mode === id}
+              title={mode === id ? 'Back to plain text' : `Switch to ${label}`}
+              onClick={() => onModeChange(mode === id ? 'plain' : id)}
               className={`rounded-md px-2.5 py-1 ${mode === id ? 'bg-panel font-semibold text-ink shadow-sm' : 'hover:text-ink'}`}
             >
               {label}
