@@ -32,7 +32,7 @@ export function SafeHtml({ html }: { html: string }) {
         srcDoc={safe.html}
         onLoad={fitHeight}
         style={{ height }}
-        className="w-full rounded-xl border border-line bg-white"
+        className="w-full rounded-xl bg-white"
       />
     </div>
   )
