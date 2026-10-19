@@ -54,7 +54,8 @@ export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
 
   const files = mail.attachments.map((a, index) => ({ ...a, index }))
   const attachments = files
-    .filter((a) => !a.related) // images embedded in the HTML are not shown as attachments
+    // Images embedded in the HTML and S/MIME signature parts (smime.p7s) aren't attachments to the reader.
+    .filter((a) => !a.related && !/pkcs7-(signature|mime)/.test(a.contentType))
     .map((a) => ({ id: String(a.index), filename: a.filename ?? `attachment-${a.index + 1}`, contentType: a.contentType, size: a.size }))
 
   const icsTexts = files.filter((a) => a.contentType === 'text/calendar' || a.filename?.endsWith('.ics')).map((a) => a.content.toString('utf8'))
