@@ -42,17 +42,17 @@
   --ink: #16161b;
   --ink-2: #2b2b33;
   --muted: #5f5f6b;
-  --faint: #6e6e79;
+  --faint: #696974;
   --sel: #ecedff;
   --sel-line: #c9ccff;
   --accent: #4b55f0;
   --accent-ink: #ffffff;
   --accent-text: #3f47d6;
-  --people: #2f6fdb;
-  --travel: #7a4fe0;
-  --notif: #a86a0c;
-  --news: #1a8a64;
-  --danger: #d23b3b;
+  --people: #2465d1;
+  --travel: #774bdf;
+  --notif: #905b0a;
+  --news: #167554;
+  --danger: #c62d2d;
   --shadow: 0 1px 2px rgb(20 20 40 / 0.06), 0 12px 32px -8px rgb(20 20 40 / 0.18);
   color-scheme: light;
 }
