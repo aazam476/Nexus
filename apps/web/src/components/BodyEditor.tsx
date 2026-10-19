@@ -96,7 +96,7 @@ function RichToolbar() {
     { icon: ImagePlus, label: 'Insert image', action: () => picker.current?.click() },
   ]
   return (
-    <div role="toolbar" aria-label="Formatting" className="flex min-w-0 items-center gap-0.5 overflow-x-auto [&>*]:shrink-0">
+    <div role="toolbar" aria-label="Formatting" className="flex min-w-0 items-center gap-0.5 overflow-x-auto max-sm:[mask-image:linear-gradient(to_right,black_85%,transparent)] max-sm:pr-6 [&>*]:shrink-0">
       <select
         aria-label="Font"
         defaultValue=""
