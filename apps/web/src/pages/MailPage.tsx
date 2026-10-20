@@ -183,13 +183,13 @@ export function MailPage() {
   )
 
   // Phone, or the "list" layout: one pane at a time.
-  // Desktop three-pane: list and reader side by side.
+  // Wide screens (1024px and up) in three-pane: list and reader side by side.
   return (
     <div className="relative flex h-full">
-      <div className={`h-full border-r border-line ${selected ? 'hidden' : 'w-full'} ${layout === 'three-pane' ? 'md:block md:w-[400px] md:shrink-0' : ''}`}>
+      <div className={`h-full border-r border-line ${selected ? 'hidden' : 'w-full'} ${layout === 'three-pane' ? 'lg:block lg:w-[340px] lg:shrink-0 xl:w-[400px]' : ''}`}>
         {listPane}
       </div>
-      <div className={`h-full min-w-0 flex-1 ${selected ? '' : 'hidden'} ${layout === 'three-pane' ? 'md:block' : ''}`}>
+      <div className={`h-full min-w-0 flex-1 ${selected ? '' : 'hidden'} ${layout === 'three-pane' ? 'lg:block' : ''}`}>
         {reader ?? <EmptyReader count={visible.filter((m) => m.unread).length} />}
       </div>
       {error && (

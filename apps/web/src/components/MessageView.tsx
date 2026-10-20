@@ -30,7 +30,7 @@ interface Props {
 const attachmentUrl = (messageId: string, file: Attachment, download = false) => `/api/messages/${messageId}/attachments/${file.id}${download ? '?download' : ''}`
 
 export function MessageView({ summary, readOnly, onBack, onRefresh, actions }: Props) {
-  const { openComposer } = useStore()
+  const { openComposer, layout } = useStore()
   const detail = useMessage(summary.id)
   const message: Message = { ...summary, ...detail.data, starred: summary.starred, unread: summary.unread }
   const [preview, setPreview] = useState<Attachment | null>(null)
@@ -49,9 +49,9 @@ export function MessageView({ summary, readOnly, onBack, onRefresh, actions }: P
   const inSpam = message.folder === 'spam'
 
   return (
-    <article className="flex h-full flex-col overflow-hidden bg-read" aria-label={message.subject}>
-      <div className="flex items-center gap-0.5 border-b border-line px-2 py-2 md:px-4">
-        <ToolButton label="Back" icon={ArrowLeft} onClick={onBack} className="md:hidden" />
+    <article className="@container flex h-full flex-col overflow-hidden bg-read" aria-label={message.subject}>
+      <div className="flex items-center gap-0.5 border-b border-line px-2 py-2 @xl:px-4">
+        <ToolButton label="Back" icon={ArrowLeft} onClick={onBack} className={layout === 'three-pane' ? 'lg:hidden' : ''} />
         {!message.outgoing && (
           <>
             <ToolButton label="Reply" icon={Reply} onClick={() => reply()} showLabel />
@@ -82,7 +82,7 @@ export function MessageView({ summary, readOnly, onBack, onRefresh, actions }: P
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto grid max-w-[820px] grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6 md:px-10">
+        <div className="mx-auto grid max-w-[820px] grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6 @xl:px-10">
           <h1 className="text-[23px] leading-tight font-bold tracking-tight text-balance">{message.subject}</h1>
 
           <div className="flex items-center gap-3">
@@ -96,9 +96,9 @@ export function MessageView({ summary, readOnly, onBack, onRefresh, actions }: P
                 to {message.to.map((p) => p.name || p.email).join(', ') || 'undisclosed recipients'}
                 {account && <> · <i className="inline-block h-1.5 w-1.5 rounded-full align-middle" style={{ background: account.color }} /> {account.email}</>}
               </div>
-              <time className="block text-[12.5px] text-muted sm:hidden" dateTime={message.date}>{formatFullDate(message.date)}</time>
+              <time className="block text-[12.5px] text-muted @xl:hidden" dateTime={message.date}>{formatFullDate(message.date)}</time>
             </div>
-            <time className="ml-auto hidden shrink-0 text-[12.5px] text-muted sm:block" dateTime={message.date}>{formatFullDate(message.date)}</time>
+            <time className="ml-auto hidden shrink-0 text-[12.5px] text-muted @xl:block" dateTime={message.date}>{formatFullDate(message.date)}</time>
           </div>
 
           <div className="flex flex-wrap gap-1.5 empty:hidden">
@@ -124,7 +124,7 @@ export function MessageView({ summary, readOnly, onBack, onRefresh, actions }: P
           {message.attachments.length > 0 && (
             <div className="grid gap-2">
               <h2 className="text-[12px] font-semibold text-muted">{message.attachments.length} attachment{message.attachments.length > 1 && 's'}</h2>
-              <div className="grid gap-2.5 sm:grid-cols-2">
+              <div className="grid gap-2.5 @2xl:grid-cols-2">
                 {message.attachments.map((file) => (
                   <AttachmentTile key={file.id} messageId={message.id} file={file} outgoing={!!message.outgoing} onPreview={() => setPreview(file)} />
                 ))}
@@ -152,7 +152,7 @@ function ToolButton({ label, icon: Icon, onClick, showLabel = false, className =
   return (
     <button type="button" onClick={onClick} title={label} aria-label={label} className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] text-ink-2 hover:bg-raise ${className}`}>
       <Icon size={16} strokeWidth={1.8} />
-      {showLabel && <span className="hidden lg:inline">{label}</span>}
+      {showLabel && <span className="hidden @2xl:inline">{label}</span>}
     </button>
   )
 }

@@ -39,7 +39,7 @@ export function ContactsPage() {
 
   return (
     <div className="flex h-full">
-      <section aria-label="Contacts" className={`h-full flex-col border-r border-line bg-panel md:flex md:w-[360px] md:shrink-0 ${selected || creating ? 'hidden' : 'flex w-full'}`}>
+      <section aria-label="Contacts" className={`h-full flex-col border-r border-line bg-panel lg:flex lg:w-[320px] lg:shrink-0 xl:w-[360px] ${selected || creating ? 'hidden' : 'flex w-full'}`}>
         <header className="grid gap-2.5 px-3.5 pt-3.5 pb-2">
           <div className="flex items-center gap-2">
             <button type="button" aria-label="Open menu" onClick={openNav} className="-ml-1 rounded-md p-1 text-muted hover:bg-raise md:hidden"><Menu size={18} /></button>
@@ -78,7 +78,7 @@ export function ContactsPage() {
         </ul>
       </section>
 
-      <section className={`h-full min-w-0 flex-1 overflow-y-auto bg-read ${selected || creating ? '' : 'hidden md:block'}`}>
+      <section className={`h-full min-w-0 flex-1 overflow-y-auto bg-read ${selected || creating ? '' : 'hidden lg:block'}`}>
         {creating ? (
           <ContactForm onDone={(id) => { refresh(); navigate(id ? `/contacts/${id}` : '/contacts') }} />
         ) : selected ? (
@@ -145,7 +145,7 @@ function ContactDetail({ contact, onChange, onDeleted }: { contact: Contact; onC
 
   return (
     <div className="mx-auto grid max-w-[640px] gap-6 px-5 py-8 md:px-10">
-      <button type="button" onClick={() => navigate('/contacts')} className="flex items-center gap-1.5 text-muted md:hidden"><ArrowLeft size={16} /> Contacts</button>
+      <button type="button" onClick={() => navigate('/contacts')} className="flex items-center gap-1.5 text-muted lg:hidden"><ArrowLeft size={16} /> Contacts</button>
       <div className="flex flex-wrap items-center gap-4">
         <Avatar name={contact.name} size={64} />
         <div className="min-w-0">

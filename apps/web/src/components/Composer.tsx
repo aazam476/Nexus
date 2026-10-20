@@ -147,7 +147,7 @@ export function Composer() {
   }
 
   const placement = {
-    normal: 'md:right-4 md:bottom-0 md:h-[600px] md:w-[620px] md:rounded-t-2xl',
+    normal: 'md:right-4 md:bottom-0 md:h-[min(600px,calc(100dvh-1rem))] md:w-[620px] md:rounded-t-2xl',
     max: 'md:inset-6 md:rounded-2xl',
     min: 'md:right-4 md:bottom-0 md:h-auto md:w-[360px] md:rounded-t-2xl',
   }[size]
