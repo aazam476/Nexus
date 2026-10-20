@@ -79,13 +79,12 @@ export async function deleteMessage(message: FullMessage) {
   })
   // POP3: also delete on the server, or the next download would bring it back.
   if (account.protocol === 'pop3' && message.remoteId) {
-    const pop3 = openPop3(account)
+    const pop3 = await openPop3(account)
     try {
-      const list = (await pop3.UIDL()) as [string, string][]
-      const number = list.find(([, uidl]) => uidl === message.remoteId)?.[0]
-      if (number) await pop3.DELE(Number(number))
+      const number = (await pop3.uidl()).find(([, uidl]) => uidl === message.remoteId)?.[0]
+      if (number) await pop3.delete(number)
     } finally {
-      await pop3.QUIT().catch(() => undefined)
+      await pop3.quit() // deletions only take effect after QUIT
     }
   }
   await db.message.deleteMany({ where: { id: message.id } })

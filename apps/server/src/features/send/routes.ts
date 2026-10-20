@@ -1,13 +1,13 @@
 // Sending, scheduling, and drafts.
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { simpleParser } from 'mailparser'
 import { z } from 'zod'
 import { db } from '../../db.ts'
 import { cancelSend, scheduleSend } from '../../jobs/queue.ts'
-import { loadBody, requireAccountRole, requireMessage } from '../../lib/access.ts'
+import { requireAccountRole, requireMessage } from '../../lib/access.ts'
 import { badRequest, notFound, parse } from '../../lib/http.ts'
 import { requireUser, storageKey } from '../../lib/session.ts'
-import { openBody } from '../mail/private.ts'
+import { isAttachment } from '../mail/parse.ts'
+import { messageParts } from '../mail/private.ts'
 import { outgoingSchema, sendNow, type OutgoingPayload } from './send.ts'
 
 export async function sendRoutes(app: FastifyInstance) {
@@ -73,9 +73,8 @@ export async function sendRoutes(app: FastifyInstance) {
 async function withForwardedAttachments(request: FastifyRequest, payload: OutgoingPayload): Promise<OutgoingPayload> {
   if (!payload.forwardOf) return payload
   const original = await requireMessage(request.user.id, payload.forwardOf, 'viewer')
-  const mail = await simpleParser(openBody(await loadBody(original.id), await storageKey(request)).raw)
-  const files = mail.attachments
-    .filter((a) => !a.related && !/pkcs7-(signature|mime)/.test(a.contentType)) // the same files the reader lists
+  const files = (await messageParts(original.id, await storageKey(request)))
+    .filter(isAttachment)
     .map((a) => ({ filename: a.filename ?? 'attachment', contentType: a.contentType, content: a.content.toString('base64') }))
   return { ...payload, forwardOf: undefined, attachments: [...payload.attachments, ...files] }
 }

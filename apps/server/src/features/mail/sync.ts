@@ -3,7 +3,7 @@
 import type { Account, Folder } from '@prisma/client'
 import type { ImapFlow, ListResponse } from 'imapflow'
 import { db } from '../../db.ts'
-import { openPop3, pop3Retrieve, withImap } from '../accounts/connect.ts'
+import { openPop3, withImap } from '../accounts/connect.ts'
 import { parseRaw } from './parse.ts'
 import { sealAccounts } from './private.ts'
 import { classify, nothingChanged } from './sorting.ts'
@@ -173,18 +173,17 @@ export async function localFolders(accountId: string): Promise<Map<string, Folde
 async function syncPop3(account: Account, context: SortingContext) {
   const folders = await localFolders(account.id)
   const known = new Set((await db.message.findMany({ where: { accountId: account.id, remoteId: { not: null } }, select: { remoteId: true } })).map((m) => m.remoteId))
-  const pop3 = openPop3(account)
+  const pop3 = await openPop3(account)
   try {
-    const list = (await pop3.UIDL()) as [string, string][]
-    for (const [number, uidl] of list) {
+    for (const [number, uidl] of await pop3.uidl()) {
       if (known.has(uidl)) continue
-      const raw = await pop3Retrieve(pop3, Number(number))
+      const raw = await pop3.retrieve(number)
       const parsed = await parseRaw(raw)
       const decision = sortIncoming(parsed, context)
       const folder = folders.get(decision.moveTo ?? 'inbox') ?? folders.get('inbox')!
       await saveMessage({ accountId: account.id, folderId: folder.id, raw, parsed, remoteId: uidl, unread: !decision.markRead, starred: false, category: decision.category, labels: decision.labels })
     }
   } finally {
-    await pop3.QUIT().catch(() => undefined)
+    await pop3.quit()
   }
 }

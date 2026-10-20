@@ -4,6 +4,7 @@
 import { existsSync } from 'node:fs'
 import { connect } from 'node:net'
 import { resolve } from 'node:path'
+import type { Prisma } from '@prisma/client'
 import nodemailer from 'nodemailer'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -34,6 +35,16 @@ const load = async () => {
 
 const unique = () => Math.random().toString(36).slice(2, 10)
 
+// A mail account for tests. By default it points at port 1, so anything that tries to connect fails.
+const makeAccount = (env: Awaited<ReturnType<typeof load>>, ownerId: string, overrides: Partial<Prisma.AccountUncheckedCreateInput> = {}) =>
+  env.db.account.create({
+    data: {
+      ownerId, email: `a-${unique()}@test.local`, name: 'Test', color: '#000000', protocol: 'imap', auth: 'password',
+      inHost: 'localhost', inPort: 1, inTls: true, smtpHost: 'localhost', smtpPort: 1, smtpTls: true, username: 'x', secret: env.crypto.encrypt('x'),
+      ...overrides,
+    },
+  })
+
 describe.skipIf(!servicesUp)('access control', () => {
   let env: Awaited<ReturnType<typeof load>>
   let app: Awaited<ReturnType<Awaited<ReturnType<typeof load>>['buildApp']>>
@@ -47,12 +58,7 @@ describe.skipIf(!servicesUp)('access control', () => {
     const password = 'test password 123'
     const owner = await db.user.create({ data: { name: 'Owner', email: `owner-${unique()}@test.local`, passwordHash: await crypto.hashPassword(password) } })
     const viewer = await db.user.create({ data: { name: 'Viewer', email: `viewer-${unique()}@test.local`, passwordHash: await crypto.hashPassword(password) } })
-    const account = await db.account.create({
-      data: {
-        ownerId: owner.id, email: 'shared@test.local', name: 'Shared', color: '#000000', protocol: 'imap', auth: 'password',
-        inHost: 'localhost', inPort: 1, inTls: true, smtpHost: 'localhost', smtpPort: 1, smtpTls: true, username: 'x', secret: crypto.encrypt('x'),
-      },
-    })
+    const account = await makeAccount(env, owner.id, { email: 'shared@test.local' })
     const folder = await db.folder.create({ data: { accountId: account.id, path: 'INBOX', role: 'inbox' } })
     const message = await db.message.create({
       data: {
@@ -105,12 +111,7 @@ describe.skipIf(!servicesUp)('IMAP sync', () => {
     smtp.close()
 
     const user = await db.user.create({ data: { name: 'Sync', email: `sync-${unique()}@test.local`, passwordHash: 'x' } })
-    const account = await db.account.create({
-      data: {
-        ownerId: user.id, email: address, name: 'Sync', color: '#000000', protocol: 'imap', auth: 'password',
-        inHost: 'localhost', inPort: 3993, inTls: true, smtpHost: 'localhost', smtpPort: 3465, smtpTls: true, username: address, secret: crypto.encrypt('x'),
-      },
-    })
+    const account = await makeAccount(env, user.id, { email: address, inPort: 3993, smtpPort: 3465, username: address })
     userId = user.id
     accountId = account.id
   })
@@ -149,12 +150,7 @@ describe.skipIf(!servicesUp)('IMAP sync', () => {
 async function seedUser(env: Awaited<ReturnType<typeof load>>, app: Awaited<ReturnType<Awaited<ReturnType<typeof load>>['buildApp']>>, password: string) {
   const { db, crypto } = env
   const user = await db.user.create({ data: { name: 'U', email: `u-${unique()}@test.local`, passwordHash: await crypto.hashPassword(password) } })
-  const account = await db.account.create({
-    data: {
-      ownerId: user.id, email: `u-${unique()}@test.local`, name: 'U', color: '#000000', protocol: 'imap', auth: 'password',
-      inHost: 'localhost', inPort: 1, inTls: true, smtpHost: 'localhost', smtpPort: 1, smtpTls: true, username: 'x', secret: crypto.encrypt('x'),
-    },
-  })
+  const account = await makeAccount(env, user.id)
   const folder = await db.folder.create({ data: { accountId: account.id, path: 'INBOX', role: 'inbox' } })
   const message = await db.message.create({
     data: {
@@ -223,12 +219,7 @@ describe.skipIf(!servicesUp)('scheduled send', () => {
     const user = await db.user.create({ data: { name: 'S', email: `s-${unique()}@test.local`, passwordHash: 'x' } })
     userId = user.id
     // SMTP port 1: every attempt fails.
-    const account = await db.account.create({
-      data: {
-        ownerId: user.id, email: 's@test.local', name: 'S', color: '#000000', protocol: 'imap', auth: 'password',
-        inHost: 'localhost', inPort: 1, inTls: true, smtpHost: 'localhost', smtpPort: 1, smtpTls: true, username: 'x', secret: crypto.encrypt('x'),
-      },
-    })
+    const account = await makeAccount(env, user.id)
     const outgoing = await db.outgoingMessage.create({
       data: { userId: user.id, accountId: account.id, status: 'scheduled', scheduledFor: new Date(), payload: { accountId: account.id, to: ['x@test.local'], subject: 'x', text: 'x' } },
     })
@@ -238,5 +229,34 @@ describe.skipIf(!servicesUp)('scheduled send', () => {
     expect(await status()).toBe('scheduled')
     await expect(env.sendScheduled(outgoing.id, true)).rejects.toThrow()
     expect(await status()).toBe('failed')
+  })
+})
+
+describe.skipIf(!servicesUp)('POP3 sync', () => {
+  let env: Awaited<ReturnType<typeof load>>
+  let userId = ''
+
+  beforeAll(async () => {
+    env = await load()
+  })
+  afterAll(async () => {
+    await env?.db.user.deleteMany({ where: { id: userId } })
+  })
+
+  it('downloads whole messages, including lines that start with a dot, and only once', async () => {
+    const address = `pop-${unique()}@nexus.test`
+    const smtp = nodemailer.createTransport({ host: 'localhost', port: 3025, secure: false, ignoreTLS: true })
+    await smtp.sendMail({ from: 't@test.local', to: address, subject: 'Dots', text: 'line one\n.starts with a dot\n..two dots\nlast line' })
+    smtp.close()
+
+    const user = await env.db.user.create({ data: { name: 'P', email: `p-${unique()}@test.local`, passwordHash: 'x' } })
+    userId = user.id
+    const account = await makeAccount(env, user.id, { email: address, protocol: 'pop3', inPort: 3995, username: address })
+
+    await env.syncAccount(account.id)
+    await env.syncAccount(account.id) // a second sync must not download it again
+    const stored = await env.db.message.findMany({ where: { accountId: account.id } })
+    expect(stored).toHaveLength(1)
+    expect(stored[0].text).toBe('line one\n.starts with a dot\n..two dots\nlast line')
   })
 })

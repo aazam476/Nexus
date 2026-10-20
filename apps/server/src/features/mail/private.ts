@@ -2,7 +2,9 @@
 // Sender, recipients, subject, date and labels stay readable so lists, sorting and search work.
 import type { KeyObject } from 'node:crypto'
 import type { Message, Prisma } from '@prisma/client'
+import { simpleParser } from 'mailparser'
 import { db } from '../../db.ts'
+import { loadBody } from '../../lib/access.ts'
 import { forbidden } from '../../lib/http.ts'
 import { sealJson, unsealJson } from '../../lib/sealed.ts'
 import type { AttachmentInfo } from './parse.ts'
@@ -87,4 +89,10 @@ export async function unsealAccounts(accountIds: string[], key: KeyObject) {
       })
     }
   }
+}
+
+// Every part of a stored message, in the order attachment ids refer to (see parse.ts).
+// Callers must have checked access with requireMessage first.
+export async function messageParts(messageId: string, key: KeyObject | null) {
+  return (await simpleParser(openBody(await loadBody(messageId), key).raw)).attachments
 }

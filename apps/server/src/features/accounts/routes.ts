@@ -8,7 +8,7 @@ import { encrypt, randomToken } from '../../lib/crypto.ts'
 import { HttpError, badRequest, parse } from '../../lib/http.ts'
 import { requireUser } from '../../lib/session.ts'
 import { testConnection } from './connect.ts'
-import { authorizeUrl, exchangeCode, getProvider } from './oauth.ts'
+import { authorizeUrl, exchangeCode, forgetAccessToken, getProvider } from './oauth.ts'
 
 const COLORS = ['#ff7f6e', '#4fd1a1', '#6ea8ff', '#f5b544', '#c79bff', '#5fc6e8']
 
@@ -36,6 +36,14 @@ export async function accountRoutes(app: FastifyInstance) {
 
     const provider = getProvider(request.params.provider)
     const tokens = await exchangeCode(request.params.provider, code)
+    // Signing in again is how people fix an expired sign-in: update that account, don't add a twin.
+    const existing = await db.account.findFirst({ where: { ownerId: pending.userId, email: tokens.email, auth: provider.auth } })
+    if (existing) {
+      await db.account.update({ where: { id: existing.id }, data: { secret: encrypt(tokens.refreshToken), syncError: null } })
+      forgetAccessToken(existing.id)
+      await queueSync(existing.id)
+      return reply.redirect('/settings/accounts?added=1')
+    }
     const count = await db.account.count({ where: { ownerId: pending.userId } })
     const account = await db.account.create({
       data: {
@@ -97,6 +105,9 @@ export async function accountRoutes(app: FastifyInstance) {
       )
       if (body.protocol === 'pop3' && (await usesPrivateStorage(request.user.id))) {
         throw badRequest('POP3 accounts can’t be added while private storage is on, because Nexus would hold the only copy of their mail.')
+      }
+      if (await db.account.findFirst({ where: { ownerId: request.user.id, email: body.email } })) {
+        throw badRequest('You already added this account. To change its password, use Edit on the account.')
       }
       const settings = { ...body, id: 'new', auth: 'password', secret: encrypt(body.password) }
       await testConnection(settings).catch((error: Error) => {

@@ -1,11 +1,11 @@
 // Opening connections to a mail account's servers: IMAP or POP3 for incoming, SMTP for outgoing.
 import type { Account } from '@prisma/client'
 import { ImapFlow } from 'imapflow'
-import Pop3Command from 'node-pop3'
 import nodemailer from 'nodemailer'
 import { config } from '../../config.ts'
 import { decrypt } from '../../lib/crypto.ts'
 import { accessToken } from './oauth.ts'
+import { Pop3 } from './pop3.ts'
 
 const tls = { rejectUnauthorized: !config.MAIL_ALLOW_INSECURE_TLS }
 
@@ -42,25 +42,7 @@ export async function withImap<T>(account: ServerSettings, work: (client: ImapFl
 
 export function openPop3(account: ServerSettings) {
   if (account.auth !== 'password') throw new Error('POP3 accounts use a password')
-  return new Pop3Command({
-    host: account.inHost,
-    port: account.inPort,
-    tls: account.inTls,
-    user: account.username,
-    password: decrypt(account.secret),
-    timeout: 30_000,
-    tlsOptions: tls,
-    parseStreamToString: false, // RETR gives the raw bytes, so 8-bit mail isn't mangled
-  })
-}
-
-// Downloads message number `n` as raw bytes.
-export async function pop3Retrieve(pop3: Pop3Command, n: number): Promise<Buffer> {
-  const result = await pop3.RETR(n)
-  if (typeof result === 'string') return Buffer.from(result, 'binary')
-  const chunks: Buffer[] = []
-  for await (const chunk of result as unknown as AsyncIterable<Buffer | string>) chunks.push(Buffer.from(chunk))
-  return Buffer.concat(chunks)
+  return Pop3.open({ host: account.inHost, port: account.inPort, tls: account.inTls, user: account.username, password: decrypt(account.secret), tlsOptions: tls })
 }
 
 export async function smtpTransport(account: ServerSettings) {
@@ -80,9 +62,9 @@ export async function testConnection(account: ServerSettings & { protocol: strin
   if (account.protocol === 'imap') {
     await withImap(account, async () => undefined)
   } else {
-    const pop3 = openPop3(account)
-    await pop3.UIDL()
-    await pop3.QUIT()
+    const pop3 = await openPop3(account)
+    await pop3.uidl()
+    await pop3.quit()
   }
   const transport = await smtpTransport(account)
   await transport.verify()

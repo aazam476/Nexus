@@ -54,8 +54,7 @@ export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
 
   const files = mail.attachments.map((a, index) => ({ ...a, index }))
   const attachments = files
-    // Images embedded in the HTML and S/MIME signature parts (smime.p7s) aren't attachments to the reader.
-    .filter((a) => !a.related && !/pkcs7-(signature|mime)/.test(a.contentType))
+    .filter(isAttachment)
     .map((a) => ({ id: String(a.index), filename: a.filename ?? `attachment-${a.index + 1}`, contentType: a.contentType, size: a.size }))
 
   const icsTexts = files.filter((a) => a.contentType === 'text/calendar' || a.filename?.endsWith('.ics')).map((a) => a.content.toString('utf8'))
@@ -80,6 +79,10 @@ export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
     ...spamHeaders(headers),
   }
 }
+
+// What counts as an attachment, everywhere (reader, forwarding): not images embedded in the HTML,
+// and not S/MIME signature parts (smime.p7s).
+export const isAttachment = (part: { related?: boolean; contentType: string }) => !part.related && !/pkcs7-(signature|mime)/.test(part.contentType)
 
 export function makePreview(content: string): string {
   return content

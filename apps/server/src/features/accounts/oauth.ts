@@ -1,7 +1,8 @@
 // "Sign in with Google / Microsoft" for mail accounts (OAuth2 authorization code flow).
 // Nexus keeps the refresh token (encrypted) and mints short-lived access tokens for IMAP and SMTP.
 import { config } from '../../config.ts'
-import { decrypt } from '../../lib/crypto.ts'
+import { db } from '../../db.ts'
+import { decrypt, encrypt } from '../../lib/crypto.ts'
 import { HttpError } from '../../lib/http.ts'
 
 export const providers = {
@@ -87,6 +88,15 @@ export async function accessToken(account: { id: string; auth: string; secret: s
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token
   const name = account.auth === 'oauth-google' ? 'google' : 'microsoft'
   const tokens = await tokenRequest(name, { grant_type: 'refresh_token', refresh_token: decrypt(account.secret) })
+  // Microsoft hands out a new refresh token each time and the old one expires 90 days after it was
+  // issued, so keep the newest. (Google usually sends none, and the old one stays valid.)
+  if (tokens.refresh_token) {
+    account.secret = encrypt(tokens.refresh_token)
+    await db.account.updateMany({ where: { id: account.id }, data: { secret: account.secret } })
+  }
   cache.set(account.id, { token: tokens.access_token, expiresAt: Date.now() + tokens.expires_in * 1000 })
   return tokens.access_token
 }
+
+// After reconnecting an account, don't keep using an access token from the old sign-in.
+export const forgetAccessToken = (accountId: string) => cache.delete(accountId)

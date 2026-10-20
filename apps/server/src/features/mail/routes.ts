@@ -2,14 +2,13 @@
 import type { KeyObject } from 'node:crypto'
 import type { Folder, Message, OutgoingMessage, Prisma } from '@prisma/client'
 import type { FastifyInstance } from 'fastify'
-import { simpleParser } from 'mailparser'
 import { z } from 'zod'
 import { db } from '../../db.ts'
 import { accessibleAccounts, loadBody, requireMessage } from '../../lib/access.ts'
 import { decrypt as decryptSecret } from '../../lib/crypto.ts'
 import { notFound, parse } from '../../lib/http.ts'
 import { requireUser, storageKey } from '../../lib/session.ts'
-import { openBody, openSummary } from './private.ts'
+import { messageParts, openBody, openSummary } from './private.ts'
 import { toIcs } from '../../plugins/nextcloud.ts'
 import * as smime from '../send/smime.ts'
 import { deleteMessage, moveMessage, setFlags } from './actions.ts'
@@ -204,8 +203,7 @@ export async function mailRoutes(app: FastifyInstance) {
   // Attachments are cut out of the stored raw message on demand.
   app.get<{ Params: { id: string; attachmentId: string }; Querystring: { download?: string } }>('/messages/:id/attachments/:attachmentId', async (request, reply) => {
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
-    const mail = await simpleParser(openBody(await loadBody(message.id), await storageKey(request)).raw)
-    const file = mail.attachments[Number(request.params.attachmentId)]
+    const file = (await messageParts(message.id, await storageKey(request)))[Number(request.params.attachmentId)]
     if (!file) throw notFound('Attachment')
 
     // Only types browsers render safely are shown inline; everything else downloads.

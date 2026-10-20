@@ -1,13 +1,12 @@
 // Turning plugins on, configuring them, and running their actions on a message.
 import type { FastifyInstance } from 'fastify'
-import { simpleParser } from 'mailparser'
 import { z } from 'zod'
 import { db } from '../../db.ts'
-import { loadBody, requireMessage } from '../../lib/access.ts'
+import { requireMessage } from '../../lib/access.ts'
 import { decrypt, encrypt } from '../../lib/crypto.ts'
 import { HttpError, badRequest, notFound, parse } from '../../lib/http.ts'
 import { requireUser, storageKey } from '../../lib/session.ts'
-import { openBody, openSummary } from '../mail/private.ts'
+import { messageParts, openSummary } from '../mail/private.ts'
 import { allPlugins, capabilities, getPlugin } from '../../plugins/registry.ts'
 import type { PluginEvent, PluginSettings } from '../../plugins/types.ts'
 
@@ -90,7 +89,7 @@ export async function pluginRoutes(app: FastifyInstance) {
     const { plugin, settings } = await enabledPlugin(request.user.id, request.params.id)
     if (!plugin.saveAttachment) throw badRequest(`${plugin.name} can't save attachments`)
     const message = await requireMessage(request.user.id, messageId, 'viewer')
-    const file = (await simpleParser(openBody(await loadBody(message.id), await storageKey(request)).raw)).attachments[Number(attachmentId)]
+    const file = (await messageParts(message.id, await storageKey(request)))[Number(attachmentId)]
     if (!file) throw notFound('Attachment')
     return runPlugin(plugin.name, () =>
       plugin.saveAttachment!({ filename: file.filename ?? 'attachment', contentType: file.contentType, content: file.content }, settings),
