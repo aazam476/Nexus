@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { db } from '../../db.ts'
 import { requireMessage } from '../../lib/access.ts'
 import { decrypt, encrypt } from '../../lib/crypto.ts'
-import { HttpError, badRequest, notFound, parse } from '../../lib/http.ts'
+import { HttpError, badRequest, errorMessage, notFound, parse } from '../../lib/http.ts'
 import { requireUser, storageKey } from '../../lib/session.ts'
 import { messageParts, openSummary } from '../mail/private.ts'
 import { allPlugins, capabilities, getPlugin } from '../../plugins/registry.ts'
@@ -31,7 +31,7 @@ async function runPlugin<T>(name: string, work: () => Promise<T>): Promise<T> {
   try {
     return await work()
   } catch (error) {
-    throw new HttpError(502, `${name}: ${(error as Error).message}`)
+    throw new HttpError(502, `${name}: ${errorMessage(error)}`)
   }
 }
 

@@ -5,6 +5,7 @@ import { Queue, Worker } from 'bullmq'
 import { Redis } from 'ioredis'
 import { config } from '../config.ts'
 import { db } from '../db.ts'
+import { errorMessage } from '../lib/http.ts'
 import { syncAccount } from '../features/mail/sync.ts'
 import { failInterruptedSends, sendScheduled } from '../features/send/send.ts'
 
@@ -30,8 +31,10 @@ export async function cancelSend(outgoingId: string) {
   await (await sendQueue.getJob(outgoingId))?.remove()
 }
 
+const workers: Worker[] = []
+
 export async function startWorkers() {
-  new Worker(
+  const syncWorker = new Worker(
     'sync',
     async (job) => {
       if (job.name === 'all') {
@@ -43,11 +46,12 @@ export async function startWorkers() {
       }
     },
     { connection, concurrency: 3 },
-  ).on('failed', (job, error) => console.warn(`sync ${job?.data.accountId ?? job?.name} failed: ${error.message}`))
+  ).on('failed', (job, error) => console.warn(`sync ${job?.data.accountId ?? job?.name} failed: ${errorMessage(error)}`))
 
-  new Worker('send', async (job) => sendScheduled(job.data.outgoingId, job.attemptsMade + 1 >= (job.opts.attempts ?? 1)), { connection }).on('failed', (job, error) =>
-    console.warn(`scheduled send ${job?.data.outgoingId} failed: ${error.message}`),
+  const sendWorker = new Worker('send', async (job) => sendScheduled(job.data.outgoingId, job.attemptsMade + 1 >= (job.opts.attempts ?? 1)), { connection }).on('failed', (job, error) =>
+    console.warn(`scheduled send ${job?.data.outgoingId} failed: ${errorMessage(error)}`),
   )
+  workers.push(syncWorker, sendWorker)
 
   // Redis may have lost delayed jobs (a crash before it saved). The database is the source of
   // truth, so queue every pending one again; jobs already in Redis are skipped because the job
@@ -60,4 +64,12 @@ export async function startWorkers() {
   await syncQueue.clean(0, 10_000, 'failed')
 
   await syncQueue.upsertJobScheduler('every-2-minutes', { every: 2 * 60_000 }, { name: 'all', opts: done })
+}
+
+// Stops the workers (letting a running job finish) and closes the Redis connection.
+// Called when Nexus shuts down, and after tests.
+export async function closeQueues() {
+  await Promise.all(workers.map((worker) => worker.close()))
+  await Promise.all([syncQueue.close(), sendQueue.close()])
+  connection.disconnect()
 }

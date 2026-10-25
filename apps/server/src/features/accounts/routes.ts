@@ -5,7 +5,7 @@ import { db } from '../../db.ts'
 import { queueSync } from '../../jobs/queue.ts'
 import { accessibleAccounts, requireAccountRole } from '../../lib/access.ts'
 import { encrypt, randomToken } from '../../lib/crypto.ts'
-import { HttpError, badRequest, parse } from '../../lib/http.ts'
+import { HttpError, badRequest, errorMessage, parse } from '../../lib/http.ts'
 import { requireUser } from '../../lib/session.ts'
 import { testConnection } from './connect.ts'
 import { authorizeUrl, exchangeCode, forgetAccessToken, getProvider } from './oauth.ts'
@@ -110,8 +110,8 @@ export async function accountRoutes(app: FastifyInstance) {
         throw badRequest('You already added this account. To change its password, use Edit on the account.')
       }
       const settings = { ...body, id: 'new', auth: 'password', secret: encrypt(body.password) }
-      await testConnection(settings).catch((error: Error) => {
-        throw badRequest(`Could not connect: ${error.message}`)
+      await testConnection(settings).catch((error) => {
+        throw badRequest(`Could not connect: ${errorMessage(error)}`)
       })
       const count = await db.account.count({ where: { ownerId: request.user.id } })
       const { password: _password, ...fields } = body
@@ -141,8 +141,8 @@ export async function accountRoutes(app: FastifyInstance) {
 
       if (password || Object.keys(serverFields).some((k) => k in rest)) {
         const current = await db.account.findUniqueOrThrow({ where: { id: request.params.id } })
-        await testConnection({ ...current, ...data }).catch((error: Error) => {
-          throw badRequest(`Could not connect: ${error.message}`)
+        await testConnection({ ...current, ...data }).catch((error) => {
+          throw badRequest(`Could not connect: ${errorMessage(error)}`)
         })
       }
       await db.account.update({ where: { id: request.params.id }, data })

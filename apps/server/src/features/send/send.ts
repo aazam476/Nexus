@@ -4,7 +4,7 @@ import MailComposer from 'nodemailer/lib/mail-composer/index.js'
 import { z } from 'zod'
 import { db } from '../../db.ts'
 import { decrypt } from '../../lib/crypto.ts'
-import { HttpError } from '../../lib/http.ts'
+import { HttpError, errorMessage } from '../../lib/http.ts'
 import { smtpTransport, withImap } from '../accounts/connect.ts'
 import { parseRaw } from '../mail/parse.ts'
 import { saveMessage } from '../mail/store.ts'
@@ -80,6 +80,9 @@ export async function sendNow(userId: string, payload: OutgoingPayload) {
   const transport = await smtpTransport(account)
   try {
     await transport.sendMail({ envelope: { from: account.email, to: recipients }, raw })
+  } catch (error) {
+    // Nothing was sent. Say why, in the words of the mail server (a wrong password, a refused recipient…).
+    throw new HttpError(502, `Your mail server did not accept the message: ${errorMessage(error)}`)
   } finally {
     transport.close()
   }
@@ -128,7 +131,7 @@ export async function sendScheduled(outgoingId: string, lastAttempt: boolean) {
     await sendNow(outgoing.userId, outgoingSchema.parse(outgoing.payload))
     await db.outgoingMessage.delete({ where: { id: outgoingId } })
   } catch (error) {
-    await db.outgoingMessage.update({ where: { id: outgoingId }, data: { status: lastAttempt ? 'failed' : 'scheduled', error: (error as Error).message } })
+    await db.outgoingMessage.update({ where: { id: outgoingId }, data: { status: lastAttempt ? 'failed' : 'scheduled', error: errorMessage(error) } })
     throw error
   }
 }

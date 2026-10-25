@@ -3,6 +3,7 @@
 //
 // Security note for plugin authors and admins: plugins run inside the Nexus server process with
 // full access. Only install plugins you trust, the same as any other server software.
+import { errorMessage } from '../lib/http.ts'
 
 export interface PluginSetting {
   key: string
@@ -50,7 +51,7 @@ export async function request(url: string, init: RequestInit, service: string): 
   try {
     response = await fetch(url, { ...init, signal: AbortSignal.timeout(60_000) })
   } catch (error) {
-    throw new Error(`Could not reach ${service} at ${new URL(url).origin}: ${(error as Error).message}`)
+    throw new Error(`Could not reach ${service} at ${new URL(url).origin}: ${errorMessage(error)}`)
   }
   if (response.status === 401 || response.status === 403) throw new Error(`${service} rejected the credentials`)
   if (!response.ok) throw new Error(`${service} answered ${response.status}: ${(await response.text()).slice(0, 200)}`)

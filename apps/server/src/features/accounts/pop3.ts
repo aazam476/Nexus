@@ -1,7 +1,7 @@
 // A small POP3 client (RFC 1939): just what Nexus needs, nothing more.
 // We use our own because the node-pop3 library ends a message at the first line starting
 // with a dot, silently cutting the rest of the mail off.
-import { connect as connectTcp, type Socket } from 'node:net'
+import { connect as connectTcp, isIP, type Socket } from 'node:net'
 import { connect as connectTls, type ConnectionOptions } from 'node:tls'
 
 const TIMEOUT = 30_000
@@ -43,7 +43,8 @@ export class Pop3 {
 
   static async open(settings: Pop3Settings): Promise<Pop3> {
     const pop3 = new Pop3()
-    const tlsOptions = { host: settings.host, port: settings.port, servername: settings.host, ...settings.tlsOptions }
+    // The server name tells TLS which certificate to expect. It must be a host name, never an IP address.
+    const tlsOptions = { host: settings.host, port: settings.port, ...(!isIP(settings.host) && { servername: settings.host }), ...settings.tlsOptions }
     pop3.attach(settings.tls ? connectTls(tlsOptions) : connectTcp(settings.port, settings.host))
     await pop3.reply() // greeting
     if (!settings.tls) {

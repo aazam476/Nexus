@@ -3,6 +3,7 @@
 import type { Account, Folder } from '@prisma/client'
 import type { ImapFlow, ListResponse } from 'imapflow'
 import { db } from '../../db.ts'
+import { errorMessage } from '../../lib/http.ts'
 import { openPop3, withImap } from '../accounts/connect.ts'
 import { parseRaw } from './parse.ts'
 import { sealAccounts } from './private.ts'
@@ -24,7 +25,7 @@ export async function syncAccount(accountId: string) {
     if (context.sealFor) await sealAccounts([account.id], context.sealFor)
     await db.account.update({ where: { id: account.id }, data: { lastSyncAt: new Date(), syncError: null } })
   } catch (error) {
-    await db.account.update({ where: { id: account.id }, data: { syncError: (error as Error).message } })
+    await db.account.update({ where: { id: account.id }, data: { syncError: errorMessage(error) } })
     throw error
   }
 }
