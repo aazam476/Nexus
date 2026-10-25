@@ -1,4 +1,9 @@
+# Send Docker only what the image needs; everything else stays out.
+*
+!apps
+!plugins
+!package.json
+!package-lock.json
 **/node_modules
 **/dist
-.env
-.git
+**/.env
