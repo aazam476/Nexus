@@ -6,7 +6,7 @@ import { Redis } from 'ioredis'
 import { config } from '../config.ts'
 import { db } from '../db.ts'
 import { syncAccount } from '../features/mail/sync.ts'
-import { sendScheduled } from '../features/send/send.ts'
+import { failInterruptedSends, sendScheduled } from '../features/send/send.ts'
 
 const connection = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null })
 
@@ -49,15 +49,12 @@ export async function startWorkers() {
     console.warn(`scheduled send ${job?.data.outgoingId} failed: ${error.message}`),
   )
 
-  // Redis may have lost delayed jobs (a crash before it saved), and a crash mid-send leaves a
-  // message "sending". The database is the source of truth, so queue every pending one again;
-  // jobs already in Redis are skipped because the job id is the message id.
-  // shortcut: a crash right after SMTP accepted the mail but before it was marked sent re-sends it once.
-  const pending = await db.outgoingMessage.findMany({ where: { status: { in: ['scheduled', 'sending'] } } })
-  for (const outgoing of pending) {
-    if (outgoing.status === 'sending') await db.outgoingMessage.update({ where: { id: outgoing.id }, data: { status: 'scheduled' } })
-    await scheduleSend(outgoing.id, outgoing.scheduledFor ?? new Date())
-  }
+  // Redis may have lost delayed jobs (a crash before it saved). The database is the source of
+  // truth, so queue every pending one again; jobs already in Redis are skipped because the job
+  // id is the message id.
+  await failInterruptedSends()
+  const pending = await db.outgoingMessage.findMany({ where: { status: 'scheduled' } })
+  for (const outgoing of pending) await scheduleSend(outgoing.id, outgoing.scheduledFor ?? new Date())
 
   // Failed sync jobs kept by older versions would still block their accounts (see syncDone).
   await syncQueue.clean(0, 10_000, 'failed')

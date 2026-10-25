@@ -21,7 +21,7 @@ const servicesUp = !!process.env.DATABASE_URL && (await reachable(5432)) && (awa
 
 // Loaded only when the services are up: importing config without them would stop the process.
 const load = async () => {
-  const [{ db }, crypto, { buildApp }, { syncAccount }, { withImap }, { sendScheduled }] = await Promise.all([
+  const [{ db }, crypto, { buildApp }, { syncAccount }, { withImap }, { sendScheduled, failInterruptedSends }] = await Promise.all([
     import('./db.ts'),
     import('./lib/crypto.ts'),
     import('./app.ts'),
@@ -30,7 +30,7 @@ const load = async () => {
     import('./features/send/send.ts'),
   ])
   crypto.setEncryptionSecret(process.env.APP_SECRET!)
-  return { db, crypto, buildApp, syncAccount, withImap, sendScheduled }
+  return { db, crypto, buildApp, syncAccount, withImap, sendScheduled, failInterruptedSends }
 }
 
 const unique = () => Math.random().toString(36).slice(2, 10)
@@ -229,6 +229,21 @@ describe.skipIf(!servicesUp)('scheduled send', () => {
     expect(await status()).toBe('scheduled')
     await expect(env.sendScheduled(outgoing.id, true)).rejects.toThrow()
     expect(await status()).toBe('failed')
+  })
+
+  it('never re-sends a message a crash left half-sent, and sends a claimed one only once', async () => {
+    const { db } = env
+    const account = await makeAccount(env, userId)
+    const outgoing = await db.outgoingMessage.create({
+      data: { userId, accountId: account.id, status: 'sending', scheduledFor: new Date(), payload: { accountId: account.id, to: ['x@test.local'], subject: 'x', text: 'x' } },
+    })
+    await env.failInterruptedSends()
+    const after = await db.outgoingMessage.findUniqueOrThrow({ where: { id: outgoing.id } })
+    expect(after.status).toBe('failed')
+    expect(after.error).toMatch(/Check Sent/)
+    // A worker finding it not "scheduled" leaves it alone instead of sending.
+    await expect(env.sendScheduled(outgoing.id, true)).resolves.toBeUndefined()
+    expect((await db.outgoingMessage.findUniqueOrThrow({ where: { id: outgoing.id } })).status).toBe('failed')
   })
 })
 

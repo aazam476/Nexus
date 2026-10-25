@@ -120,8 +120,10 @@ async function rememberRecipients(userId: string, emails: string[]) {
 // "scheduled" so the queue's retry really retries; only the last attempt marks it failed.
 export async function sendScheduled(outgoingId: string, lastAttempt: boolean) {
   const outgoing = await db.outgoingMessage.findUnique({ where: { id: outgoingId } })
-  if (!outgoing || outgoing.status !== 'scheduled') return // cancelled or already sent
-  await db.outgoingMessage.update({ where: { id: outgoingId }, data: { status: 'sending' } })
+  if (!outgoing) return // cancelled or already sent
+  // Claim it in one step, so it is only ever sent once even if two workers pick it up.
+  const claimed = await db.outgoingMessage.updateMany({ where: { id: outgoingId, status: 'scheduled' }, data: { status: 'sending' } })
+  if (!claimed.count) return
   try {
     await sendNow(outgoing.userId, outgoingSchema.parse(outgoing.payload))
     await db.outgoingMessage.delete({ where: { id: outgoingId } })
@@ -129,4 +131,14 @@ export async function sendScheduled(outgoingId: string, lastAttempt: boolean) {
     await db.outgoingMessage.update({ where: { id: outgoingId }, data: { status: lastAttempt ? 'failed' : 'scheduled', error: (error as Error).message } })
     throw error
   }
+}
+
+// After a crash, a message still "sending" may or may not have reached the SMTP server.
+// Sending it again could deliver it twice, so mark it failed and let the user decide:
+// it shows in Scheduled with this note, next to "Send now" and "Cancel".
+export async function failInterruptedSends() {
+  await db.outgoingMessage.updateMany({
+    where: { status: 'sending' },
+    data: { status: 'failed', error: 'Nexus stopped while sending this. Check Sent before sending it again.' },
+  })
 }
