@@ -6,7 +6,12 @@ import { expect, test } from './fixtures.ts'
 import { runFile, uniqueAddress } from './helpers.ts'
 
 test('a new server walks the first person through setup', async ({ page }) => {
-  const details = { email: uniqueAddress('admin'), password: 'correct horse battery staple', mailbox: uniqueAddress('inbox'), accountId: '' }
+  const details = {
+    email: uniqueAddress('admin'),
+    password: 'correct horse battery staple',
+    mailbox: uniqueAddress('inbox'),
+    accountId: '',
+  }
 
   await page.goto('/')
   await expect(page).toHaveURL(/\/login$/)

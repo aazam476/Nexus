@@ -21,10 +21,21 @@ const done = { removeOnComplete: true, removeOnFail: 100 }
 const syncDone = { removeOnComplete: true, removeOnFail: true }
 
 // The job id makes this a no-op while a sync for the same account is already waiting.
-export const queueSync = (accountId: string) => syncQueue.add('account', { accountId }, { jobId: `sync-${accountId}`, ...syncDone })
+export const queueSync = (accountId: string) =>
+  syncQueue.add('account', { accountId }, { jobId: `sync-${accountId}`, ...syncDone })
 
 export async function scheduleSend(outgoingId: string, at: Date) {
-  await sendQueue.add('send', { outgoingId }, { jobId: outgoingId, delay: Math.max(0, at.getTime() - Date.now()), attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, ...done })
+  await sendQueue.add(
+    'send',
+    { outgoingId },
+    {
+      jobId: outgoingId,
+      delay: Math.max(0, at.getTime() - Date.now()),
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 60_000 },
+      ...done,
+    },
+  )
 }
 
 export async function cancelSend(outgoingId: string) {
@@ -46,11 +57,15 @@ export async function startWorkers() {
       }
     },
     { connection, concurrency: 3 },
-  ).on('failed', (job, error) => console.warn(`sync ${job?.data.accountId ?? job?.name} failed: ${errorMessage(error)}`))
-
-  const sendWorker = new Worker('send', async (job) => sendScheduled(job.data.outgoingId, job.attemptsMade + 1 >= (job.opts.attempts ?? 1)), { connection }).on('failed', (job, error) =>
-    console.warn(`scheduled send ${job?.data.outgoingId} failed: ${errorMessage(error)}`),
+  ).on('failed', (job, error) =>
+    console.warn(`sync ${job?.data.accountId ?? job?.name} failed: ${errorMessage(error)}`),
   )
+
+  const sendWorker = new Worker(
+    'send',
+    async (job) => sendScheduled(job.data.outgoingId, job.attemptsMade + 1 >= (job.opts.attempts ?? 1)),
+    { connection },
+  ).on('failed', (job, error) => console.warn(`scheduled send ${job?.data.outgoingId} failed: ${errorMessage(error)}`))
   workers.push(syncWorker, sendWorker)
 
   // Redis may have lost delayed jobs (a crash before it saved). The database is the source of

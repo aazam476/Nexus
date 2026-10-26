@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
-  lockWithPassword, lockWithToken, newStorageKeys, seal, sealJson, unlockWithPassword, unlockWithToken, unseal, unsealJson,
+  lockWithPassword,
+  lockWithToken,
+  newStorageKeys,
+  seal,
+  sealJson,
+  unlockWithPassword,
+  unlockWithToken,
+  unseal,
+  unsealJson,
 } from './sealed.ts'
 
 describe('private storage', () => {

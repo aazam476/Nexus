@@ -17,7 +17,10 @@ import { parseRaw } from './parse.ts'
 const FOLDERS = ['inbox', 'starred', 'scheduled', 'drafts', 'sent', 'archive', 'spam', 'trash'] as const
 
 // The shape the web app works with (see apps/web/src/types.ts).
-function toRow(message: Omit<Message, 'raw' | 'html' | 'text' | 'sealedBody'> & { folder: Folder }, key: KeyObject | null) {
+function toRow(
+  message: Omit<Message, 'raw' | 'html' | 'text' | 'sealedBody'> & { folder: Folder },
+  key: KeyObject | null,
+) {
   const summary = openSummary(message, key)
   return {
     id: message.id,
@@ -41,7 +44,16 @@ function toRow(message: Omit<Message, 'raw' | 'html' | 'text' | 'sealedBody'> & 
 
 // Drafts and scheduled mail live in OutgoingMessage until sent; show them like messages.
 function outgoingToRow(outgoing: OutgoingMessage, me: { name: string; email: string }) {
-  const p = outgoing.payload as { accountId: string; to: string[]; cc: string[]; subject: string; text: string; html?: string; forwardOf?: string; attachments: { filename: string; contentType: string; content: string }[] }
+  const p = outgoing.payload as {
+    accountId: string
+    to: string[]
+    cc: string[]
+    subject: string
+    text: string
+    html?: string
+    forwardOf?: string
+    attachments: { filename: string; contentType: string; content: string }[]
+  }
   return {
     id: outgoing.id,
     accountId: outgoing.accountId,
@@ -58,7 +70,12 @@ function outgoingToRow(outgoing: OutgoingMessage, me: { name: string; email: str
     unread: false,
     starred: false,
     labels: [],
-    attachments: p.attachments.map((a, i) => ({ id: String(i), filename: a.filename, contentType: a.contentType, size: Math.floor((a.content.length * 3) / 4) })),
+    attachments: p.attachments.map((a, i) => ({
+      id: String(i),
+      filename: a.filename,
+      contentType: a.contentType,
+      size: Math.floor((a.content.length * 3) / 4),
+    })),
     scheduledFor: outgoing.scheduledFor,
     forwardOf: p.forwardOf,
     error: outgoing.error,
@@ -72,7 +89,11 @@ export async function mailRoutes(app: FastifyInstance) {
   // Unread counts for the sidebar.
   app.get('/counts', async (request) => {
     const accountIds = (await accessibleAccounts(request.user.id)).map((a) => a.account.id)
-    const unread = await db.message.groupBy({ by: ['folderId', 'accountId'], where: { accountId: { in: accountIds }, unread: true }, _count: true })
+    const unread = await db.message.groupBy({
+      by: ['folderId', 'accountId'],
+      where: { accountId: { in: accountIds }, unread: true },
+      _count: true,
+    })
     const folders = await db.folder.findMany({ where: { accountId: { in: accountIds } } })
     const roleOf = new Map(folders.map((f) => [f.id, f.role]))
 
@@ -84,7 +105,9 @@ export async function mailRoutes(app: FastifyInstance) {
       if (role === 'inbox') byAccount[row.accountId] = (byAccount[row.accountId] ?? 0) + row._count
     }
     byFolder.starred = await db.message.count({ where: { accountId: { in: accountIds }, starred: true, unread: true } })
-    byFolder.scheduled = await db.outgoingMessage.count({ where: { userId: request.user.id, status: { in: ['scheduled', 'failed'] } } })
+    byFolder.scheduled = await db.outgoingMessage.count({
+      where: { userId: request.user.id, status: { in: ['scheduled', 'failed'] } },
+    })
     byFolder.drafts = await db.outgoingMessage.count({ where: { userId: request.user.id, status: 'draft' } })
 
     const labelRows = await db.$queryRaw<{ label: string; count: bigint }[]>`
@@ -111,13 +134,18 @@ export async function mailRoutes(app: FastifyInstance) {
 
     const outgoing = (status: Prisma.OutgoingMessageWhereInput['status']) =>
       db.outgoingMessage
-        .findMany({ where: { userId: request.user.id, accountId: { in: accountIds }, status }, orderBy: { updatedAt: 'desc' } })
+        .findMany({
+          where: { userId: request.user.id, accountId: { in: accountIds }, status },
+          orderBy: { updatedAt: 'desc' },
+        })
         .then((rows) => rows.map((o) => outgoingToRow(o, me)))
     if (query.folder === 'scheduled') return outgoing({ in: ['scheduled', 'failed'] })
 
     const where: Prisma.MessageWhereInput = {
       accountId: { in: accountIds },
-      ...(query.folder === 'starred' ? { starred: true, folder: { role: { notIn: ['trash', 'spam'] } } } : { folder: { role: query.folder } }),
+      ...(query.folder === 'starred'
+        ? { starred: true, folder: { role: { notIn: ['trash', 'spam'] } } }
+        : { folder: { role: query.folder } }),
       ...(query.label && { labels: { has: query.label } }),
     }
     if (query.q) {
@@ -150,12 +178,20 @@ export async function mailRoutes(app: FastifyInstance) {
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
     const key = await storageKey(request)
     const body = openBody(await loadBody(message.id), key)
-    const detail = { ...toRow(message, key), messageId: message.messageId, html: body.html, text: body.text, signature: undefined as string | undefined }
+    const detail = {
+      ...toRow(message, key),
+      messageId: message.messageId,
+      html: body.html,
+      text: body.text,
+      signature: undefined as string | undefined,
+    }
 
     if (message.security === 'smime-encrypted') {
       const cert = await db.smimeCert.findFirst({ where: { userId: request.user.id }, orderBy: { createdAt: 'desc' } })
       if (cert) {
-        const inner = await parseRaw(await smime.decrypt(body.raw, cert.certPem, decryptSecret(cert.keyPem))).catch(() => null)
+        const inner = await parseRaw(await smime.decrypt(body.raw, cert.certPem, decryptSecret(cert.keyPem))).catch(
+          () => null,
+        )
         if (inner) Object.assign(detail, { html: inner.html, text: inner.text, attachments: inner.attachments })
       }
     }
@@ -164,7 +200,8 @@ export async function mailRoutes(app: FastifyInstance) {
       detail.signature = result.status
       // Keep the sender's certificate so you can send them encrypted mail later. Self-signed certificates
       // are common on home servers, so intact-but-untrusted ones are kept too; the UI says which it is.
-      if (result.signerPem) await rememberCertificate(request.user.id, message.fromEmail, message.fromName, result.signerPem)
+      if (result.signerPem)
+        await rememberCertificate(request.user.id, message.fromEmail, message.fromName, result.signerPem)
     }
     return detail
   })
@@ -188,7 +225,8 @@ export async function mailRoutes(app: FastifyInstance) {
     const { spam } = parse(z.object({ spam: z.boolean() }), request.body)
     const message = await requireMessage(request.user.id, request.params.id, 'editor')
     const key = { userId: request.user.id, pattern: message.fromEmail }
-    if (spam && message.fromEmail) await db.blockedSender.upsert({ where: { userId_pattern: key }, create: key, update: {} })
+    if (spam && message.fromEmail)
+      await db.blockedSender.upsert({ where: { userId_pattern: key }, create: key, update: {} })
     else await db.blockedSender.deleteMany({ where: key })
     await moveMessage(message, spam ? 'spam' : 'inbox')
     return { ok: true }
@@ -201,34 +239,50 @@ export async function mailRoutes(app: FastifyInstance) {
   })
 
   // Attachments are cut out of the stored raw message on demand.
-  app.get<{ Params: { id: string; attachmentId: string }; Querystring: { download?: string } }>('/messages/:id/attachments/:attachmentId', async (request, reply) => {
-    const message = await requireMessage(request.user.id, request.params.id, 'viewer')
-    const file = (await messageParts(message.id, await storageKey(request)))[Number(request.params.attachmentId)]
-    if (!file) throw notFound('Attachment')
+  app.get<{ Params: { id: string; attachmentId: string }; Querystring: { download?: string } }>(
+    '/messages/:id/attachments/:attachmentId',
+    async (request, reply) => {
+      const message = await requireMessage(request.user.id, request.params.id, 'viewer')
+      const file = (await messageParts(message.id, await storageKey(request)))[Number(request.params.attachmentId)]
+      if (!file) throw notFound('Attachment')
 
-    // Only types browsers render safely are shown inline; everything else downloads.
-    const previewable = /^(image\/(png|jpeg|gif|webp)|application\/pdf|text\/plain)$/.test(file.contentType)
-    const inline = previewable && request.query.download === undefined
-    const name = (file.filename ?? 'attachment').replace(/["\r\n]/g, '')
-    reply
-      .header('content-type', file.contentType === 'text/plain' ? 'text/plain; charset=utf-8' : file.contentType)
-      .header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename="${name.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`)
-      .header('x-content-type-options', 'nosniff')
-    // PDFs need the browser's viewer, which a sandbox blocks; everything else is sandboxed.
-    if (file.contentType !== 'application/pdf') reply.header('content-security-policy', "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'")
-    return reply.send(file.content)
-  })
+      // Only types browsers render safely are shown inline; everything else downloads.
+      const previewable = /^(image\/(png|jpeg|gif|webp)|application\/pdf|text\/plain)$/.test(file.contentType)
+      const inline = previewable && request.query.download === undefined
+      const name = (file.filename ?? 'attachment').replace(/["\r\n]/g, '')
+      reply
+        .header('content-type', file.contentType === 'text/plain' ? 'text/plain; charset=utf-8' : file.contentType)
+        .header(
+          'content-disposition',
+          `${inline ? 'inline' : 'attachment'}; filename="${name.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+        )
+        .header('x-content-type-options', 'nosniff')
+      // PDFs need the browser's viewer, which a sandbox blocks; everything else is sandboxed.
+      if (file.contentType !== 'application/pdf')
+        reply.header(
+          'content-security-policy',
+          "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
+        )
+      return reply.send(file.content)
+    },
+  )
 
   app.get<{ Params: { id: string } }>('/messages/:id/raw', async (request, reply) => {
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
-    return reply.header('content-type', 'message/rfc822').header('content-disposition', `attachment; filename="message-${message.id}.eml"`).send(openBody(await loadBody(message.id), await storageKey(request)).raw)
+    return reply
+      .header('content-type', 'message/rfc822')
+      .header('content-disposition', `attachment; filename="message-${message.id}.eml"`)
+      .send(openBody(await loadBody(message.id), await storageKey(request)).raw)
   })
 
   app.get<{ Params: { id: string } }>('/messages/:id/event.ics', async (request, reply) => {
     const message = await requireMessage(request.user.id, request.params.id, 'viewer')
     const { event } = openSummary(message, await storageKey(request))
     if (!event) throw notFound('Event')
-    return reply.header('content-type', 'text/calendar; charset=utf-8').header('content-disposition', 'attachment; filename="event.ics"').send(toIcs(event, `${message.id}@nexus`))
+    return reply
+      .header('content-type', 'text/calendar; charset=utf-8')
+      .header('content-disposition', 'attachment; filename="event.ics"')
+      .send(toIcs(event, `${message.id}@nexus`))
   })
 }
 

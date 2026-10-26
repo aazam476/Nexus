@@ -19,7 +19,14 @@ describe('adding an account', () => {
     const { id, email } = await addAccount(browser)
 
     const [account] = await browser.json('GET', '/api/accounts')
-    expect(account).toMatchObject({ id, email, role: 'owner', protocol: 'imap', inHost: 'localhost', color: expect.stringMatching(/^#/) })
+    expect(account).toMatchObject({
+      id,
+      email,
+      role: 'owner',
+      protocol: 'imap',
+      inHost: 'localhost',
+      color: expect.stringMatching(/^#/),
+    })
     const stored = await db.account.findUniqueOrThrow({ where: { id } })
     expect(stored.secret).not.toContain('any password')
     expect(decrypt(stored.secret)).toBe('any password')
@@ -49,7 +56,11 @@ describe('editing and removing an account', () => {
     const { browser } = await signedInUser(app)
     const { id } = await addAccount(browser)
     await browser.json('PATCH', `/api/accounts/${id}`, { name: 'Work', color: '#123abc', signature: '<p>Cheers</p>' })
-    expect((await browser.json('GET', '/api/accounts'))[0]).toMatchObject({ name: 'Work', color: '#123abc', signature: '<p>Cheers</p>' })
+    expect((await browser.json('GET', '/api/accounts'))[0]).toMatchObject({
+      name: 'Work',
+      color: '#123abc',
+      signature: '<p>Cheers</p>',
+    })
 
     const badServer = await browser.patch(`/api/accounts/${id}`, { inPort: 1 })
     expect(badServer.statusCode).toBe(400)
@@ -61,7 +72,21 @@ describe('editing and removing an account', () => {
     const { id } = await addAccount(browser)
     const folder = await db.folder.create({ data: { accountId: id, path: 'INBOX', role: 'inbox' } })
     await db.message.create({
-      data: { accountId: id, folderId: folder.id, fromName: 'A', fromEmail: 'a@x.test', to: [], cc: [], subject: 's', preview: '', date: new Date(), category: 'people', labels: [], attachments: [], raw: Buffer.from('x') },
+      data: {
+        accountId: id,
+        folderId: folder.id,
+        fromName: 'A',
+        fromEmail: 'a@x.test',
+        to: [],
+        cc: [],
+        subject: 's',
+        preview: '',
+        date: new Date(),
+        category: 'people',
+        labels: [],
+        attachments: [],
+        raw: Buffer.from('x'),
+      },
     })
     await browser.json('DELETE', `/api/accounts/${id}`)
     expect(await browser.json('GET', '/api/accounts')).toEqual([])
@@ -84,8 +109,20 @@ describe('sharing an account', () => {
     const folder = await db.folder.create({ data: { accountId, path: 'INBOX', role: 'inbox' } })
     const message = await db.message.create({
       data: {
-        accountId, folderId: folder.id, fromName: 'A', fromEmail: 'a@x.test', to: [], cc: [], subject: 'Hello', preview: 'Hi', text: 'Hi',
-        date: new Date(), category: 'people', labels: [], attachments: [], raw: Buffer.from('Subject: Hello\r\n\r\nHi\r\n'),
+        accountId,
+        folderId: folder.id,
+        fromName: 'A',
+        fromEmail: 'a@x.test',
+        to: [],
+        cc: [],
+        subject: 'Hello',
+        preview: 'Hi',
+        text: 'Hi',
+        date: new Date(),
+        category: 'people',
+        labels: [],
+        attachments: [],
+        raw: Buffer.from('Subject: Hello\r\n\r\nHi\r\n'),
       },
     })
     await owner.browser.json('PUT', `/api/accounts/${accountId}/members`, { userId: member.user.id, role })
@@ -108,7 +145,9 @@ describe('sharing an account', () => {
     expect((await viewer.patch(`/api/messages/${messageId}`, { starred: true })).statusCode).toBe(403)
     expect((await viewer.post('/api/send', { accountId, to: ['x@x.test'], text: 'x' })).statusCode).toBe(403)
     expect((await viewer.get(`/api/accounts/${accountId}/members`)).statusCode).toBe(403)
-    expect((await viewer.put(`/api/accounts/${accountId}/members`, { userId: member.user.id, role: 'editor' })).statusCode).toBe(403)
+    expect(
+      (await viewer.put(`/api/accounts/${accountId}/members`, { userId: member.user.id, role: 'editor' })).statusCode,
+    ).toBe(403)
     expect((await viewer.delete(`/api/accounts/${accountId}`)).statusCode).toBe(403)
   })
 
@@ -128,8 +167,13 @@ describe('sharing an account', () => {
 
   it('lists members and takes access away again', async () => {
     const { owner, member, accountId, messageId } = await sharedSetup('viewer')
-    expect(await owner.browser.json('GET', `/api/accounts/${accountId}/members`)).toEqual([{ userId: member.user.id, name: 'Member', email: member.user.email, role: 'viewer' }])
-    expect((await owner.browser.put(`/api/accounts/${accountId}/members`, { userId: owner.user.id, role: 'viewer' })).statusCode).toBe(400)
+    expect(await owner.browser.json('GET', `/api/accounts/${accountId}/members`)).toEqual([
+      { userId: member.user.id, name: 'Member', email: member.user.email, role: 'viewer' },
+    ])
+    expect(
+      (await owner.browser.put(`/api/accounts/${accountId}/members`, { userId: owner.user.id, role: 'viewer' }))
+        .statusCode,
+    ).toBe(400)
 
     await owner.browser.json('DELETE', `/api/accounts/${accountId}/members/${member.user.id}`)
     expect((await member.browser.get(`/api/messages/${messageId}`)).statusCode).toBe(404)
@@ -145,12 +189,18 @@ describe('sharing an account', () => {
 describe('Google sign-in', () => {
   // A fake Google token endpoint. The ID token carries the signed-in email, as Google's does.
   function fakeGoogle(response: Record<string, unknown>) {
-    const idToken = (email: string) => `x.${Buffer.from(JSON.stringify({ email, name: 'Gee Mail' })).toString('base64url')}.x`
+    const idToken = (email: string) =>
+      `x.${Buffer.from(JSON.stringify({ email, name: 'Gee Mail' })).toString('base64url')}.x`
     const calls: URLSearchParams[] = []
     vi.stubGlobal('fetch', async (url: string, init: { body: URLSearchParams }) => {
       expect(url).toBe('https://oauth2.googleapis.com/token')
       calls.push(new URLSearchParams(init.body))
-      const body = { access_token: 'access-1', expires_in: 3600, ...response, ...(response.email ? { id_token: idToken(String(response.email)) } : {}) }
+      const body = {
+        access_token: 'access-1',
+        expires_in: 3600,
+        ...response,
+        ...(response.email ? { id_token: idToken(String(response.email)) } : {}),
+      }
       return new Response(JSON.stringify(body), { status: 200 })
     })
     return calls
@@ -227,15 +277,29 @@ describe('OAuth access tokens', () => {
     const { user } = await signedInUser(app)
     const account = await db.account.create({
       data: {
-        ownerId: user.id, email: uniqueAddress(), name: 'G', color: '#000000', protocol: 'imap', auth: 'oauth-google',
-        inHost: 'imap.gmail.com', inPort: 993, inTls: true, smtpHost: 'smtp.gmail.com', smtpPort: 465, smtpTls: true, username: 'g', secret: encrypt('refresh-old'),
+        ownerId: user.id,
+        email: uniqueAddress(),
+        name: 'G',
+        color: '#000000',
+        protocol: 'imap',
+        auth: 'oauth-google',
+        inHost: 'imap.gmail.com',
+        inPort: 993,
+        inTls: true,
+        smtpHost: 'smtp.gmail.com',
+        smtpPort: 465,
+        smtpTls: true,
+        username: 'g',
+        secret: encrypt('refresh-old'),
       },
     })
     let requests = 0
     vi.stubGlobal('fetch', async (_url: string, init: { body: URLSearchParams }) => {
       requests++
       expect(new URLSearchParams(init.body).get('grant_type')).toBe('refresh_token')
-      return new Response(JSON.stringify({ access_token: `access-${requests}`, expires_in: 3600, refresh_token: 'refresh-new' }))
+      return new Response(
+        JSON.stringify({ access_token: `access-${requests}`, expires_in: 3600, refresh_token: 'refresh-new' }),
+      )
     })
 
     expect(await accessToken(account)).toBe('access-1')

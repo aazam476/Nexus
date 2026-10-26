@@ -44,7 +44,12 @@ export class Pop3 {
   static async open(settings: Pop3Settings): Promise<Pop3> {
     const pop3 = new Pop3()
     // The server name tells TLS which certificate to expect. It must be a host name, never an IP address.
-    const tlsOptions = { host: settings.host, port: settings.port, ...(!isIP(settings.host) && { servername: settings.host }), ...settings.tlsOptions }
+    const tlsOptions = {
+      host: settings.host,
+      port: settings.port,
+      ...(!isIP(settings.host) && { servername: settings.host }),
+      ...settings.tlsOptions,
+    }
     pop3.attach(settings.tls ? connectTls(tlsOptions) : connectTcp(settings.port, settings.host))
     await pop3.reply() // greeting
     if (!settings.tls) {

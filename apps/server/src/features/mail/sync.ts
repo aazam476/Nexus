@@ -44,10 +44,20 @@ async function syncImap(account: Account, context: SortingContext) {
 }
 
 const specialUse: Record<string, (typeof ROLES)[number]> = {
-  '\\Inbox': 'inbox', '\\Sent': 'sent', '\\Drafts': 'drafts', '\\Archive': 'archive', '\\Junk': 'spam', '\\Trash': 'trash',
+  '\\Inbox': 'inbox',
+  '\\Sent': 'sent',
+  '\\Drafts': 'drafts',
+  '\\Archive': 'archive',
+  '\\Junk': 'spam',
+  '\\Trash': 'trash',
 }
 const byName: [RegExp, (typeof ROLES)[number]][] = [
-  [/^inbox$/i, 'inbox'], [/^sent/i, 'sent'], [/^drafts?$/i, 'drafts'], [/^archive/i, 'archive'], [/junk|spam/i, 'spam'], [/trash|deleted/i, 'trash'],
+  [/^inbox$/i, 'inbox'],
+  [/^sent/i, 'sent'],
+  [/^drafts?$/i, 'drafts'],
+  [/^archive/i, 'archive'],
+  [/junk|spam/i, 'spam'],
+  [/trash|deleted/i, 'trash'],
 ]
 
 // Matches server mailboxes to Nexus folder roles, creating Archive/Spam/Trash/Sent if the server lacks them.
@@ -55,10 +65,16 @@ export async function discoverFolders(client: ImapFlow, accountId: string): Prom
   const mailboxes: ListResponse[] = await client.list()
   const pathFor = new Map<string, string>()
   for (const box of mailboxes) {
-    const role = (box.specialUse && specialUse[box.specialUse]) || byName.find(([pattern]) => pattern.test(box.name))?.[1]
+    const role =
+      (box.specialUse && specialUse[box.specialUse]) || byName.find(([pattern]) => pattern.test(box.name))?.[1]
     if (role && !pathFor.has(role)) pathFor.set(role, box.path)
   }
-  for (const [role, name] of [['sent', 'Sent'], ['archive', 'Archive'], ['spam', 'Junk'], ['trash', 'Trash']] as const) {
+  for (const [role, name] of [
+    ['sent', 'Sent'],
+    ['archive', 'Archive'],
+    ['spam', 'Junk'],
+    ['trash', 'Trash'],
+  ] as const) {
     if (!pathFor.has(role)) {
       const created = await client.mailboxCreate(name)
       pathFor.set(role, created.path)
@@ -77,7 +93,13 @@ export async function discoverFolders(client: ImapFlow, accountId: string): Prom
   return folders
 }
 
-async function syncFolder(client: ImapFlow, account: Account, folder: Folder, folders: Map<string, Folder>, context: SortingContext) {
+async function syncFolder(
+  client: ImapFlow,
+  account: Account,
+  folder: Folder,
+  folders: Map<string, Folder>,
+  context: SortingContext,
+) {
   const lock = await client.getMailboxLock(folder.path)
   try {
     const mailbox = client.mailbox
@@ -106,7 +128,13 @@ async function syncFolder(client: ImapFlow, account: Account, folder: Folder, fo
       const parsed = await parseRaw(message.source)
       const flags = message.flags ?? new Set<string>()
       let unread = !flags.has('\\Seen')
-      let category = classify({ fromEmail: parsed.from.email, subject: parsed.subject, isMailingList: parsed.isMailingList, isAutomated: parsed.isAutomated, hasEvent: !!parsed.event })
+      let category = classify({
+        fromEmail: parsed.from.email,
+        subject: parsed.subject,
+        isMailingList: parsed.isMailingList,
+        isAutomated: parsed.isAutomated,
+        hasEvent: !!parsed.event,
+      })
       let labels: string[] = []
 
       if (folder.role === 'inbox') {
@@ -125,17 +153,34 @@ async function syncFolder(client: ImapFlow, account: Account, folder: Folder, fo
         labels = decision.labels
       }
 
-      await saveMessage({ accountId: account.id, folderId: folder.id, raw: message.source, parsed, uid, unread, starred: flags.has('\\Flagged'), category, labels, sealFor: context.sealFor })
+      await saveMessage({
+        accountId: account.id,
+        folderId: folder.id,
+        raw: message.source,
+        parsed,
+        uid,
+        unread,
+        starred: flags.has('\\Flagged'),
+        category,
+        labels,
+        sealFor: context.sealFor,
+      })
     }
 
     // 2. Bring flags and deletions made in other mail apps into Nexus (skipped when nothing changed).
     const modseq = mailbox.highestModseq ?? null
     const unchanged = nothingChanged(folder, { highestModseq: modseq, exists: mailbox.exists }, newUids.length)
-    const local = unchanged ? [] : await db.message.findMany({ where: { folderId: folder.id }, select: { id: true, uid: true, unread: true, starred: true } })
+    const local = unchanged
+      ? []
+      : await db.message.findMany({
+          where: { folderId: folder.id },
+          select: { id: true, uid: true, unread: true, starred: true },
+        })
     if (local.length) {
       const remote = new Map<number, Set<string>>()
       if (mailbox.exists > 0) {
-        for await (const message of client.fetch('1:*', { uid: true, flags: true })) remote.set(message.uid, message.flags ?? new Set())
+        for await (const message of client.fetch('1:*', { uid: true, flags: true }))
+          remote.set(message.uid, message.flags ?? new Set())
       }
       const gone = local.filter((m) => m.uid == null || !remote.has(m.uid)).map((m) => m.id)
       if (gone.length) await db.message.deleteMany({ where: { id: { in: gone } } })
@@ -152,7 +197,12 @@ async function syncFolder(client: ImapFlow, account: Account, folder: Folder, fo
 
     await db.folder.update({
       where: { id: folder.id },
-      data: { uidValidity: mailbox.uidValidity, lastUid: Math.max(lastUid, ...newUids, 0), highestModseq: modseq, lastExists: mailbox.exists },
+      data: {
+        uidValidity: mailbox.uidValidity,
+        lastUid: Math.max(lastUid, ...newUids, 0),
+        highestModseq: modseq,
+        lastExists: mailbox.exists,
+      },
     })
   } finally {
     lock.release()
@@ -165,7 +215,11 @@ async function syncFolder(client: ImapFlow, account: Account, folder: Folder, fo
 export async function localFolders(accountId: string): Promise<Map<string, Folder>> {
   const folders = new Map<string, Folder>()
   for (const role of ROLES) {
-    const folder = await db.folder.upsert({ where: { accountId_role: { accountId, role } }, create: { accountId, role, path: role }, update: {} })
+    const folder = await db.folder.upsert({
+      where: { accountId_role: { accountId, role } },
+      create: { accountId, role, path: role },
+      update: {},
+    })
     folders.set(role, folder)
   }
   return folders
@@ -173,7 +227,14 @@ export async function localFolders(accountId: string): Promise<Map<string, Folde
 
 async function syncPop3(account: Account, context: SortingContext) {
   const folders = await localFolders(account.id)
-  const known = new Set((await db.message.findMany({ where: { accountId: account.id, remoteId: { not: null } }, select: { remoteId: true } })).map((m) => m.remoteId))
+  const known = new Set(
+    (
+      await db.message.findMany({
+        where: { accountId: account.id, remoteId: { not: null } },
+        select: { remoteId: true },
+      })
+    ).map((m) => m.remoteId),
+  )
   const pop3 = await openPop3(account)
   try {
     for (const [number, uidl] of await pop3.uidl()) {
@@ -182,7 +243,17 @@ async function syncPop3(account: Account, context: SortingContext) {
       const parsed = await parseRaw(raw)
       const decision = sortIncoming(parsed, context)
       const folder = folders.get(decision.moveTo ?? 'inbox') ?? folders.get('inbox')!
-      await saveMessage({ accountId: account.id, folderId: folder.id, raw, parsed, remoteId: uidl, unread: !decision.markRead, starred: false, category: decision.category, labels: decision.labels })
+      await saveMessage({
+        accountId: account.id,
+        folderId: folder.id,
+        raw,
+        parsed,
+        remoteId: uidl,
+        unread: !decision.markRead,
+        starred: false,
+        category: decision.category,
+        labels: decision.labels,
+      })
     }
   } finally {
     await pop3.quit()

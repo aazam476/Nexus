@@ -8,7 +8,9 @@
     "dev:web": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
     "test": "npm test --workspaces --if-present",
-    "dev:server": "npm run dev -w apps/server"
+    "dev:server": "npm run dev -w apps/server",
+    "format": "prettier --write \"apps/*/{src,e2e}/**/*.{ts,tsx}\" \"apps/*/*.config.ts\" \"scripts/*.ts\" \"docs/examples/**/*.js\"",
+    "format:check": "prettier --check \"apps/*/{src,e2e}/**/*.{ts,tsx}\" \"apps/*/*.config.ts\" \"scripts/*.ts\" \"docs/examples/**/*.js\""
   },
   "allowScripts": {
     "prisma@6.19.3": true,
@@ -16,5 +18,8 @@
     "@prisma/engines@6.19.3": true
   },
   "license": "Apache-2.0",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "prettier": "3.9.10"
+  }
 }

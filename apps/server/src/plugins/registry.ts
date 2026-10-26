@@ -11,7 +11,8 @@ import type { NexusPlugin } from './types.ts'
 
 const plugins = new Map<string, NexusPlugin & { builtIn: boolean }>()
 
-for (const plugin of [immich, nextcloudFiles, nextcloudCalendar, paperless]) plugins.set(plugin.id, { ...plugin, builtIn: true })
+for (const plugin of [immich, nextcloudFiles, nextcloudCalendar, paperless])
+  plugins.set(plugin.id, { ...plugin, builtIn: true })
 
 export async function loadExternalPlugins(dir: string) {
   let entries: Dirent[]
@@ -27,7 +28,8 @@ export async function loadExternalPlugins(dir: string) {
     const file = /\.m?js$/.test(entry) ? path : join(path, 'index.js')
     try {
       const plugin = (await import(pathToFileURL(file).href)).default as NexusPlugin
-      if (!plugin?.id || !plugin.name || !Array.isArray(plugin.settings)) throw new Error('default export is not a Nexus plugin')
+      if (!plugin?.id || !plugin.name || !Array.isArray(plugin.settings))
+        throw new Error('default export is not a Nexus plugin')
       if (plugins.has(plugin.id)) throw new Error(`a plugin with id "${plugin.id}" is already loaded`)
       plugins.set(plugin.id, { ...plugin, builtIn: false })
       console.info(`Loaded plugin ${plugin.name} (${plugin.id}) from ${entry}`)

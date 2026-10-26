@@ -9,7 +9,10 @@ import { Pop3 } from './pop3.ts'
 
 const tls = { rejectUnauthorized: !config.MAIL_ALLOW_INSECURE_TLS }
 
-type ServerSettings = Pick<Account, 'id' | 'auth' | 'secret' | 'username' | 'inHost' | 'inPort' | 'inTls' | 'smtpHost' | 'smtpPort' | 'smtpTls'>
+type ServerSettings = Pick<
+  Account,
+  'id' | 'auth' | 'secret' | 'username' | 'inHost' | 'inPort' | 'inTls' | 'smtpHost' | 'smtpPort' | 'smtpTls'
+>
 
 async function credentials(account: ServerSettings) {
   return account.auth === 'password'
@@ -42,7 +45,14 @@ export async function withImap<T>(account: ServerSettings, work: (client: ImapFl
 
 export function openPop3(account: ServerSettings) {
   if (account.auth !== 'password') throw new Error('POP3 accounts use a password')
-  return Pop3.open({ host: account.inHost, port: account.inPort, tls: account.inTls, user: account.username, password: decrypt(account.secret), tlsOptions: tls })
+  return Pop3.open({
+    host: account.inHost,
+    port: account.inPort,
+    tls: account.inTls,
+    user: account.username,
+    password: decrypt(account.secret),
+    tlsOptions: tls,
+  })
 }
 
 export async function smtpTransport(account: ServerSettings) {

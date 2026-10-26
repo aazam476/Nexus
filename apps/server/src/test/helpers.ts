@@ -34,7 +34,8 @@ export class Browser {
       method,
       url,
       remoteAddress: this.ip,
-      ...(body !== undefined && (typeof body === 'string' || Buffer.isBuffer(body) ? { body } : { payload: body as object })),
+      ...(body !== undefined &&
+        (typeof body === 'string' || Buffer.isBuffer(body) ? { body } : { payload: body as object })),
       headers: { ...(this.cookie && { cookie: this.cookie }), ...headers },
     })
     // Keep the newest session cookie; an empty value means the server signed us out.
@@ -60,7 +61,12 @@ export class Browser {
 // A user created straight in the database, then signed in through the real login route.
 export async function signedInUser(app: FastifyInstance, options: { role?: 'admin' | 'user'; name?: string } = {}) {
   const user = await db.user.create({
-    data: { name: options.name ?? 'Test User', email: uniqueAddress('login'), passwordHash: await hashPassword(PASSWORD), role: options.role ?? 'user' },
+    data: {
+      name: options.name ?? 'Test User',
+      email: uniqueAddress('login'),
+      passwordHash: await hashPassword(PASSWORD),
+      role: options.role ?? 'user',
+    },
   })
   const browser = new Browser(app)
   const login = await browser.post('/api/auth/login', { email: user.email, password: PASSWORD })
@@ -101,7 +107,14 @@ export async function deliver(to: string, mail: Mail.Options) {
 
 // Reads a GreenMail mailbox directly, to check what Nexus really did on the mail server.
 export async function onMailServer<T>(email: string, work: (client: ImapFlow) => Promise<T>): Promise<T> {
-  const client = new ImapFlow({ host: 'localhost', port: 3993, secure: true, auth: { user: email, pass: 'x' }, tls: { rejectUnauthorized: false }, logger: false })
+  const client = new ImapFlow({
+    host: 'localhost',
+    port: 3993,
+    secure: true,
+    auth: { user: email, pass: 'x' },
+    tls: { rejectUnauthorized: false },
+    logger: false,
+  })
   await client.connect()
   try {
     return await work(client)
@@ -117,7 +130,8 @@ export const subjectsOnServer = (email: string, folder = 'INBOX') =>
     try {
       const subjects: string[] = []
       if ((client.mailbox as { exists: number }).exists === 0) return subjects
-      for await (const message of client.fetch('1:*', { envelope: true })) subjects.push(message.envelope?.subject ?? '')
+      for await (const message of client.fetch('1:*', { envelope: true }))
+        subjects.push(message.envelope?.subject ?? '')
       return subjects
     } finally {
       lock.release()
@@ -125,7 +139,11 @@ export const subjectsOnServer = (email: string, folder = 'INBOX') =>
   })
 
 // Waits for something that happens in the background (a job, a delivery), checking every 200 ms.
-export async function waitFor<T>(check: () => Promise<T | undefined | null | false>, what: string, timeout = 15_000): Promise<T> {
+export async function waitFor<T>(
+  check: () => Promise<T | undefined | null | false>,
+  what: string,
+  timeout = 15_000,
+): Promise<T> {
   const deadline = Date.now() + timeout
   for (;;) {
     const result = await check()
@@ -146,8 +164,32 @@ export async function makeP12(email: string, password: string, days = 30): Promi
   try {
     const key = join(dir, 'key.pem')
     const cert = join(dir, 'cert.pem')
-    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', String(days), '-subj', `/CN=Test/emailAddress=${email}`, '-addext', `subjectAltName=email:${email}`], { stdio: 'ignore' })
-    execFileSync('openssl', ['pkcs12', '-export', '-inkey', key, '-in', cert, '-out', join(dir, 'id.p12'), '-passout', `pass:${password}`], { stdio: 'ignore' })
+    execFileSync(
+      'openssl',
+      [
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-nodes',
+        '-keyout',
+        key,
+        '-out',
+        cert,
+        '-days',
+        String(days),
+        '-subj',
+        `/CN=Test/emailAddress=${email}`,
+        '-addext',
+        `subjectAltName=email:${email}`,
+      ],
+      { stdio: 'ignore' },
+    )
+    execFileSync(
+      'openssl',
+      ['pkcs12', '-export', '-inkey', key, '-in', cert, '-out', join(dir, 'id.p12'), '-passout', `pass:${password}`],
+      { stdio: 'ignore' },
+    )
     return readFileSync(join(dir, 'id.p12'))
   } finally {
     rmSync(dir, { recursive: true, force: true })

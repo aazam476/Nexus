@@ -14,7 +14,8 @@ async function watch(page: Page, problems: string[]) {
   page.on('dialog', async (dialog) => {
     if (dialog.type() === 'confirm') return dialog.accept()
     // The editor's Link button asks for the address this way.
-    if (dialog.type() === 'prompt' && dialog.message() === 'Link address') return dialog.accept('https://example.com/docs')
+    if (dialog.type() === 'prompt' && dialog.message() === 'Link address')
+      return dialog.accept('https://example.com/docs')
     problems.push(`Unexpected ${dialog.type()}: ${dialog.message()}`)
     await dialog.dismiss()
   })

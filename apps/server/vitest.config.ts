@@ -10,7 +10,10 @@ import { defineConfig } from 'vitest/config'
 const reachable = (port: number) =>
   new Promise<boolean>((done) => {
     const socket = connect(port, 'localhost')
-    socket.once('connect', () => { socket.end(); done(true) })
+    socket.once('connect', () => {
+      socket.end()
+      done(true)
+    })
     socket.once('error', () => done(false))
   })
 
@@ -18,25 +21,29 @@ export default defineConfig(async () => {
   const servicesUp = (await reachable(5432)) && (await reachable(6379)) && (await reachable(3025))
   if (!servicesUp) {
     if (process.env.CI) throw new Error('CI needs Postgres, Redis and GreenMail running for the integration tests')
-    console.warn('\nIntegration tests skipped: start Postgres, Redis and GreenMail with docker compose -f docker-compose.dev.yml up -d\n')
+    console.warn(
+      '\nIntegration tests skipped: start Postgres, Redis and GreenMail with docker compose -f docker-compose.dev.yml up -d\n',
+    )
   }
   return {
     test: {
       projects: [
         { test: { name: 'unit', include: ['src/**/*.test.ts'], exclude: ['src/**/*.int.test.ts'] } },
         ...(servicesUp
-          ? [{
-              test: {
-                name: 'integration',
-                include: ['src/**/*.int.test.ts'],
-                globalSetup: ['src/test/global-setup.ts'],
-                setupFiles: ['src/test/setup.ts'],
-                // One file at a time: they share the test database and the test mail server.
-                fileParallelism: false,
-                testTimeout: 30_000,
-                hookTimeout: 60_000,
+          ? [
+              {
+                test: {
+                  name: 'integration',
+                  include: ['src/**/*.int.test.ts'],
+                  globalSetup: ['src/test/global-setup.ts'],
+                  setupFiles: ['src/test/setup.ts'],
+                  // One file at a time: they share the test database and the test mail server.
+                  fileParallelism: false,
+                  testTimeout: 30_000,
+                  hookTimeout: 60_000,
+                },
               },
-            }]
+            ]
           : []),
       ],
       coverage: {

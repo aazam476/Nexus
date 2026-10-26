@@ -10,7 +10,11 @@ import { discoverFolders, localFolders } from './sync.ts'
 // What requireMessage returns: the message without its (possibly huge) body.
 type FullMessage = Omit<Message, 'raw' | 'html' | 'text' | 'sealedBody'> & { folder: Folder }
 
-async function onServer(account: Account, message: FullMessage, work: (client: ImapFlow, uid: string) => Promise<void>) {
+async function onServer(
+  account: Account,
+  message: FullMessage,
+  work: (client: ImapFlow, uid: string) => Promise<void>,
+) {
   if (account.protocol !== 'imap' || message.uid == null) return
   await withImap(account, async (client) => {
     const lock = await client.getMailboxLock(message.folder.path)
@@ -25,7 +29,8 @@ async function onServer(account: Account, message: FullMessage, work: (client: I
 export async function setFlags(message: FullMessage, change: { unread?: boolean; starred?: boolean }) {
   const account = await db.account.findUniqueOrThrow({ where: { id: message.accountId } })
   await onServer(account, message, async (client, uid) => {
-    const update = async (flag: string, on: boolean) => (on ? client.messageFlagsAdd(uid, [flag], { uid: true }) : client.messageFlagsRemove(uid, [flag], { uid: true }))
+    const update = async (flag: string, on: boolean) =>
+      on ? client.messageFlagsAdd(uid, [flag], { uid: true }) : client.messageFlagsRemove(uid, [flag], { uid: true })
     if (change.unread !== undefined) await update('\\Seen', !change.unread)
     if (change.starred !== undefined) await update('\\Flagged', change.starred)
   })

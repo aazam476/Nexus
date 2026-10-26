@@ -50,7 +50,10 @@ export async function pluginRoutes(app: FastifyInstance) {
           builtIn: plugin.builtIn,
           enabled,
           capabilities: capabilities(plugin),
-          settings: plugin.settings.map((s) => ({ ...s, value: s.type === 'password' && settings[s.key] ? HIDDEN : (settings[s.key] ?? '') })),
+          settings: plugin.settings.map((s) => ({
+            ...s,
+            value: s.type === 'password' && settings[s.key] ? HIDDEN : (settings[s.key] ?? ''),
+          })),
         }
       }),
     ),
@@ -59,7 +62,10 @@ export async function pluginRoutes(app: FastifyInstance) {
   app.put<{ Params: { id: string } }>('/plugins/:id', async (request) => {
     const plugin = getPlugin(request.params.id)
     if (!plugin) throw notFound('Plugin')
-    const body = parse(z.object({ enabled: z.boolean().optional(), settings: z.record(z.string()).optional() }), request.body)
+    const body = parse(
+      z.object({ enabled: z.boolean().optional(), settings: z.record(z.string()).optional() }),
+      request.body,
+    )
     const current = await savedSettings(request.user.id, plugin.id)
     const settings = { ...current.settings }
     for (const field of plugin.settings) {
@@ -72,7 +78,11 @@ export async function pluginRoutes(app: FastifyInstance) {
       if (missing.length) throw badRequest(`Fill in ${missing.join(', ')} before turning ${plugin.name} on`)
     }
     const data = { enabled, settings: encrypt(JSON.stringify(settings)) }
-    await db.pluginSetting.upsert({ where: { userId_pluginId: { userId: request.user.id, pluginId: plugin.id } }, create: { ...data, userId: request.user.id, pluginId: plugin.id }, update: data })
+    await db.pluginSetting.upsert({
+      where: { userId_pluginId: { userId: request.user.id, pluginId: plugin.id } },
+      create: { ...data, userId: request.user.id, pluginId: plugin.id },
+      update: data,
+    })
     return { ok: true }
   })
 
@@ -85,14 +95,20 @@ export async function pluginRoutes(app: FastifyInstance) {
   })
 
   app.post<{ Params: { id: string } }>('/plugins/:id/save-attachment', async (request) => {
-    const { messageId, attachmentId } = parse(z.object({ messageId: z.string(), attachmentId: z.string() }), request.body)
+    const { messageId, attachmentId } = parse(
+      z.object({ messageId: z.string(), attachmentId: z.string() }),
+      request.body,
+    )
     const { plugin, settings } = await enabledPlugin(request.user.id, request.params.id)
     if (!plugin.saveAttachment) throw badRequest(`${plugin.name} can't save attachments`)
     const message = await requireMessage(request.user.id, messageId, 'viewer')
     const file = (await messageParts(message.id, await storageKey(request)))[Number(attachmentId)]
     if (!file) throw notFound('Attachment')
     return runPlugin(plugin.name, () =>
-      plugin.saveAttachment!({ filename: file.filename ?? 'attachment', contentType: file.contentType, content: file.content }, settings),
+      plugin.saveAttachment!(
+        { filename: file.filename ?? 'attachment', contentType: file.contentType, content: file.content },
+        settings,
+      ),
     )
   })
 

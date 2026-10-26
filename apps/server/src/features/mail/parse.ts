@@ -43,7 +43,11 @@ const people = (field: AddressObject | AddressObject[] | undefined): Person[] =>
 const header = (headers: Map<string, unknown>, name: string) => {
   const value = headers.get(name)
   if (value == null) return ''
-  return typeof value === 'string' ? value : typeof value === 'object' && 'value' in value ? String(value.value) : String(value)
+  return typeof value === 'string'
+    ? value
+    : typeof value === 'object' && 'value' in value
+      ? String(value.value)
+      : String(value)
 }
 
 export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
@@ -53,11 +57,16 @@ export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
   const text = mail.text?.trim() || null
 
   const files = mail.attachments.map((a, index) => ({ ...a, index }))
-  const attachments = files
-    .filter(isAttachment)
-    .map((a) => ({ id: String(a.index), filename: a.filename ?? `attachment-${a.index + 1}`, contentType: a.contentType, size: a.size }))
+  const attachments = files.filter(isAttachment).map((a) => ({
+    id: String(a.index),
+    filename: a.filename ?? `attachment-${a.index + 1}`,
+    contentType: a.contentType,
+    size: a.size,
+  }))
 
-  const icsTexts = files.filter((a) => a.contentType === 'text/calendar' || a.filename?.endsWith('.ics')).map((a) => a.content.toString('utf8'))
+  const icsTexts = files
+    .filter((a) => a.contentType === 'text/calendar' || a.filename?.endsWith('.ics'))
+    .map((a) => a.content.toString('utf8'))
   const from = people(mail.from)[0] ?? { name: 'Unknown sender', email: '' }
 
   return {
@@ -82,7 +91,8 @@ export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
 
 // What counts as an attachment, everywhere (reader, forwarding): not images embedded in the HTML,
 // and not S/MIME signature parts (smime.p7s).
-export const isAttachment = (part: { related?: boolean; contentType: string }) => !part.related && !/pkcs7-(signature|mime)/.test(part.contentType)
+export const isAttachment = (part: { related?: boolean; contentType: string }) =>
+  !part.related && !/pkcs7-(signature|mime)/.test(part.contentType)
 
 export function makePreview(content: string): string {
   return content
@@ -116,7 +126,8 @@ function detectSecurity(headers: Map<string, unknown>, text: string | null): Par
 function spamHeaders(headers: Map<string, unknown>) {
   const status = header(headers, 'x-spam-status')
   const flag = /^yes/i.test(header(headers, 'x-spam-flag')) || /^yes/i.test(status)
-  const scoreText = header(headers, 'x-spam-score') || header(headers, 'x-rspamd-score') || status.match(/score=(-?[\d.]+)/)?.[1] || ''
+  const scoreText =
+    header(headers, 'x-spam-score') || header(headers, 'x-rspamd-score') || status.match(/score=(-?[\d.]+)/)?.[1] || ''
   const score = Number.parseFloat(scoreText)
   return { spamFlag: flag, spamScore: Number.isFinite(score) ? score : null }
 }

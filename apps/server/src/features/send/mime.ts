@@ -12,14 +12,22 @@ export interface InlineImage {
 // referenced by cid:, so swap each one out.
 export function extractInlineImages(html: string): { html: string; images: InlineImage[] } {
   const images: InlineImage[] = []
-  const rewritten = html.replace(/src="data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)"/gi, (_match, contentType: string, base64: string) => {
-    const content = Buffer.from(base64.replace(/\s/g, ''), 'base64')
-    const cid = `${createHash('sha256').update(content).digest('hex').slice(0, 16)}@nexus`
-    if (!images.some((i) => i.cid === cid)) {
-      images.push({ cid, filename: `image-${images.length + 1}.${contentType.split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg')}`, contentType, content })
-    }
-    return `src="cid:${cid}"`
-  })
+  const rewritten = html.replace(
+    /src="data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)"/gi,
+    (_match, contentType: string, base64: string) => {
+      const content = Buffer.from(base64.replace(/\s/g, ''), 'base64')
+      const cid = `${createHash('sha256').update(content).digest('hex').slice(0, 16)}@nexus`
+      if (!images.some((i) => i.cid === cid)) {
+        images.push({
+          cid,
+          filename: `image-${images.length + 1}.${contentType.split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg')}`,
+          contentType,
+          content,
+        })
+      }
+      return `src="cid:${cid}"`
+    },
+  )
   return { html: rewritten, images }
 }
 
@@ -29,7 +37,10 @@ export function splitHeaders(raw: Buffer): { headers: string; body: Buffer } {
   const end = text.search(/\r?\n\r?\n/)
   if (end === -1) return { headers: text, body: Buffer.alloc(0) }
   const separator = text.slice(end).match(/^\r?\n\r?\n/)![0]
-  return { headers: text.slice(0, end), body: raw.subarray(Buffer.byteLength(text.slice(0, end + separator.length), 'latin1')) }
+  return {
+    headers: text.slice(0, end),
+    body: raw.subarray(Buffer.byteLength(text.slice(0, end + separator.length), 'latin1')),
+  }
 }
 
 // Header lines (with their folded continuation lines), grouped per header.

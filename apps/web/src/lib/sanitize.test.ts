@@ -4,7 +4,10 @@ import { buildSafeEmailDocument } from './sanitize'
 
 describe('buildSafeEmailDocument', () => {
   it('removes scripts and event handlers', () => {
-    const { html } = buildSafeEmailDocument('<p onclick="steal()">Hi</p><script>alert(1)</script><img src=x onerror="alert(1)">', false)
+    const { html } = buildSafeEmailDocument(
+      '<p onclick="steal()">Hi</p><script>alert(1)</script><img src=x onerror="alert(1)">',
+      false,
+    )
     expect(html).not.toMatch(/<script/i)
     expect(html).not.toMatch(/onclick|onerror/i)
     expect(html).toContain('<p>Hi</p>')
@@ -34,7 +37,9 @@ describe('buildSafeEmailDocument', () => {
 describe('sanitizeForEditor', () => {
   it('drops event handlers but keeps formatting, inline images and the signature marker', async () => {
     const { sanitizeForEditor } = await import('./sanitize')
-    const clean = sanitizeForEditor('<b onclick="x()">Ali</b><img src="x" onerror="steal()"><img src="data:image/png;base64,AAAA"><div data-signature="">-- </div><script>bad()</script>')
+    const clean = sanitizeForEditor(
+      '<b onclick="x()">Ali</b><img src="x" onerror="steal()"><img src="data:image/png;base64,AAAA"><div data-signature="">-- </div><script>bad()</script>',
+    )
     expect(clean).not.toMatch(/onclick|onerror|<script/)
     expect(clean).toContain('<b>Ali</b>')
     expect(clean).toContain('src="data:image/png;base64,AAAA"')

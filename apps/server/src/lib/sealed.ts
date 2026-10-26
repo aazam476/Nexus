@@ -6,12 +6,26 @@
 //   - in Session, with a key derived from that session's cookie token (only the browser has it)
 // A database dump alone therefore opens nothing.
 import {
-  createCipheriv, createDecipheriv, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, randomBytes, scrypt, type KeyObject,
+  createCipheriv,
+  createDecipheriv,
+  createPrivateKey,
+  createPublicKey,
+  diffieHellman,
+  generateKeyPairSync,
+  hkdfSync,
+  randomBytes,
+  scrypt,
+  type KeyObject,
 } from 'node:crypto'
 import { promisify } from 'node:util'
 
 const VERSION = 1
-const scryptAsync = promisify(scrypt) as (password: string, salt: Buffer, keylen: number, options: object) => Promise<Buffer>
+const scryptAsync = promisify(scrypt) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+  options: object,
+) => Promise<Buffer>
 
 export interface StorageKeys {
   publicKey: string // base64 SPKI
@@ -49,7 +63,8 @@ export function unseal(sealed: Buffer, privateKey: KeyObject): Buffer {
 const derive = (shared: Buffer) => Buffer.from(hkdfSync('sha256', shared, Buffer.alloc(0), 'nexus-sealed-v1', 32))
 
 export const sealJson = (value: unknown, publicKey: string) => seal(Buffer.from(JSON.stringify(value)), publicKey)
-export const unsealJson = <T>(sealed: Uint8Array, privateKey: KeyObject): T => JSON.parse(unseal(Buffer.from(sealed), privateKey).toString())
+export const unsealJson = <T>(sealed: Uint8Array, privateKey: KeyObject): T =>
+  JSON.parse(unseal(Buffer.from(sealed), privateKey).toString())
 
 // ---------- Locking the private key ----------
 // Stored as "salt.iv.tag.data" (base64). The salt is empty for session locks, which use a random token.
@@ -82,7 +97,9 @@ export async function lockWithPassword(privateKey: KeyObject, password: string):
 }
 
 // Throws when the password is wrong (the GCM tag won't match).
-export const unlockWithPassword = (locked: string, password: string) => unlockWith(locked, (salt) => passwordKey(password, salt))
+export const unlockWithPassword = (locked: string, password: string) =>
+  unlockWith(locked, (salt) => passwordKey(password, salt))
 
-export const lockWithToken = (privateKey: KeyObject, token: string) => lockWith(privateKey, tokenKey(token), Buffer.alloc(0))
+export const lockWithToken = (privateKey: KeyObject, token: string) =>
+  lockWith(privateKey, tokenKey(token), Buffer.alloc(0))
 export const unlockWithToken = (locked: string, token: string) => unlockWith(locked, () => tokenKey(token))

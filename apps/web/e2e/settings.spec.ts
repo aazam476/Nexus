@@ -8,7 +8,10 @@ test('an admin adds a user, who signs in, turns on two-factor sign-in, and signs
   const email = uniqueAddress('bob')
   const password = 'bobs starting password'
   await page.goto('/settings/sharing')
-  await page.getByRole('button', { name: /Add user/ }).first().click()
+  await page
+    .getByRole('button', { name: /Add user/ })
+    .first()
+    .click()
   await page.getByLabel('Name', { exact: true }).fill('Bob Builder')
   await page.getByLabel('Email', { exact: true }).fill(email)
   await page.getByLabel(/^Starting password/).fill(password)
@@ -151,7 +154,10 @@ test('PGP: creates a key, sends encrypted mail, and decrypts it, all in the brow
 
   const title = `Secret plans ${Date.now().toString(36)}`
   await page.goto('/mail/inbox')
-  await page.getByRole('button', { name: /^New message/ }).first().click()
+  await page
+    .getByRole('button', { name: /^New message/ })
+    .first()
+    .click()
   await page.getByLabel('To', { exact: true }).fill(mailbox)
   await page.getByLabel('To', { exact: true }).press('Enter')
   await page.getByLabel('Subject').fill(title)

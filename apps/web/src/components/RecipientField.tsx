@@ -6,7 +6,12 @@ import { useContacts } from '../lib/queries'
 const looksLikeEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
 // A "To/Cc/Bcc" line: typed addresses become chips, with contact suggestions.
-export function RecipientField({ label, value, onChange, autoFocus }: {
+export function RecipientField({
+  label,
+  value,
+  onChange,
+  autoFocus,
+}: {
   label: string
   value: string[]
   onChange: (emails: string[]) => void
@@ -37,11 +42,22 @@ export function RecipientField({ label, value, onChange, autoFocus }: {
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'ArrowDown') { event.preventDefault(); setActive((i) => Math.min(i + 1, suggestions.length - 1)) }
-    if (event.key === 'ArrowUp') { event.preventDefault(); setActive((i) => Math.max(i - 1, 0)) }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setActive((i) => Math.min(i + 1, suggestions.length - 1))
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setActive((i) => Math.max(i - 1, 0))
+    }
     if (event.key === 'Enter' || event.key === ',' || event.key === 'Tab') {
-      if (suggestions[active]) { event.preventDefault(); add(suggestions[active].email) }
-      else if (text.trim()) { event.preventDefault(); add(text) }
+      if (suggestions[active]) {
+        event.preventDefault()
+        add(suggestions[active].email)
+      } else if (text.trim()) {
+        event.preventDefault()
+        add(text)
+      }
     }
     if (event.key === 'Backspace' && !text && value.length) onChange(value.slice(0, -1))
   }
@@ -56,7 +72,12 @@ export function RecipientField({ label, value, onChange, autoFocus }: {
           title={looksLikeEmail(email) ? email : 'This does not look like an email address'}
         >
           {email}
-          <button type="button" aria-label={`Remove ${email}`} onClick={() => onChange(value.filter((e) => e !== email))} className="rounded-full p-0.5 text-muted hover:text-ink">
+          <button
+            type="button"
+            aria-label={`Remove ${email}`}
+            onClick={() => onChange(value.filter((e) => e !== email))}
+            className="rounded-full p-0.5 text-muted hover:text-ink"
+          >
             <X size={12} />
           </button>
         </span>
@@ -71,15 +92,24 @@ export function RecipientField({ label, value, onChange, autoFocus }: {
         className="min-w-32 flex-1 bg-transparent py-1 text-ink focus:outline-none"
       />
       {suggestions.length > 0 && (
-        <ul role="listbox" className="absolute top-full left-12 z-10 mt-1 w-72 rounded-xl border border-line bg-panel p-1 shadow-pop">
+        <ul
+          role="listbox"
+          className="absolute top-full left-12 z-10 mt-1 w-72 rounded-xl border border-line bg-panel p-1 shadow-pop"
+        >
           {suggestions.map((s, i) => (
             <li key={s.email} role="option" aria-selected={i === active}>
               <button
                 type="button"
-                onMouseDown={(e) => { e.preventDefault(); add(s.email) }}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  add(s.email)
+                }}
                 className={`flex w-full flex-col rounded-lg px-2.5 py-1.5 text-left ${i === active ? 'bg-raise' : ''}`}
               >
-                <span className="flex items-center gap-1.5">{s.name}{s.hasKey && <KeyRound size={11} className="text-news" aria-label="Has PGP key" />}</span>
+                <span className="flex items-center gap-1.5">
+                  {s.name}
+                  {s.hasKey && <KeyRound size={11} className="text-news" aria-label="Has PGP key" />}
+                </span>
                 <span className="text-[12px] text-muted">{s.email}</span>
               </button>
             </li>

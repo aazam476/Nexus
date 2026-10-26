@@ -12,14 +12,22 @@ export const paperless: NexusPlugin = {
   ],
 
   async testConnection(s) {
-    await request(`${trimUrl(s.url)}/api/documents/?page_size=1`, { headers: { authorization: `Token ${s.token}` } }, 'Paperless')
+    await request(
+      `${trimUrl(s.url)}/api/documents/?page_size=1`,
+      { headers: { authorization: `Token ${s.token}` } },
+      'Paperless',
+    )
   },
 
   async saveAttachment(file, s) {
     const form = new FormData()
     form.append('document', new Blob([new Uint8Array(file.content)], { type: file.contentType }), file.filename)
     form.append('title', file.filename.replace(/\.[^.]+$/, ''))
-    await request(`${trimUrl(s.url)}/api/documents/post_document/`, { method: 'POST', headers: { authorization: `Token ${s.token}` }, body: form }, 'Paperless')
+    await request(
+      `${trimUrl(s.url)}/api/documents/post_document/`,
+      { method: 'POST', headers: { authorization: `Token ${s.token}` }, body: form },
+      'Paperless',
+    )
     return { url: `${trimUrl(s.url)}/documents` }
   },
 }

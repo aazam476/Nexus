@@ -8,7 +8,10 @@ describe('errorMessage', () => {
   })
 
   it('looks inside an AggregateError, whose own message is empty', () => {
-    const refused = new AggregateError([Object.assign(new Error('connect ECONNREFUSED ::1:993'), { code: 'ECONNREFUSED' })], '')
+    const refused = new AggregateError(
+      [Object.assign(new Error('connect ECONNREFUSED ::1:993'), { code: 'ECONNREFUSED' })],
+      '',
+    )
     expect(errorMessage(refused)).toBe('connect ECONNREFUSED ::1:993')
   })
 

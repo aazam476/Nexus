@@ -4,22 +4,51 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from '../../db.ts'
 import { Pop3 } from '../accounts/pop3.ts'
-import { Browser, PASSWORD, addAccount, deliver, onMailServer, signedInUser, startApp, subjectsOnServer, uniqueAddress } from '../../test/helpers.ts'
+import {
+  Browser,
+  PASSWORD,
+  addAccount,
+  deliver,
+  onMailServer,
+  signedInUser,
+  startApp,
+  subjectsOnServer,
+  uniqueAddress,
+} from '../../test/helpers.ts'
 import { syncAccount } from './sync.ts'
 
 // The smallest valid PNG: one transparent pixel.
-const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 const flight = {
-  '@context': 'http://schema.org', '@type': 'FlightReservation', reservationNumber: 'ABC123',
+  '@context': 'http://schema.org',
+  '@type': 'FlightReservation',
+  reservationNumber: 'ABC123',
   reservationFor: {
-    '@type': 'Flight', flightNumber: '42', airline: { iataCode: 'NX' },
-    departureAirport: { name: 'Oslo', iataCode: 'OSL' }, arrivalAirport: { name: 'Lisbon', iataCode: 'LIS' },
-    departureTime: '2030-05-01T08:00:00Z', arrivalTime: '2030-05-01T12:00:00Z',
+    '@type': 'Flight',
+    flightNumber: '42',
+    airline: { iataCode: 'NX' },
+    departureAirport: { name: 'Oslo', iataCode: 'OSL' },
+    arrivalAirport: { name: 'Lisbon', iataCode: 'LIS' },
+    departureTime: '2030-05-01T08:00:00Z',
+    arrivalTime: '2030-05-01T12:00:00Z',
   },
 }
 
-interface Row { id: string; subject: string; folder: string; category: string; unread: boolean; starred: boolean; labels: string[]; preview: string; attachments: { id: string; filename: string }[] }
+interface Row {
+  id: string
+  subject: string
+  folder: string
+  category: string
+  unread: boolean
+  starred: boolean
+  labels: string[]
+  preview: string
+  attachments: { id: string; filename: string }[]
+}
 
 let app: Awaited<ReturnType<typeof startApp>>
 beforeAll(async () => {
@@ -43,8 +72,18 @@ describe('IMAP sync', () => {
   it('downloads new mail and sorts it into people, newsletters and notifications', async () => {
     const { list } = await mailboxWith([
       { from: 'Jane Doe <jane@example.test>', subject: 'Lunch?', text: 'Tomorrow at noon?' },
-      { from: 'Weekly <news@letters.test>', subject: 'Issue 7', html: '<p>News</p>', headers: { 'List-Unsubscribe': '<mailto:u@letters.test>' } },
-      { from: 'Builds <noreply@ci.test>', subject: 'Build passed', text: 'All green', headers: { 'Auto-Submitted': 'auto-generated' } },
+      {
+        from: 'Weekly <news@letters.test>',
+        subject: 'Issue 7',
+        html: '<p>News</p>',
+        headers: { 'List-Unsubscribe': '<mailto:u@letters.test>' },
+      },
+      {
+        from: 'Builds <noreply@ci.test>',
+        subject: 'Build passed',
+        text: 'All green',
+        headers: { 'Auto-Submitted': 'auto-generated' },
+      },
     ])
     const rows = await list()
     expect(rows.map((r) => [r.subject, r.category, r.unread]).sort()).toEqual([
@@ -55,8 +94,10 @@ describe('IMAP sync', () => {
   })
 
   it('mirrors read state and deletions made in other mail apps', async () => {
-    const { accountId, email, list } = await mailboxWith([1, 2, 3].map((n) => ({ subject: `Message ${n}`, text: `Body ${n}` })))
-    const before = (await db.message.findMany({ where: { accountId }, orderBy: { subject: 'asc' } }))
+    const { accountId, email, list } = await mailboxWith(
+      [1, 2, 3].map((n) => ({ subject: `Message ${n}`, text: `Body ${n}` })),
+    )
+    const before = await db.message.findMany({ where: { accountId }, orderBy: { subject: 'asc' } })
 
     await onMailServer(email, async (client) => {
       const lock = await client.getMailboxLock('INBOX')
@@ -68,7 +109,10 @@ describe('IMAP sync', () => {
       }
     })
     await syncAccount(accountId)
-    expect((await list()).map((r) => [r.subject, r.unread]).sort()).toEqual([['Message 1', false], ['Message 3', true]])
+    expect((await list()).map((r) => [r.subject, r.unread]).sort()).toEqual([
+      ['Message 1', false],
+      ['Message 3', true],
+    ])
   })
 
   it('does not download anything twice', async () => {
@@ -101,7 +145,13 @@ describe('sorting rules and spam', () => {
         { from: 'Bot <bot@spam.test>', subject: 'You won', text: 'x', headers: { 'X-Spam-Flag': 'YES' } },
       ],
       async (browser) => {
-        await browser.json('POST', '/api/rules', { name: 'Invoices', field: 'subject', contains: 'invoice', action: 'label', value: 'Receipts' })
+        await browser.json('POST', '/api/rules', {
+          name: 'Invoices',
+          field: 'subject',
+          contains: 'invoice',
+          action: 'label',
+          value: 'Receipts',
+        })
         await browser.json('POST', '/api/blocked', { pattern: 'annoying.test' })
       },
     )
@@ -117,7 +167,10 @@ describe('reading mail', () => {
       {
         subject: 'Your trip',
         html: `<script type="application/ld+json">${JSON.stringify(flight)}</script><p>Have a <b>good</b> flight</p>`,
-        attachments: [{ filename: 'boarding.png', content: PNG, contentType: 'image/png' }, { filename: 'notes.txt', content: 'Gate B12' }],
+        attachments: [
+          { filename: 'boarding.png', content: PNG, contentType: 'image/png' },
+          { filename: 'notes.txt', content: 'Gate B12' },
+        ],
       },
     ])
     const row = await find('Your trip')
@@ -125,7 +178,11 @@ describe('reading mail', () => {
 
     const detail = await browser.json('GET', `/api/messages/${row.id}`)
     expect(detail.html).toContain('<b>good</b>')
-    expect(detail.event).toMatchObject({ title: 'NX42 Oslo → Lisbon', start: '2030-05-01T08:00:00Z', detail: 'Booking ABC123' })
+    expect(detail.event).toMatchObject({
+      title: 'NX42 Oslo → Lisbon',
+      start: '2030-05-01T08:00:00Z',
+      detail: 'Booking ABC123',
+    })
 
     // Images open inline in the preview; asking for a download makes it a download.
     const image = await browser.get(`/api/messages/${row.id}/attachments/${row.attachments[0].id}`)
@@ -147,7 +204,10 @@ describe('reading mail', () => {
   })
 
   it('counts unread mail per folder and per account for the sidebar', async () => {
-    const { browser, accountId } = await mailboxWith([{ subject: 'A', text: 'a' }, { subject: 'B', text: 'b' }])
+    const { browser, accountId } = await mailboxWith([
+      { subject: 'A', text: 'a' },
+      { subject: 'B', text: 'b' },
+    ])
     const counts = await browser.json('GET', '/api/counts')
     expect(counts.folders.inbox).toBe(2)
     expect(counts.accounts[accountId]).toBe(2)
@@ -169,9 +229,11 @@ describe('reading mail', () => {
   })
 
   it('returns only as many messages as asked for, newest first', async () => {
-    const { list } = await mailboxWith([1, 2, 3].map((n) => ({ subject: `N${n}`, text: 'x', date: new Date(2030, 0, n) })))
+    const { list } = await mailboxWith(
+      [1, 2, 3].map((n) => ({ subject: `N${n}`, text: 'x', date: new Date(2030, 0, n) })),
+    )
     expect((await list('folder=inbox&limit=2')).map((r) => r.subject)).toEqual(['N3', 'N2'])
-    expect((await list('limit=0').catch((e) => e.message))).toMatch(/400/)
+    expect(await list('limit=0').catch((e) => e.message)).toMatch(/400/)
   })
 })
 
@@ -204,7 +266,9 @@ describe('organising mail', () => {
   })
 
   it('marking spam blocks the sender; "not spam" unblocks them and returns the mail', async () => {
-    const { browser, find, list } = await mailboxWith([{ from: 'Maybe <maybe@spammy.test>', subject: 'Offer', text: 'x' }])
+    const { browser, find, list } = await mailboxWith([
+      { from: 'Maybe <maybe@spammy.test>', subject: 'Offer', text: 'x' },
+    ])
     const row = await find('Offer')
     await browser.json('POST', `/api/messages/${row.id}/spam`, { spam: true })
     expect((await list('folder=spam')).map((r) => r.subject)).toEqual(['Offer'])
@@ -257,7 +321,14 @@ describe('POP3', () => {
     await browser.json('DELETE', `/api/messages/${row.id}`) // to Trash
     await browser.json('DELETE', `/api/messages/${row.id}`) // for good
 
-    const pop3 = await Pop3.open({ host: 'localhost', port: 3995, tls: true, user: email, password: 'x', tlsOptions: { rejectUnauthorized: false } })
+    const pop3 = await Pop3.open({
+      host: 'localhost',
+      port: 3995,
+      tls: true,
+      user: email,
+      password: 'x',
+      tlsOptions: { rejectUnauthorized: false },
+    })
     expect(await pop3.uidl()).toEqual([])
     await pop3.quit()
   })
@@ -284,7 +355,10 @@ describe('private storage', () => {
     expect((await read(phone)).statusCode).toBe(401) // other devices are signed out, so they sign in again and get the key
 
     // New mail is sealed as it arrives.
-    await deliver((await db.account.findUniqueOrThrow({ where: { id: accountId } })).email, { subject: 'Later', text: 'Also private' })
+    await deliver((await db.account.findUniqueOrThrow({ where: { id: accountId } })).email, {
+      subject: 'Later',
+      text: 'Also private',
+    })
     await syncAccount(accountId)
     const later = await db.message.findFirstOrThrow({ where: { accountId, subject: 'Later' } })
     expect(later.text).toBeNull()
@@ -309,16 +383,28 @@ describe('private storage', () => {
     const friend = await signedInUser(app)
     const { id } = await addAccount(owner.browser)
     await owner.browser.json('PUT', `/api/accounts/${id}/members`, { userId: friend.user.id, role: 'viewer' })
-    expect((await owner.browser.post('/api/auth/private-storage', { enabled: true, password: PASSWORD })).json().error).toMatch(/Stop sharing/)
-    expect((await owner.browser.post('/api/auth/private-storage', { enabled: true, password: 'wrong' })).statusCode).toBe(400)
+    expect(
+      (await owner.browser.post('/api/auth/private-storage', { enabled: true, password: PASSWORD })).json().error,
+    ).toMatch(/Stop sharing/)
+    expect(
+      (await owner.browser.post('/api/auth/private-storage', { enabled: true, password: 'wrong' })).statusCode,
+    ).toBe(400)
   })
 
   it('blocks adding POP3 or sharing while it is on', async () => {
     const { browser } = await signedInUser(app)
     const { id } = await addAccount(browser)
     await browser.json('POST', '/api/auth/private-storage', { enabled: true, password: PASSWORD })
-    expect((await browser.post('/api/accounts', { ...(await import('../../test/helpers.ts')).greenMail(uniqueAddress(), 'pop3') })).statusCode).toBe(400)
+    expect(
+      (
+        await browser.post('/api/accounts', {
+          ...(await import('../../test/helpers.ts')).greenMail(uniqueAddress(), 'pop3'),
+        })
+      ).statusCode,
+    ).toBe(400)
     const friend = await signedInUser(app)
-    expect((await browser.put(`/api/accounts/${id}/members`, { userId: friend.user.id, role: 'viewer' })).statusCode).toBe(400)
+    expect(
+      (await browser.put(`/api/accounts/${id}/members`, { userId: friend.user.id, role: 'viewer' })).statusCode,
+    ).toBe(400)
   })
 })

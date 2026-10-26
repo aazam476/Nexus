@@ -12,8 +12,12 @@ describe('formatListDate', () => {
   it('shows the time for today, "Yesterday", the weekday this week, then the date', () => {
     expect(formatListDate(new Date(2030, 4, 15, 9, 5).toISOString())).toMatch(/09.05/)
     expect(formatListDate(new Date(2030, 4, 14, 22, 0).toISOString())).toBe('Yesterday')
-    expect(formatListDate(new Date(2030, 4, 11, 12, 0).toISOString())).toBe(new Date(2030, 4, 11).toLocaleDateString([], { weekday: 'short' }))
-    expect(formatListDate(new Date(2030, 0, 2, 12, 0).toISOString())).toBe(new Date(2030, 0, 2).toLocaleDateString([], { day: 'numeric', month: 'short' }))
+    expect(formatListDate(new Date(2030, 4, 11, 12, 0).toISOString())).toBe(
+      new Date(2030, 4, 11).toLocaleDateString([], { weekday: 'short' }),
+    )
+    expect(formatListDate(new Date(2030, 0, 2, 12, 0).toISOString())).toBe(
+      new Date(2030, 0, 2).toLocaleDateString([], { day: 'numeric', month: 'short' }),
+    )
   })
 })
 

@@ -26,7 +26,11 @@ describe('sign-up', () => {
     const me = await first.json('GET', '/api/auth/me')
     expect(me).toMatchObject({ name: 'Ada', email: 'ada@example.test', role: 'admin', totpEnabled: false })
 
-    const second = await new Browser(app).post('/api/auth/signup', { name: 'Bo', email: uniqueAddress(), password: PASSWORD })
+    const second = await new Browser(app).post('/api/auth/signup', {
+      name: 'Bo',
+      email: uniqueAddress(),
+      password: PASSWORD,
+    })
     expect(second.statusCode).toBe(403)
   })
 
@@ -40,11 +44,19 @@ describe('sign-up', () => {
 
   it('refuses a short password or a taken email, saying why', async () => {
     config.ALLOW_SIGNUP = true
-    const short = await new Browser(app).post('/api/auth/signup', { name: 'C', email: uniqueAddress(), password: 'short' })
+    const short = await new Browser(app).post('/api/auth/signup', {
+      name: 'C',
+      email: uniqueAddress(),
+      password: 'short',
+    })
     expect(short.statusCode).toBe(400)
     expect(short.json().error).toMatch(/12 characters/)
 
-    const taken = await new Browser(app).post('/api/auth/signup', { name: 'C', email: 'ada@example.test', password: PASSWORD })
+    const taken = await new Browser(app).post('/api/auth/signup', {
+      name: 'C',
+      email: 'ada@example.test',
+      password: PASSWORD,
+    })
     expect(taken.statusCode).toBe(400)
     expect(taken.json().error).toMatch(/already registered/)
     config.ALLOW_SIGNUP = false
@@ -54,8 +66,14 @@ describe('sign-up', () => {
 describe('sign-in', () => {
   it('needs the right email and password, and gives the same answer for an unknown email', async () => {
     const { user } = await signedInUser(app)
-    const wrongPassword = await new Browser(app).post('/api/auth/login', { email: user.email, password: 'not the password' })
-    const unknownEmail = await new Browser(app).post('/api/auth/login', { email: 'nobody@nexus.test', password: PASSWORD })
+    const wrongPassword = await new Browser(app).post('/api/auth/login', {
+      email: user.email,
+      password: 'not the password',
+    })
+    const unknownEmail = await new Browser(app).post('/api/auth/login', {
+      email: 'nobody@nexus.test',
+      password: PASSWORD,
+    })
     expect([wrongPassword.statusCode, unknownEmail.statusCode]).toEqual([401, 401])
     expect(wrongPassword.json().error).toBe(unknownEmail.json().error)
   })
@@ -91,12 +109,17 @@ describe('two-factor sign-in', () => {
 
     const wrong = await browser.post('/api/auth/2fa/enable', { secret: setup.secret, code: '000000' })
     expect(wrong.statusCode).toBe(400)
-    const { recoveryCodes } = await browser.json('POST', '/api/auth/2fa/enable', { secret: setup.secret, code: authenticator.generate(setup.secret) })
+    const { recoveryCodes } = await browser.json('POST', '/api/auth/2fa/enable', {
+      secret: setup.secret,
+      code: authenticator.generate(setup.secret),
+    })
     expect(recoveryCodes).toHaveLength(10)
 
     // Password alone gives a half-signed-in session that can't read anything.
     const phone = new Browser(app)
-    expect((await phone.json('POST', '/api/auth/login', { email: user.email, password: PASSWORD })).twoFactorRequired).toBe(true)
+    expect(
+      (await phone.json('POST', '/api/auth/login', { email: user.email, password: PASSWORD })).twoFactorRequired,
+    ).toBe(true)
     expect((await phone.get('/api/auth/me')).statusCode).toBe(401)
     expect((await phone.post('/api/auth/2fa', { code: '000000' })).statusCode).toBe(401)
 
@@ -107,7 +130,10 @@ describe('two-factor sign-in', () => {
   it('accepts each recovery code once, typed with or without the dash', async () => {
     const { user, browser } = await signedInUser(app)
     const { secret } = await browser.json('POST', '/api/auth/2fa/setup')
-    const { recoveryCodes } = await browser.json('POST', '/api/auth/2fa/enable', { secret, code: authenticator.generate(secret) })
+    const { recoveryCodes } = await browser.json('POST', '/api/auth/2fa/enable', {
+      secret,
+      code: authenticator.generate(secret),
+    })
 
     const signInWithRecovery = async (code: string) => {
       const phone = new Browser(app)
@@ -140,12 +166,17 @@ describe('password and sessions', () => {
     const phone = new Browser(app)
     await phone.json('POST', '/api/auth/login', { email: user.email, password: PASSWORD })
 
-    expect((await browser.post('/api/auth/password', { current: 'wrong', next: 'a brand new password' })).statusCode).toBe(400)
+    expect(
+      (await browser.post('/api/auth/password', { current: 'wrong', next: 'a brand new password' })).statusCode,
+    ).toBe(400)
     await browser.json('POST', '/api/auth/password', { current: PASSWORD, next: 'a brand new password' })
 
     expect((await browser.get('/api/auth/me')).statusCode).toBe(200)
     expect((await phone.get('/api/auth/me')).statusCode).toBe(401)
-    expect((await new Browser(app).post('/api/auth/login', { email: user.email, password: 'a brand new password' })).statusCode).toBe(200)
+    expect(
+      (await new Browser(app).post('/api/auth/login', { email: user.email, password: 'a brand new password' }))
+        .statusCode,
+    ).toBe(200)
   })
 
   it('lists your devices and signs one out', async () => {
@@ -162,7 +193,10 @@ describe('password and sessions', () => {
 
   it('saves theme and layout preferences, and rejects unknown values', async () => {
     const { browser } = await signedInUser(app)
-    expect((await browser.json('GET', '/api/auth/me')).preferences).toMatchObject({ theme: 'system', layout: 'three-pane' })
+    expect((await browser.json('GET', '/api/auth/me')).preferences).toMatchObject({
+      theme: 'system',
+      layout: 'three-pane',
+    })
     await browser.json('PUT', '/api/auth/me/preferences', { theme: 'dark', layout: 'list' })
     expect((await browser.json('GET', '/api/auth/me')).preferences).toMatchObject({ theme: 'dark', layout: 'list' })
     expect((await browser.put('/api/auth/me/preferences', { theme: 'purple' })).statusCode).toBe(400)
@@ -181,7 +215,11 @@ describe('request security', () => {
   it('sends security headers and an httpOnly, SameSite=Strict cookie', async () => {
     const browser = new Browser(app)
     const response = await browser.post('/api/auth/login', { email: 'nobody@nexus.test', password: 'x' })
-    expect(response.headers).toMatchObject({ 'x-content-type-options': 'nosniff', 'x-frame-options': 'SAMEORIGIN', 'referrer-policy': 'no-referrer' })
+    expect(response.headers).toMatchObject({
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'SAMEORIGIN',
+      'referrer-policy': 'no-referrer',
+    })
 
     const { user } = await signedInUser(app)
     const login = await new Browser(app).post('/api/auth/login', { email: user.email, password: PASSWORD })
@@ -199,10 +237,15 @@ describe('request security', () => {
   it('slows down password guessing: 10 sign-in attempts a minute', async () => {
     const attacker = new Browser(app)
     const statuses: number[] = []
-    for (let i = 0; i < 11; i++) statuses.push((await attacker.post('/api/auth/login', { email: 'nobody@nexus.test', password: 'guess' })).statusCode)
+    for (let i = 0; i < 11; i++)
+      statuses.push(
+        (await attacker.post('/api/auth/login', { email: 'nobody@nexus.test', password: 'guess' })).statusCode,
+      )
     expect(statuses.slice(0, 10).every((s) => s === 401)).toBe(true)
     expect(statuses[10]).toBe(429)
     // Someone else, from another address, can still sign in.
-    expect((await new Browser(app).post('/api/auth/login', { email: 'nobody@nexus.test', password: 'guess' })).statusCode).toBe(401)
+    expect(
+      (await new Browser(app).post('/api/auth/login', { email: 'nobody@nexus.test', password: 'guess' })).statusCode,
+    ).toBe(401)
   })
 })

@@ -15,7 +15,10 @@ export function Avatar({ name, size = 34, accountColor }: { name: string; size?:
     >
       {initials(name)}
       {accountColor && (
-        <i className="absolute -right-px -bottom-px h-2.5 w-2.5 rounded-full border-2 border-panel" style={{ background: accountColor }} />
+        <i
+          className="absolute -right-px -bottom-px h-2.5 w-2.5 rounded-full border-2 border-panel"
+          style={{ background: accountColor }}
+        />
       )}
     </span>
   )
@@ -59,7 +62,15 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   )
 }
 
-export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Toggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  label: string
+}) {
   return (
     <button
       type="button"
@@ -69,13 +80,17 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       onClick={() => onChange(!checked)}
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-line'}`}
     >
-      <span className={`absolute top-0.5 left-0 h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+      <span
+        className={`absolute top-0.5 left-0 h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4.5' : 'translate-x-0.5'}`}
+      />
     </button>
   )
 }
 
 export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="rounded border border-line px-1.5 font-sans text-[11px] font-semibold text-muted">{children}</kbd>
+  return (
+    <kbd className="rounded border border-line px-1.5 font-sans text-[11px] font-semibold text-muted">{children}</kbd>
+  )
 }
 
 export function Chip({ color, children }: { color: string; children: ReactNode }) {
@@ -89,7 +104,17 @@ export function Chip({ color, children }: { color: string; children: ReactNode }
   )
 }
 
-export function Card({ title, description, children, actions }: { title: string; description?: string; children?: ReactNode; actions?: ReactNode }) {
+export function Card({
+  title,
+  description,
+  children,
+  actions,
+}: {
+  title: string
+  description?: string
+  children?: ReactNode
+  actions?: ReactNode
+}) {
   return (
     <section className="rounded-2xl border border-line bg-panel">
       <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">

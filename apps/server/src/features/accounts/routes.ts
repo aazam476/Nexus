@@ -27,40 +27,49 @@ export async function accountRoutes(app: FastifyInstance) {
   // session cookie on that cross-site hop, so the pending sign-in is remembered here by `state`.
   const pendingOAuth = new Map<string, { userId: string; expires: number }>()
 
-  app.get<{ Params: { provider: string }; Querystring: { code?: string; state?: string; error?: string } }>('/oauth/:provider/callback', async (request, reply) => {
-    const { code, state, error } = request.query
-    const pending = state ? pendingOAuth.get(state) : undefined
-    if (state) pendingOAuth.delete(state)
-    if (error) return reply.redirect(`/settings/accounts?error=${encodeURIComponent(error)}`)
-    if (!code || !pending || pending.expires < Date.now()) throw new HttpError(400, 'This sign-in link expired. Start again from Settings.')
+  app.get<{ Params: { provider: string }; Querystring: { code?: string; state?: string; error?: string } }>(
+    '/oauth/:provider/callback',
+    async (request, reply) => {
+      const { code, state, error } = request.query
+      const pending = state ? pendingOAuth.get(state) : undefined
+      if (state) pendingOAuth.delete(state)
+      if (error) return reply.redirect(`/settings/accounts?error=${encodeURIComponent(error)}`)
+      if (!code || !pending || pending.expires < Date.now())
+        throw new HttpError(400, 'This sign-in link expired. Start again from Settings.')
 
-    const provider = getProvider(request.params.provider)
-    const tokens = await exchangeCode(request.params.provider, code)
-    // Signing in again is how people fix an expired sign-in: update that account, don't add a twin.
-    const existing = await db.account.findFirst({ where: { ownerId: pending.userId, email: tokens.email, auth: provider.auth } })
-    if (existing) {
-      await db.account.update({ where: { id: existing.id }, data: { secret: encrypt(tokens.refreshToken), syncError: null } })
-      forgetAccessToken(existing.id)
-      await queueSync(existing.id)
+      const provider = getProvider(request.params.provider)
+      const tokens = await exchangeCode(request.params.provider, code)
+      // Signing in again is how people fix an expired sign-in: update that account, don't add a twin.
+      const existing = await db.account.findFirst({
+        where: { ownerId: pending.userId, email: tokens.email, auth: provider.auth },
+      })
+      if (existing) {
+        await db.account.update({
+          where: { id: existing.id },
+          data: { secret: encrypt(tokens.refreshToken), syncError: null },
+        })
+        forgetAccessToken(existing.id)
+        await queueSync(existing.id)
+        return reply.redirect('/settings/accounts?added=1')
+      }
+      const count = await db.account.count({ where: { ownerId: pending.userId } })
+      const account = await db.account.create({
+        data: {
+          ownerId: pending.userId,
+          email: tokens.email,
+          name: tokens.name,
+          color: COLORS[count % COLORS.length],
+          protocol: 'imap',
+          auth: provider.auth,
+          username: tokens.email,
+          secret: encrypt(tokens.refreshToken),
+          ...provider.servers,
+        },
+      })
+      await queueSync(account.id)
       return reply.redirect('/settings/accounts?added=1')
-    }
-    const count = await db.account.count({ where: { ownerId: pending.userId } })
-    const account = await db.account.create({
-      data: {
-        ownerId: pending.userId,
-        email: tokens.email,
-        name: tokens.name,
-        color: COLORS[count % COLORS.length],
-        protocol: 'imap',
-        auth: provider.auth,
-        username: tokens.email,
-        secret: encrypt(tokens.refreshToken),
-        ...provider.servers,
-      },
-    })
-    await queueSync(account.id)
-    return reply.redirect('/settings/accounts?added=1')
-  })
+    },
+  )
 
   app.register(async (signedIn) => {
     signedIn.addHook('preHandler', requireUser)
@@ -88,7 +97,15 @@ export async function accountRoutes(app: FastifyInstance) {
         lastSyncAt: account.lastSyncAt,
         syncError: account.syncError,
         // Server details only for the owner; members don't need them.
-        ...(role === 'owner' && { inHost: account.inHost, inPort: account.inPort, inTls: account.inTls, smtpHost: account.smtpHost, smtpPort: account.smtpPort, smtpTls: account.smtpTls, username: account.username }),
+        ...(role === 'owner' && {
+          inHost: account.inHost,
+          inPort: account.inPort,
+          inTls: account.inTls,
+          smtpHost: account.smtpHost,
+          smtpPort: account.smtpPort,
+          smtpTls: account.smtpTls,
+          username: account.username,
+        }),
       }))
     })
 
@@ -104,7 +121,9 @@ export async function accountRoutes(app: FastifyInstance) {
         request.body,
       )
       if (body.protocol === 'pop3' && (await usesPrivateStorage(request.user.id))) {
-        throw badRequest('POP3 accounts can’t be added while private storage is on, because Nexus would hold the only copy of their mail.')
+        throw badRequest(
+          'POP3 accounts can’t be added while private storage is on, because Nexus would hold the only copy of their mail.',
+        )
       }
       if (await db.account.findFirst({ where: { ownerId: request.user.id, email: body.email } })) {
         throw badRequest('You already added this account. To change its password, use Edit on the account.')
@@ -116,7 +135,13 @@ export async function accountRoutes(app: FastifyInstance) {
       const count = await db.account.count({ where: { ownerId: request.user.id } })
       const { password: _password, ...fields } = body
       const account = await db.account.create({
-        data: { ...fields, ownerId: request.user.id, auth: 'password', secret: settings.secret, color: COLORS[count % COLORS.length] },
+        data: {
+          ...fields,
+          ownerId: request.user.id,
+          auth: 'password',
+          secret: settings.secret,
+          color: COLORS[count % COLORS.length],
+        },
       })
       await queueSync(account.id)
       return { id: account.id }
@@ -127,7 +152,10 @@ export async function accountRoutes(app: FastifyInstance) {
       const body = parse(
         z.object({
           name: z.string().trim().min(1).optional(),
-          color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+          color: z
+            .string()
+            .regex(/^#[0-9a-f]{6}$/i)
+            .optional(),
           signature: z.string().max(20_000).optional(),
           password: z.string().min(1).optional(),
           ...Object.fromEntries(Object.entries(serverFields).map(([k, v]) => [k, v.optional()])),
@@ -136,8 +164,13 @@ export async function accountRoutes(app: FastifyInstance) {
       )
       // Editors may change the signature; everything else is the owner's call.
       const { signature, password, ...rest } = body
-      if (role !== 'owner' && (password || Object.keys(rest).length)) throw new HttpError(403, 'Only the owner can change account settings')
-      const data = { ...rest, ...(signature !== undefined && { signature }), ...(password && { secret: encrypt(password) }) }
+      if (role !== 'owner' && (password || Object.keys(rest).length))
+        throw new HttpError(403, 'Only the owner can change account settings')
+      const data = {
+        ...rest,
+        ...(signature !== undefined && { signature }),
+        ...(password && { secret: encrypt(password) }),
+      }
 
       if (password || Object.keys(serverFields).some((k) => k in rest)) {
         const current = await db.account.findUniqueOrThrow({ where: { id: request.params.id } })
@@ -165,7 +198,10 @@ export async function accountRoutes(app: FastifyInstance) {
 
     signedIn.get<{ Params: { id: string } }>('/accounts/:id/members', async (request) => {
       await requireAccountRole(request.user.id, request.params.id, 'owner')
-      const members = await db.accountMember.findMany({ where: { accountId: request.params.id }, include: { user: { select: { name: true, email: true } } } })
+      const members = await db.accountMember.findMany({
+        where: { accountId: request.params.id },
+        include: { user: { select: { name: true, email: true } } },
+      })
       return members.map((m) => ({ userId: m.userId, name: m.user.name, email: m.user.email, role: m.role }))
     })
 
@@ -173,7 +209,8 @@ export async function accountRoutes(app: FastifyInstance) {
       await requireAccountRole(request.user.id, request.params.id, 'owner')
       const { userId, role } = parse(z.object({ userId: z.string(), role: z.enum(['editor', 'viewer']) }), request.body)
       if (userId === request.user.id) throw badRequest('You already own this account')
-      if (await usesPrivateStorage(request.user.id)) throw badRequest('Accounts can’t be shared while private storage is on: other people couldn’t read the mail.')
+      if (await usesPrivateStorage(request.user.id))
+        throw badRequest('Accounts can’t be shared while private storage is on: other people couldn’t read the mail.')
       await db.accountMember.upsert({
         where: { accountId_userId: { accountId: request.params.id, userId } },
         create: { accountId: request.params.id, userId, role },
@@ -190,4 +227,5 @@ export async function accountRoutes(app: FastifyInstance) {
   })
 }
 
-const usesPrivateStorage = async (userId: string) => (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { privateStorage: true } })).privateStorage
+const usesPrivateStorage = async (userId: string) =>
+  (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { privateStorage: true } })).privateStorage

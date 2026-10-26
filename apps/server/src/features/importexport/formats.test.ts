@@ -25,8 +25,11 @@ describe('mbox', () => {
 
 describe('vCard', () => {
   it('reads common fields, folded lines and grouped properties', () => {
-    const card = 'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Sara Oka\r\n for\r\nitem1.EMAIL;TYPE=work:Sara@Okafor.dev\r\nEMAIL:s@proton.me\r\nTEL:+49 151\r\nORG:Okafor Labs;R&D\r\nEND:VCARD\r\nBEGIN:VCARD\r\nFN:No email\r\nEND:VCARD'
-    expect(parseVcards(card)).toEqual([{ name: 'Sara Okafor', emails: ['sara@okafor.dev', 's@proton.me'], phone: '+49 151', company: 'Okafor Labs' }])
+    const card =
+      'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Sara Oka\r\n for\r\nitem1.EMAIL;TYPE=work:Sara@Okafor.dev\r\nEMAIL:s@proton.me\r\nTEL:+49 151\r\nORG:Okafor Labs;R&D\r\nEND:VCARD\r\nBEGIN:VCARD\r\nFN:No email\r\nEND:VCARD'
+    expect(parseVcards(card)).toEqual([
+      { name: 'Sara Okafor', emails: ['sara@okafor.dev', 's@proton.me'], phone: '+49 151', company: 'Okafor Labs' },
+    ])
   })
 
   it('round-trips, escaping commas', () => {

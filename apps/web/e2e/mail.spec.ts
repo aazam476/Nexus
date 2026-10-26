@@ -14,7 +14,12 @@ test('sorts new mail into sections and shows a message safely, with remote image
     html: '<p>Shall we try the <b>new place</b>?</p><img src="https://tracker.example/pixel.gif" alt="">',
     attachments: [{ filename: 'menu.txt', content: 'Soup of the day' }],
   })
-  await deliver(run().mailbox, { from: 'News <news@letters.test>', subject: news, html: '<p>Stories</p>', headers: { 'List-Unsubscribe': '<mailto:u@letters.test>' } })
+  await deliver(run().mailbox, {
+    from: 'News <news@letters.test>',
+    subject: news,
+    html: '<p>Stories</p>',
+    headers: { 'List-Unsubscribe': '<mailto:u@letters.test>' },
+  })
   await page.goto('/mail/inbox')
   await syncUntil(page, news)
 
@@ -63,7 +68,8 @@ test('stars, archives, marks as spam and deletes, and the mail server agrees', a
   const keep = subject('Keep this')
   const junk = subject('Cheap pills')
   const bin = subject('Old news')
-  for (const s of [keep, junk, bin]) await deliver(run().mailbox, { from: `Someone <someone-${s.length}@example.test>`, subject: s, text: 'x' })
+  for (const s of [keep, junk, bin])
+    await deliver(run().mailbox, { from: `Someone <someone-${s.length}@example.test>`, subject: s, text: 'x' })
   await page.goto('/mail/inbox')
   await syncUntil(page, bin)
   const row = (s: string) => page.getByRole('button', { name: new RegExp(s) })
@@ -113,13 +119,20 @@ test('keyboard: j/k move through the list, e archives, / searches', async ({ pag
 
   await page.keyboard.press('/')
   await page.keyboard.type(first)
-  await expect(page.getByRole('region', { name: 'Search' }).getByRole('button', { name: new RegExp(first) })).toBeVisible()
+  await expect(
+    page.getByRole('region', { name: 'Search' }).getByRole('button', { name: new RegExp(first) }),
+  ).toBeVisible()
 })
 
 test('replies to a message, and the reply reaches the sender', async ({ page }) => {
   const friend = uniqueAddress('friend')
   const question = subject('Coffee at 3')
-  await deliver(run().mailbox, { from: `Friend <${friend}>`, subject: question, text: 'Are you free at 3?', messageId: `<${Date.now()}@friend.test>` })
+  await deliver(run().mailbox, {
+    from: `Friend <${friend}>`,
+    subject: question,
+    text: 'Are you free at 3?',
+    messageId: `<${Date.now()}@friend.test>`,
+  })
   await page.goto('/mail/inbox')
   await syncUntil(page, question)
   await page.getByRole('button', { name: new RegExp(question) }).click()
@@ -139,11 +152,25 @@ test('replies to a message, and the reply reaches the sender', async ({ page }) 
 test('shows a booking as an event card, and marks mail unread or replies to everyone', async ({ page }) => {
   const trip = subject('Your flight')
   const flight = {
-    '@context': 'http://schema.org', '@type': 'FlightReservation', reservationNumber: 'E2E123',
-    reservationFor: { '@type': 'Flight', flightNumber: '9', airline: { iataCode: 'NX' }, departureAirport: { name: 'Oslo', iataCode: 'OSL' }, arrivalAirport: { name: 'Lisbon', iataCode: 'LIS' }, departureTime: '2030-05-01T08:00:00Z', arrivalTime: '2030-05-01T12:00:00Z' },
+    '@context': 'http://schema.org',
+    '@type': 'FlightReservation',
+    reservationNumber: 'E2E123',
+    reservationFor: {
+      '@type': 'Flight',
+      flightNumber: '9',
+      airline: { iataCode: 'NX' },
+      departureAirport: { name: 'Oslo', iataCode: 'OSL' },
+      arrivalAirport: { name: 'Lisbon', iataCode: 'LIS' },
+      departureTime: '2030-05-01T08:00:00Z',
+      arrivalTime: '2030-05-01T12:00:00Z',
+    },
   }
   const colleague = uniqueAddress('cc')
-  await deliver(run().mailbox, { subject: trip, cc: colleague, html: `<script type="application/ld+json">${JSON.stringify(flight)}</script><p>Booked!</p>` })
+  await deliver(run().mailbox, {
+    subject: trip,
+    cc: colleague,
+    html: `<script type="application/ld+json">${JSON.stringify(flight)}</script><p>Booked!</p>`,
+  })
   await page.goto('/mail/inbox')
   await syncUntil(page, trip)
   await page.getByRole('button', { name: new RegExp(trip) }).click()
@@ -153,11 +180,16 @@ test('shows a booking as an event card, and marks mail unread or replies to ever
   await expect(page.getByRole('link', { name: 'Download calendar file' })).toHaveAttribute('href', /event\.ics$/)
 
   await page.getByRole('button', { name: 'Reply all' }).click()
-  await expect(page.getByRole('region', { name: /Re:/ }).or(page.getByLabel('New message')).getByText(colleague)).toBeVisible()
+  await expect(
+    page.getByRole('region', { name: /Re:/ }).or(page.getByLabel('New message')).getByText(colleague),
+  ).toBeVisible()
   await page.getByRole('button', { name: 'Discard draft' }).click()
 
   await page.getByRole('button', { name: 'Mark unread' }).click()
   await expect(page.getByRole('heading', { level: 1, name: trip })).toBeHidden()
-  const counts = (await (await page.request.get('/api/messages?folder=inbox')).json()) as { subject: string; unread: boolean }[]
+  const counts = (await (await page.request.get('/api/messages?folder=inbox')).json()) as {
+    subject: string
+    unread: boolean
+  }[]
   expect(counts.find((m) => m.subject === trip)?.unread).toBe(true)
 })

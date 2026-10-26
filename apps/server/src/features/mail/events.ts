@@ -26,7 +26,7 @@ function jsonLdBlocks(html: string): unknown[] {
   for (const match of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     try {
       const data = JSON.parse(match[1])
-      const items = Array.isArray(data) ? data : data['@graph'] ?? [data]
+      const items = Array.isArray(data) ? data : (data['@graph'] ?? [data])
       blocks.push(...items)
     } catch {
       // Broken JSON-LD in a marketing email: ignore it.

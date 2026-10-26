@@ -93,7 +93,14 @@ export interface Plugin {
   builtIn: boolean
   enabled: boolean
   capabilities: ('save-attachment' | 'create-event')[]
-  settings: { key: string; label: string; type: 'text' | 'password' | 'url'; value: string; placeholder?: string; required?: boolean }[]
+  settings: {
+    key: string
+    label: string
+    type: 'text' | 'password' | 'url'
+    value: string
+    placeholder?: string
+    required?: boolean
+  }[]
 }
 
 export interface Rule {

@@ -34,7 +34,10 @@ export function TwoFactorPage() {
     const typed = value.replace(/\D/g, '').slice(-(CODE_LENGTH - index))
     const next = [...digits]
     if (typed.length <= 1) next[index] = typed
-    else typed.split('').forEach((d, i) => { next[index + i] = d })
+    else
+      typed.split('').forEach((d, i) => {
+        next[index + i] = d
+      })
     setDigits(next)
     const last = Math.min(index + Math.max(typed.length, 1), CODE_LENGTH - 1)
     if (typed) inputs.current[last]?.focus()
@@ -60,7 +63,12 @@ export function TwoFactorPage() {
   }
 
   return (
-    <AuthLayout title="Two-factor authentication" subtitle={useRecovery ? 'Enter one of your recovery codes.' : 'Enter the 6-digit code from your authenticator app.'}>
+    <AuthLayout
+      title="Two-factor authentication"
+      subtitle={
+        useRecovery ? 'Enter one of your recovery codes.' : 'Enter the 6-digit code from your authenticator app.'
+      }
+    >
       {useRecovery ? (
         <form className="grid gap-4" onSubmit={submitRecovery}>
           <input
@@ -71,14 +79,18 @@ export function TwoFactorPage() {
             className="w-full rounded-lg border border-line bg-raise px-3 py-2.5 text-center text-[15px] tracking-widest focus:border-accent"
             autoFocus
           />
-          <Button type="submit" variant="primary" className="py-2.5">Verify recovery code</Button>
+          <Button type="submit" variant="primary" className="py-2.5">
+            Verify recovery code
+          </Button>
         </form>
       ) : (
         <div className="flex justify-between gap-2" onPaste={onPaste}>
           {digits.map((digit, index) => (
             <input
               key={index}
-              ref={(el) => { inputs.current[index] = el }}
+              ref={(el) => {
+                inputs.current[index] = el
+              }}
               value={digit}
               onChange={(e) => setDigit(index, e.target.value)}
               onKeyDown={(e) => onKeyDown(index, e)}
@@ -91,12 +103,25 @@ export function TwoFactorPage() {
           ))}
         </div>
       )}
-      {error && <p role="alert" className="mt-4 text-[13px] text-danger">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-4 text-[13px] text-danger">
+          {error}
+        </p>
+      )}
       <div className="mt-5 flex justify-between text-[13px]">
-        <button type="button" className="text-accent-text hover:underline" onClick={() => { setUseRecovery(!useRecovery); setError('') }}>
+        <button
+          type="button"
+          className="text-accent-text hover:underline"
+          onClick={() => {
+            setUseRecovery(!useRecovery)
+            setError('')
+          }}
+        >
           {useRecovery ? 'Use authenticator code' : 'Use a recovery code'}
         </button>
-        <Link to="/login" className="text-muted hover:text-ink">Back</Link>
+        <Link to="/login" className="text-muted hover:text-ink">
+          Back
+        </Link>
       </div>
     </AuthLayout>
   )

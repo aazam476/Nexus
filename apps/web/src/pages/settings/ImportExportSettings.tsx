@@ -23,7 +23,10 @@ export function ImportExportSettings() {
     setStatus({ ok: true, text: 'Importing…' })
     try {
       const result = await api<{ imported: number }>('/import', { form })
-      setStatus({ ok: true, text: `Imported ${result.imported} message${result.imported === 1 ? '' : 's'}. IMAP accounts show them after the next sync.` })
+      setStatus({
+        ok: true,
+        text: `Imported ${result.imported} message${result.imported === 1 ? '' : 's'}. IMAP accounts show them after the next sync.`,
+      })
       setFiles([])
       refresh()
     } catch (e) {
@@ -35,40 +38,100 @@ export function ImportExportSettings() {
 
   return (
     <>
-      <Card title="Import mail" description="Bring in .eml files or .mbox archives from another client (Thunderbird, Apple Mail, Gmail Takeout).">
+      <Card
+        title="Import mail"
+        description="Bring in .eml files or .mbox archives from another client (Thunderbird, Apple Mail, Gmail Takeout)."
+      >
         <form className="grid gap-4" onSubmit={importMail}>
           <label
             className="grid cursor-pointer place-items-center gap-2 rounded-xl border-2 border-dashed border-line bg-raise px-4 py-8 text-center hover:border-accent"
             onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); setFiles([...files, ...Array.from(e.dataTransfer.files)]) }}
+            onDrop={(e) => {
+              e.preventDefault()
+              setFiles([...files, ...Array.from(e.dataTransfer.files)])
+            }}
           >
             <Upload size={22} className="text-muted" />
-            <span className="font-medium">{files.length ? files.map((f) => f.name).join(', ') : 'Drop .eml or .mbox files here'}</span>
+            <span className="font-medium">
+              {files.length ? files.map((f) => f.name).join(', ') : 'Drop .eml or .mbox files here'}
+            </span>
             <span className="text-[12.5px] text-muted">or click to choose files</span>
-            <input name="files" type="file" accept=".eml,.mbox,message/rfc822,application/mbox" multiple className="sr-only" onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
+            <input
+              name="files"
+              type="file"
+              accept=".eml,.mbox,message/rfc822,application/mbox"
+              multiple
+              className="sr-only"
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+            />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Into account">
-              <select name="accountId" className={select} required>{accounts.filter((a) => a.role !== 'viewer').map((a) => <option key={a.id} value={a.id}>{a.email}</option>)}</select>
+              <select name="accountId" className={select} required>
+                {accounts
+                  .filter((a) => a.role !== 'viewer')
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.email}
+                    </option>
+                  ))}
+              </select>
             </Field>
             <Field label="Folder">
-              <select name="folder" defaultValue="archive" className={select}><option value="archive">Archive</option><option value="inbox">Inbox</option><option value="sent">Sent</option></select>
+              <select name="folder" defaultValue="archive" className={select}>
+                <option value="archive">Archive</option>
+                <option value="inbox">Inbox</option>
+                <option value="sent">Sent</option>
+              </select>
             </Field>
           </div>
-          {status && <p role={status.ok ? 'status' : 'alert'} className={`text-[13px] ${status.ok ? 'text-muted' : 'text-danger'}`}>{status.text}</p>}
-          <Button type="submit" variant="primary" className="justify-self-start" disabled={!files.length || !accounts.length}>Import</Button>
+          {status && (
+            <p
+              role={status.ok ? 'status' : 'alert'}
+              className={`text-[13px] ${status.ok ? 'text-muted' : 'text-danger'}`}
+            >
+              {status.text}
+            </p>
+          )}
+          <Button
+            type="submit"
+            variant="primary"
+            className="justify-self-start"
+            disabled={!files.length || !accounts.length}
+          >
+            Import
+          </Button>
         </form>
       </Card>
 
       <Card title="Export mail" description="Download mail as a standard .mbox file any mail client can open.">
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <Field label="Account">
-            <select value={exportAccount} onChange={(e) => setExportAccount(e.target.value)} className={select}><option value="">All accounts</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.email}</option>)}</select>
+            <select value={exportAccount} onChange={(e) => setExportAccount(e.target.value)} className={select}>
+              <option value="">All accounts</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.email}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Folder">
-            <select value={exportFolder} onChange={(e) => setExportFolder(e.target.value)} className={select}><option value="">Everything</option><option value="inbox">Inbox</option><option value="sent">Sent</option><option value="archive">Archive</option><option value="spam">Spam</option><option value="trash">Trash</option></select>
+            <select value={exportFolder} onChange={(e) => setExportFolder(e.target.value)} className={select}>
+              <option value="">Everything</option>
+              <option value="inbox">Inbox</option>
+              <option value="sent">Sent</option>
+              <option value="archive">Archive</option>
+              <option value="spam">Spam</option>
+              <option value="trash">Trash</option>
+            </select>
           </Field>
-          <a href={exportUrl} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-line bg-raise px-3 py-1.5 text-[13px] hover:bg-hover"><Download size={15} /> Export .mbox</a>
+          <a
+            href={exportUrl}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-line bg-raise px-3 py-1.5 text-[13px] hover:bg-hover"
+          >
+            <Download size={15} /> Export .mbox
+          </a>
         </div>
       </Card>
     </>

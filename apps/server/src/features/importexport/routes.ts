@@ -28,7 +28,9 @@ export async function importExportRoutes(app: FastifyInstance) {
         if (part.fieldname === 'folder') folderRole = String(part.value)
       } else {
         const file = await part.toBuffer()
-        messages.push(...(/\.mbox$/i.test(part.filename) || file.subarray(0, 5).toString() === 'From ' ? splitMbox(file) : [file]))
+        messages.push(
+          ...(/\.mbox$/i.test(part.filename) || file.subarray(0, 5).toString() === 'From ' ? splitMbox(file) : [file]),
+        )
       }
     }
     const { folder } = parse(z.object({ folder: z.enum(['inbox', 'archive', 'sent']) }), { folder: folderRole })
@@ -47,15 +49,36 @@ export async function importExportRoutes(app: FastifyInstance) {
       const target = (await localFolders(account.id)).get(folder)!
       for (const raw of messages) {
         const parsed = await parseRaw(raw)
-        const category = classify({ fromEmail: parsed.from.email, subject: parsed.subject, isMailingList: parsed.isMailingList, isAutomated: parsed.isAutomated, hasEvent: !!parsed.event })
-        await saveMessage({ accountId: account.id, folderId: target.id, raw, parsed, unread: false, starred: false, category, labels: [] })
+        const category = classify({
+          fromEmail: parsed.from.email,
+          subject: parsed.subject,
+          isMailingList: parsed.isMailingList,
+          isAutomated: parsed.isAutomated,
+          hasEvent: !!parsed.event,
+        })
+        await saveMessage({
+          accountId: account.id,
+          folderId: target.id,
+          raw,
+          parsed,
+          unread: false,
+          starred: false,
+          category,
+          labels: [],
+        })
       }
     }
     return { imported: messages.length }
   })
 
   app.get('/export.mbox', async (request, reply) => {
-    const query = parse(z.object({ account: z.string().optional(), folder: z.enum(['inbox', 'sent', 'archive', 'spam', 'trash']).optional() }), request.query)
+    const query = parse(
+      z.object({
+        account: z.string().optional(),
+        folder: z.enum(['inbox', 'sent', 'archive', 'spam', 'trash']).optional(),
+      }),
+      request.query,
+    )
     let accountIds = (await accessibleAccounts(request.user.id)).map((a) => a.account.id)
     if (query.account) accountIds = accountIds.filter((id) => id === query.account)
     const key = await storageKey(request)

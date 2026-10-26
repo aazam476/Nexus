@@ -15,36 +15,53 @@ export async function sendRoutes(app: FastifyInstance) {
 
   // Send now, or later when `scheduledFor` is in the future. `draftId` removes the draft it came from.
   app.post('/send', { bodyLimit: 30 * 1024 * 1024 }, async (request) => {
-    const body = parse(outgoingSchema.extend({ scheduledFor: z.coerce.date().optional(), draftId: z.string().optional() }), request.body)
+    const body = parse(
+      outgoingSchema.extend({ scheduledFor: z.coerce.date().optional(), draftId: z.string().optional() }),
+      request.body,
+    )
     const { scheduledFor, draftId, ...fields } = body
     await requireAccountRole(request.user.id, fields.accountId, 'editor')
     const payload = await withForwardedAttachments(request, fields)
 
     if (scheduledFor && scheduledFor.getTime() > Date.now() + 30_000) {
-      const outgoing = await db.outgoingMessage.create({ data: { userId: request.user.id, accountId: payload.accountId, status: 'scheduled', payload, scheduledFor } })
+      const outgoing = await db.outgoingMessage.create({
+        data: { userId: request.user.id, accountId: payload.accountId, status: 'scheduled', payload, scheduledFor },
+      })
       await scheduleSend(outgoing.id, scheduledFor)
-      if (draftId) await db.outgoingMessage.deleteMany({ where: { id: draftId, userId: request.user.id, status: 'draft' } })
+      if (draftId)
+        await db.outgoingMessage.deleteMany({ where: { id: draftId, userId: request.user.id, status: 'draft' } })
       return { scheduled: true, id: outgoing.id }
     }
 
     await sendNow(request.user.id, payload)
-    if (draftId) await db.outgoingMessage.deleteMany({ where: { id: draftId, userId: request.user.id, status: 'draft' } })
+    if (draftId)
+      await db.outgoingMessage.deleteMany({ where: { id: draftId, userId: request.user.id, status: 'draft' } })
     return { sent: true }
   })
 
   // Save (or update) a draft. Recipients may be incomplete, so they are not validated as emails here.
   app.put('/drafts', { bodyLimit: 30 * 1024 * 1024 }, async (request) => {
     const body = parse(
-      outgoingSchema.extend({ id: z.string().optional(), to: z.array(z.string()).default([]), cc: z.array(z.string()).default([]), bcc: z.array(z.string()).default([]) }),
+      outgoingSchema.extend({
+        id: z.string().optional(),
+        to: z.array(z.string()).default([]),
+        cc: z.array(z.string()).default([]),
+        bcc: z.array(z.string()).default([]),
+      }),
       request.body,
     )
     const { id, ...payload } = body
     await requireAccountRole(request.user.id, payload.accountId, 'editor')
     if (id) {
-      const updated = await db.outgoingMessage.updateMany({ where: { id, userId: request.user.id, status: 'draft' }, data: { payload, accountId: payload.accountId } })
+      const updated = await db.outgoingMessage.updateMany({
+        where: { id, userId: request.user.id, status: 'draft' },
+        data: { payload, accountId: payload.accountId },
+      })
       if (updated.count) return { id }
     }
-    const draft = await db.outgoingMessage.create({ data: { userId: request.user.id, accountId: payload.accountId, status: 'draft', payload } })
+    const draft = await db.outgoingMessage.create({
+      data: { userId: request.user.id, accountId: payload.accountId, status: 'draft', payload },
+    })
     return { id: draft.id }
   })
 
@@ -59,7 +76,9 @@ export async function sendRoutes(app: FastifyInstance) {
   })
 
   app.post<{ Params: { id: string } }>('/outgoing/:id/send-now', async (request) => {
-    const outgoing = await db.outgoingMessage.findFirst({ where: { id: request.params.id, userId: request.user.id, status: { in: ['scheduled', 'failed'] } } })
+    const outgoing = await db.outgoingMessage.findFirst({
+      where: { id: request.params.id, userId: request.user.id, status: { in: ['scheduled', 'failed'] } },
+    })
     if (!outgoing) throw notFound('Scheduled message')
     await cancelSend(outgoing.id)
     await sendNow(request.user.id, outgoingSchema.parse(outgoing.payload))
@@ -73,8 +92,10 @@ export async function sendRoutes(app: FastifyInstance) {
 async function withForwardedAttachments(request: FastifyRequest, payload: OutgoingPayload): Promise<OutgoingPayload> {
   if (!payload.forwardOf) return payload
   const original = await requireMessage(request.user.id, payload.forwardOf, 'viewer')
-  const files = (await messageParts(original.id, await storageKey(request)))
-    .filter(isAttachment)
-    .map((a) => ({ filename: a.filename ?? 'attachment', contentType: a.contentType, content: a.content.toString('base64') }))
+  const files = (await messageParts(original.id, await storageKey(request))).filter(isAttachment).map((a) => ({
+    filename: a.filename ?? 'attachment',
+    contentType: a.contentType,
+    content: a.content.toString('base64'),
+  }))
   return { ...payload, forwardOf: undefined, attachments: [...payload.attachments, ...files] }
 }

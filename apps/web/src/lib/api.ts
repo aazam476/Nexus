@@ -8,7 +8,10 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T = unknown>(path: string, options: { method?: string; body?: unknown; form?: FormData } = {}): Promise<T> {
+export async function api<T = unknown>(
+  path: string,
+  options: { method?: string; body?: unknown; form?: FormData } = {},
+): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method: options.method ?? (options.body !== undefined || options.form ? 'POST' : 'GET'),
     headers: options.body !== undefined ? { 'content-type': 'application/json' } : undefined,

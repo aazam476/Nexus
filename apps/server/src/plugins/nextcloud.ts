@@ -9,8 +9,14 @@ const connection = [
   { key: 'appPassword', label: 'App password', type: 'password', required: true },
 ] as const
 
-const auth = (s: PluginSettings) => ({ authorization: `Basic ${Buffer.from(`${s.username}:${s.appPassword}`).toString('base64')}` })
-const davPath = (...parts: string[]) => parts.map((p) => p.split('/').filter(Boolean).map(encodeURIComponent).join('/')).filter(Boolean).join('/')
+const auth = (s: PluginSettings) => ({
+  authorization: `Basic ${Buffer.from(`${s.username}:${s.appPassword}`).toString('base64')}`,
+})
+const davPath = (...parts: string[]) =>
+  parts
+    .map((p) => p.split('/').filter(Boolean).map(encodeURIComponent).join('/'))
+    .filter(Boolean)
+    .join('/')
 
 export const nextcloudFiles: NexusPlugin = {
   id: 'nextcloud-files',
@@ -20,7 +26,11 @@ export const nextcloudFiles: NexusPlugin = {
   settings: [...connection, { key: 'folder', label: 'Folder', type: 'text', placeholder: '/Email attachments' }],
 
   async testConnection(s) {
-    await request(`${trimUrl(s.url)}/remote.php/dav/files/${encodeURIComponent(s.username)}/`, { method: 'PROPFIND', headers: { ...auth(s), depth: '0' } }, 'Nextcloud')
+    await request(
+      `${trimUrl(s.url)}/remote.php/dav/files/${encodeURIComponent(s.username)}/`,
+      { method: 'PROPFIND', headers: { ...auth(s), depth: '0' } },
+      'Nextcloud',
+    )
   },
 
   async saveAttachment(file, s) {
@@ -31,10 +41,15 @@ export const nextcloudFiles: NexusPlugin = {
     for (const part of folder.split('/').filter(Boolean)) {
       path = davPath(path, part)
       const response = await fetch(`${root}/${path}`, { method: 'MKCOL', headers: auth(s) })
-      if (!response.ok && response.status !== 405) throw new Error(`Nextcloud could not create ${folder}: ${response.status}`)
+      if (!response.ok && response.status !== 405)
+        throw new Error(`Nextcloud could not create ${folder}: ${response.status}`)
     }
     const target = `${root}/${davPath(folder, file.filename)}`
-    await request(target, { method: 'PUT', headers: { ...auth(s), 'content-type': file.contentType }, body: new Uint8Array(file.content) }, 'Nextcloud')
+    await request(
+      target,
+      { method: 'PUT', headers: { ...auth(s), 'content-type': file.contentType }, body: new Uint8Array(file.content) },
+      'Nextcloud',
+    )
     return { url: `${trimUrl(s.url)}/apps/files/?dir=${encodeURIComponent(folder)}` }
   },
 }
@@ -52,15 +67,28 @@ export const nextcloudCalendar: NexusPlugin = {
 
   async createEvent(event, s) {
     const uid = randomUUID()
-    await request(`${calendarUrl(s)}${uid}.ics`, { method: 'PUT', headers: { ...auth(s), 'content-type': 'text/calendar; charset=utf-8' }, body: toIcs(event, uid) }, 'Nextcloud Calendar')
+    await request(
+      `${calendarUrl(s)}${uid}.ics`,
+      {
+        method: 'PUT',
+        headers: { ...auth(s), 'content-type': 'text/calendar; charset=utf-8' },
+        body: toIcs(event, uid),
+      },
+      'Nextcloud Calendar',
+    )
     return { url: `${trimUrl(s.url)}/apps/calendar` }
   },
 }
 
-const calendarUrl = (s: PluginSettings) => `${trimUrl(s.url)}/remote.php/dav/calendars/${encodeURIComponent(s.username)}/${encodeURIComponent(s.calendar || 'personal')}/`
+const calendarUrl = (s: PluginSettings) =>
+  `${trimUrl(s.url)}/remote.php/dav/calendars/${encodeURIComponent(s.username)}/${encodeURIComponent(s.calendar || 'personal')}/`
 
 export function toIcs(event: PluginEvent, uid: string): string {
-  const stamp = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const stamp = (iso: string) =>
+    new Date(iso)
+      .toISOString()
+      .replace(/[-:]/g, '')
+      .replace(/\.\d{3}/, '')
   const text = (value: string) => value.replace(/([\\,;])/g, '\\$1').replace(/\n/g, '\\n')
   return [
     'BEGIN:VCALENDAR',

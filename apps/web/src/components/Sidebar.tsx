@@ -1,6 +1,20 @@
 // The left-hand navigation: folders with unread counts, accounts, labels, contacts, settings and sync status.
 import { useQueryClient } from '@tanstack/react-query'
-import { Archive, BookUser, Clock, FileText, Inbox, LogOut, PenLine, Send, Settings, ShieldAlert, Star, Trash2, type LucideIcon } from 'lucide-react'
+import {
+  Archive,
+  BookUser,
+  Clock,
+  FileText,
+  Inbox,
+  LogOut,
+  PenLine,
+  Send,
+  Settings,
+  ShieldAlert,
+  Star,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react'
 import { NavLink, useLocation, useNavigate } from 'react-router'
 import { api } from '../lib/api'
 import { useAccounts, useCounts, useLabels } from '../lib/queries'
@@ -46,7 +60,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <nav aria-label="Mailboxes" className="flex h-full flex-col gap-4 overflow-y-auto bg-gradient-to-b from-side to-ground px-2.5 py-3.5">
+    <nav
+      aria-label="Mailboxes"
+      className="flex h-full flex-col gap-4 overflow-y-auto bg-gradient-to-b from-side to-ground px-2.5 py-3.5"
+    >
       <div className="flex items-center gap-2.5 px-1.5">
         <Logo size={26} />
         <span className="text-[16px] font-bold tracking-tight">Nexus</span>
@@ -54,7 +71,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <button
         type="button"
-        onClick={() => { openComposer(); onNavigate?.() }}
+        onClick={() => {
+          openComposer()
+          onNavigate?.()
+        }}
         className="accent-gradient flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold text-accent-ink shadow-[0_4px_12px_-4px_rgb(0_0_0/0.5)] hover:brightness-105"
       >
         <PenLine size={16} strokeWidth={2} />
@@ -64,7 +84,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="grid gap-0.5">
         {folders.map(({ role, name, icon: Icon }) => (
-          <NavLink key={role} to={`/mail/${role}`} onClick={onNavigate} className={() => itemClass(pathname.startsWith(`/mail/${role}`) && !accountFilter)}>
+          <NavLink
+            key={role}
+            to={`/mail/${role}`}
+            onClick={onNavigate}
+            className={() => itemClass(pathname.startsWith(`/mail/${role}`) && !accountFilter)}
+          >
             <Icon size={16} strokeWidth={1.8} />
             {name}
             <Count value={unreadIn(role)} />
@@ -89,16 +114,23 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         ))}
       </div>
 
-      {labels.length > 0 && <div className="grid gap-0.5">
-        <h2 className="px-2 pb-1 text-[12px] font-semibold text-faint">Labels</h2>
-        {labels.map((label) => (
-          <NavLink key={label.name} to={`/mail/inbox?label=${label.name}`} onClick={onNavigate} className={() => itemClass(search.includes(`label=${label.name}`))}>
-            <i className="mx-1 h-2 w-2 shrink-0 rounded-sm" style={{ background: label.color }} />
-            {label.name}
-            <Count value={counts?.labels[label.name] ?? 0} />
-          </NavLink>
-        ))}
-      </div>}
+      {labels.length > 0 && (
+        <div className="grid gap-0.5">
+          <h2 className="px-2 pb-1 text-[12px] font-semibold text-faint">Labels</h2>
+          {labels.map((label) => (
+            <NavLink
+              key={label.name}
+              to={`/mail/inbox?label=${label.name}`}
+              onClick={onNavigate}
+              className={() => itemClass(search.includes(`label=${label.name}`))}
+            >
+              <i className="mx-1 h-2 w-2 shrink-0 rounded-sm" style={{ background: label.color }} />
+              {label.name}
+              <Count value={counts?.labels[label.name] ?? 0} />
+            </NavLink>
+          ))}
+        </div>
+      )}
 
       <div className="mt-auto grid gap-0.5 border-t border-line pt-3">
         <NavLink to="/contacts" onClick={onNavigate} className={({ isActive }) => itemClass(isActive)}>
@@ -118,15 +150,28 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
 function SyncStatus({ accounts }: { accounts: Account[] }) {
   const failing = accounts.filter((a) => a.syncError)
-  const last = accounts.map((a) => a.lastSyncAt).filter(Boolean).sort().at(-1)
+  const last = accounts
+    .map((a) => a.lastSyncAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1)
   const text = failing.length
     ? `Can’t sync ${failing.map((a) => a.email).join(', ')}`
-    : accounts.length === 0 ? 'No accounts yet' : last ? `Synced ${timeAgo(last)}` : 'Syncing…'
+    : accounts.length === 0
+      ? 'No accounts yet'
+      : last
+        ? `Synced ${timeAgo(last)}`
+        : 'Syncing…'
   return (
-    <div className="flex items-center gap-2 px-2 pt-2 text-[12px] text-muted" title={failing.map((a) => `${a.email}: ${a.syncError}`).join('\n') || undefined}>
+    <div
+      className="flex items-center gap-2 px-2 pt-2 text-[12px] text-muted"
+      title={failing.map((a) => `${a.email}: ${a.syncError}`).join('\n') || undefined}
+    >
       <i className={`h-[7px] w-[7px] shrink-0 rounded-full ${failing.length ? 'bg-danger' : 'bg-news'}`} />
       <span className="truncate">{text}</span>
-      <span className="ml-auto"><Kbd>?</Kbd></span>
+      <span className="ml-auto">
+        <Kbd>?</Kbd>
+      </span>
     </div>
   )
 }

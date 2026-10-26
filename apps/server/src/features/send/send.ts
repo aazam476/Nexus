@@ -32,7 +32,12 @@ export const outgoingSchema = z.object({
 })
 export type OutgoingPayload = z.infer<typeof outgoingSchema>
 
-export async function buildMessage(account: Account, fromName: string, payload: OutgoingPayload, userId: string): Promise<Buffer> {
+export async function buildMessage(
+  account: Account,
+  fromName: string,
+  payload: OutgoingPayload,
+  userId: string,
+): Promise<Buffer> {
   const { html, images } = payload.html ? extractInlineImages(payload.html) : { html: undefined, images: [] }
   const composer = new MailComposer({
     from: { name: fromName, address: account.email },
@@ -46,22 +51,35 @@ export async function buildMessage(account: Account, fromName: string, payload: 
     inReplyTo: payload.inReplyTo,
     references: payload.inReplyTo,
     attachments: [
-      ...payload.attachments.map((a) => ({ filename: a.filename, contentType: a.contentType, content: Buffer.from(a.content, 'base64') })),
+      ...payload.attachments.map((a) => ({
+        filename: a.filename,
+        contentType: a.contentType,
+        content: Buffer.from(a.content, 'base64'),
+      })),
       ...images.map((i) => ({ filename: i.filename, contentType: i.contentType, content: i.content, cid: i.cid })),
     ],
   })
   let raw: Buffer = await composer.compile().build()
 
   if (payload.smime.sign || payload.smime.encrypt) {
-    const cert = await db.smimeCert.findFirst({ where: { userId, email: account.email }, orderBy: { createdAt: 'desc' } })
+    const cert = await db.smimeCert.findFirst({
+      where: { userId, email: account.email },
+      orderBy: { createdAt: 'desc' },
+    })
     if (!cert) throw new HttpError(400, `Upload an S/MIME certificate for ${account.email} first`)
     let entity = mimeEntity(raw)
     if (payload.smime.sign) entity = await smime.sign(entity, cert.certPem, decrypt(cert.keyPem))
     if (payload.smime.encrypt) {
       const recipients = [...payload.to, ...payload.cc, ...payload.bcc]
-      const contacts = await db.contact.findMany({ where: { userId, emails: { hasSome: recipients }, smimeCert: { not: null } } })
+      const contacts = await db.contact.findMany({
+        where: { userId, emails: { hasSome: recipients }, smimeCert: { not: null } },
+      })
       const missing = recipients.filter((email) => !contacts.some((c) => c.emails.includes(email)))
-      if (missing.length) throw new HttpError(400, `No S/MIME certificate for ${missing.join(', ')}. They need to send you a signed message first.`)
+      if (missing.length)
+        throw new HttpError(
+          400,
+          `No S/MIME certificate for ${missing.join(', ')}. They need to send you a signed message first.`,
+        )
       entity = await smime.encrypt(entity, [cert.certPem, ...contacts.map((c) => c.smimeCert!)])
     }
     raw = rewrap(raw, entity)
@@ -89,12 +107,17 @@ export async function sendNow(userId: string, payload: OutgoingPayload) {
 
   // The mail is out. Problems from here on must not look like a failed send,
   // or the user (or a retry) would send it a second time.
-  await fileInSent(account, raw).catch((error) => console.warn(`Sent, but could not file a copy in Sent for ${account.email}: ${error.message}`))
-  await rememberRecipients(userId, recipients).catch((error) => console.warn(`Sent, but could not update contacts: ${error.message}`))
+  await fileInSent(account, raw).catch((error) =>
+    console.warn(`Sent, but could not file a copy in Sent for ${account.email}: ${error.message}`),
+  )
+  await rememberRecipients(userId, recipients).catch((error) =>
+    console.warn(`Sent, but could not update contacts: ${error.message}`),
+  )
 }
 
 // These providers put sent mail in Sent themselves; our own copy would show up twice.
-const filesSentMailItself = (smtpHost: string) => /(^|\.)(gmail\.com|googlemail\.com|office365\.com|outlook\.com)$/i.test(smtpHost)
+const filesSentMailItself = (smtpHost: string) =>
+  /(^|\.)(gmail\.com|googlemail\.com|office365\.com|outlook\.com)$/i.test(smtpHost)
 
 async function fileInSent(account: Account, raw: Buffer) {
   if (filesSentMailItself(account.smtpHost)) return
@@ -106,7 +129,16 @@ async function fileInSent(account: Account, raw: Buffer) {
   } else {
     const sent = (await localFolders(account.id)).get('sent')!
     const parsed = await parseRaw(raw)
-    await saveMessage({ accountId: account.id, folderId: sent.id, raw, parsed, unread: false, starred: false, category: 'people', labels: [] })
+    await saveMessage({
+      accountId: account.id,
+      folderId: sent.id,
+      raw,
+      parsed,
+      unread: false,
+      starred: false,
+      category: 'people',
+      labels: [],
+    })
   }
 }
 
@@ -125,13 +157,19 @@ export async function sendScheduled(outgoingId: string, lastAttempt: boolean) {
   const outgoing = await db.outgoingMessage.findUnique({ where: { id: outgoingId } })
   if (!outgoing) return // cancelled or already sent
   // Claim it in one step, so it is only ever sent once even if two workers pick it up.
-  const claimed = await db.outgoingMessage.updateMany({ where: { id: outgoingId, status: 'scheduled' }, data: { status: 'sending' } })
+  const claimed = await db.outgoingMessage.updateMany({
+    where: { id: outgoingId, status: 'scheduled' },
+    data: { status: 'sending' },
+  })
   if (!claimed.count) return
   try {
     await sendNow(outgoing.userId, outgoingSchema.parse(outgoing.payload))
     await db.outgoingMessage.delete({ where: { id: outgoingId } })
   } catch (error) {
-    await db.outgoingMessage.update({ where: { id: outgoingId }, data: { status: lastAttempt ? 'failed' : 'scheduled', error: errorMessage(error) } })
+    await db.outgoingMessage.update({
+      where: { id: outgoingId },
+      data: { status: lastAttempt ? 'failed' : 'scheduled', error: errorMessage(error) },
+    })
     throw error
   }
 }

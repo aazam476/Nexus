@@ -25,7 +25,10 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
 export function LoginPage() {
   const navigate = useNavigate()
   const client = useQueryClient()
-  const status = useQuery({ queryKey: ['auth-status'], queryFn: () => api<{ needsSetup: boolean; allowSignup: boolean }>('/auth/status') })
+  const status = useQuery({
+    queryKey: ['auth-status'],
+    queryFn: () => api<{ needsSetup: boolean; allowSignup: boolean }>('/auth/status'),
+  })
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -67,17 +70,38 @@ export function LoginPage() {
           </Field>
         )}
         <Field label="Email">
-          <Input name="email" type="email" autoComplete="username" placeholder="you@example.com" required autoFocus={!signingUp} />
+          <Input
+            name="email"
+            type="email"
+            autoComplete="username"
+            placeholder="you@example.com"
+            required
+            autoFocus={!signingUp}
+          />
         </Field>
         <Field label="Password" hint={signingUp ? 'At least 12 characters.' : undefined}>
-          <Input name="password" type="password" autoComplete={signingUp ? 'new-password' : 'current-password'} minLength={signingUp ? 12 : undefined} required />
+          <Input
+            name="password"
+            type="password"
+            autoComplete={signingUp ? 'new-password' : 'current-password'}
+            minLength={signingUp ? 12 : undefined}
+            required
+          />
         </Field>
-        {error && <p role="alert" className="text-[13px] text-danger">{error}</p>}
+        {error && (
+          <p role="alert" className="text-[13px] text-danger">
+            {error}
+          </p>
+        )}
         <Button type="submit" variant="primary" className="py-2.5" disabled={busy || status.isLoading}>
           {signingUp ? 'Create account' : 'Sign in'}
         </Button>
         {status.data?.allowSignup && !status.data.needsSetup && (
-          <button type="button" className="text-[13px] text-accent-text hover:underline" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>
+          <button
+            type="button"
+            className="text-[13px] text-accent-text hover:underline"
+            onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+          >
             {mode === 'login' ? 'New here? Create an account' : 'Have an account? Sign in'}
           </button>
         )}

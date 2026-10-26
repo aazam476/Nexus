@@ -25,7 +25,11 @@ export default defineConfig({
   projects: [
     // Creates the admin and their mail account, and saves the signed-in session for the others.
     { name: 'setup', testMatch: /first-run\.setup\.ts/ },
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/admin.json' }, dependencies: ['setup'] },
+    {
+      name: 'desktop',
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/admin.json' },
+      dependencies: ['setup'],
+    },
   ],
   webServer: {
     // Build the app (with source maps, so coverage maps back to src/), then start a fresh server.

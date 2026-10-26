@@ -59,7 +59,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const apply = () => {
       const resolved = theme === 'system' ? (media.matches ? 'light' : 'dark') : theme
       document.documentElement.dataset.theme = resolved
-      document.querySelector('meta[name=theme-color]')?.setAttribute('content', resolved === 'light' ? '#F3F3F6' : '#0E0F12')
+      document
+        .querySelector('meta[name=theme-color]')
+        ?.setAttribute('content', resolved === 'light' ? '#F3F3F6' : '#0E0F12')
     }
     apply()
     media.addEventListener('change', apply)

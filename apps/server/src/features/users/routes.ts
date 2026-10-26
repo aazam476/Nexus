@@ -31,14 +31,18 @@ export async function userRoutes(app: FastifyInstance) {
         }),
         request.body,
       )
-      if (await db.user.findUnique({ where: { email: body.email } })) throw badRequest('That email is already registered')
-      const user = await db.user.create({ data: { name: body.name, email: body.email, role: body.role, passwordHash: await hashPassword(body.password) } })
+      if (await db.user.findUnique({ where: { email: body.email } }))
+        throw badRequest('That email is already registered')
+      const user = await db.user.create({
+        data: { name: body.name, email: body.email, role: body.role, passwordHash: await hashPassword(body.password) },
+      })
       return { id: user.id }
     })
 
     admin.patch<{ Params: { id: string } }>('/:id', async (request) => {
       const { role } = parse(z.object({ role: z.enum(['admin', 'user']) }), request.body)
-      if (request.params.id === request.user.id && role !== 'admin') throw badRequest('You cannot remove your own admin role')
+      if (request.params.id === request.user.id && role !== 'admin')
+        throw badRequest('You cannot remove your own admin role')
       await db.user.update({ where: { id: request.params.id }, data: { role } })
       return { ok: true }
     })

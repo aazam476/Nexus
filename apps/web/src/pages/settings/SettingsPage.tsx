@@ -1,5 +1,17 @@
 // The settings screen: the list of sections on the left, the chosen section on the right.
-import { ArrowLeft, ArrowRightLeft, AtSign, Filter, KeyRound, Menu, Palette, Puzzle, Shield, Users, type LucideIcon } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRightLeft,
+  AtSign,
+  Filter,
+  KeyRound,
+  Menu,
+  Palette,
+  Puzzle,
+  Shield,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import type { ShellContext } from '../../components/AppShell'
 import { AccountsSettings } from './AccountsSettings'
@@ -32,9 +44,19 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-full">
-      <nav aria-label="Settings" className={`h-full flex-col gap-0.5 border-r border-line bg-panel p-2.5 lg:flex lg:w-[240px] lg:shrink-0 ${current ? 'hidden' : 'flex w-full'}`}>
+      <nav
+        aria-label="Settings"
+        className={`h-full flex-col gap-0.5 border-r border-line bg-panel p-2.5 lg:flex lg:w-[240px] lg:shrink-0 ${current ? 'hidden' : 'flex w-full'}`}
+      >
         <div className="flex items-center gap-2 px-1.5 pt-1 pb-3">
-          <button type="button" aria-label="Open menu" onClick={openNav} className="rounded-md p-1 text-muted hover:bg-raise md:hidden"><Menu size={18} /></button>
+          <button
+            type="button"
+            aria-label="Open menu"
+            onClick={openNav}
+            className="rounded-md p-1 text-muted hover:bg-raise md:hidden"
+          >
+            <Menu size={18} />
+          </button>
           <h1 className="text-[19px] font-bold tracking-tight">Settings</h1>
         </div>
         {sections.map(({ id, title, icon: Icon }) => (
@@ -52,7 +74,9 @@ export function SettingsPage() {
 
       <div className={`h-full min-w-0 flex-1 overflow-y-auto bg-read ${current ? '' : 'hidden lg:block'}`}>
         <div className="mx-auto grid max-w-[760px] gap-5 px-4 py-6 md:px-10 md:py-8">
-          <Link to="/settings" className="flex items-center gap-1.5 text-muted lg:hidden"><ArrowLeft size={16} /> Settings</Link>
+          <Link to="/settings" className="flex items-center gap-1.5 text-muted lg:hidden">
+            <ArrowLeft size={16} /> Settings
+          </Link>
           <h2 className="text-[23px] font-bold tracking-tight">{shown.title}</h2>
           <Page />
         </div>

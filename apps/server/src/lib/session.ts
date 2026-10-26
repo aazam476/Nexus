@@ -27,7 +27,13 @@ declare module 'fastify' {
 }
 
 // storageKey: the user's unlocked private-storage key, if they use private storage.
-export async function startSession(request: FastifyRequest, reply: FastifyReply, userId: string, pending2fa: boolean, storageKey?: KeyObject) {
+export async function startSession(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  userId: string,
+  pending2fa: boolean,
+  storageKey?: KeyObject,
+) {
   const token = randomToken()
   const lifetime = pending2fa ? PENDING_2FA_MINUTES * 60_000 : SESSION_DAYS * 86_400_000
   await db.session.create({
@@ -106,7 +112,8 @@ export async function storageKey(request: FastifyRequest): Promise<KeyObject | n
 // Locks a key into the current session (used when private storage is turned on mid-session).
 export async function setSessionStorageKey(request: FastifyRequest, key: KeyObject) {
   const token = request.cookies[COOKIE]
-  if (token) await db.session.update({ where: { id: request.sessionId }, data: { storageKey: lockWithToken(key, token) } })
+  if (token)
+    await db.session.update({ where: { id: request.sessionId }, data: { storageKey: lockWithToken(key, token) } })
 }
 
 export const sessionToken = (request: FastifyRequest) => request.cookies[COOKIE]

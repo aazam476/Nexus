@@ -4,7 +4,15 @@ import { simpleParser } from 'mailparser'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from '../../db.ts'
 import { syncAccount } from '../mail/sync.ts'
-import { addAccount, makeP12, onMailServer, signedInUser, startApp, subjectsOnServer, uniqueAddress } from '../../test/helpers.ts'
+import {
+  addAccount,
+  makeP12,
+  onMailServer,
+  signedInUser,
+  startApp,
+  subjectsOnServer,
+  uniqueAddress,
+} from '../../test/helpers.ts'
 
 let app: Awaited<ReturnType<typeof startApp>>
 beforeAll(async () => {
@@ -39,7 +47,16 @@ describe('sending now', () => {
     const { browser, accountId, email } = await sender()
     const to = uniqueAddress('to')
     const cc = uniqueAddress('cc')
-    expect(await browser.json('POST', '/api/send', { accountId, to: [to], cc: [cc], subject: 'Hello there', text: 'Hi!', html: '<p>Hi!</p>' })).toEqual({ sent: true })
+    expect(
+      await browser.json('POST', '/api/send', {
+        accountId,
+        to: [to],
+        cc: [cc],
+        subject: 'Hello there',
+        text: 'Hi!',
+        html: '<p>Hi!</p>',
+      }),
+    ).toEqual({ sent: true })
 
     const [mail] = await received(to)
     expect(mail.subject).toBe('Hello there')
@@ -65,7 +82,13 @@ describe('sending now', () => {
   it('threads replies with In-Reply-To and References', async () => {
     const { browser, accountId } = await sender()
     const to = uniqueAddress()
-    await browser.json('POST', '/api/send', { accountId, to: [to], subject: 'Re: Plans', text: 'Sure', inReplyTo: '<original@example.test>' })
+    await browser.json('POST', '/api/send', {
+      accountId,
+      to: [to],
+      subject: 'Re: Plans',
+      text: 'Sure',
+      inReplyTo: '<original@example.test>',
+    })
     const [mail] = await received(to)
     expect(mail.inReplyTo).toBe('<original@example.test>')
     expect(mail.references).toBe('<original@example.test>')
@@ -74,11 +97,23 @@ describe('sending now', () => {
   it('turns pasted images into inline attachments, and sends files', async () => {
     const { browser, accountId } = await sender()
     const to = uniqueAddress()
-    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    )
     await browser.json('POST', '/api/send', {
-      accountId, to: [to], subject: 'Pictures', text: 'see image',
+      accountId,
+      to: [to],
+      subject: 'Pictures',
+      text: 'see image',
       html: `<p>Look</p><img src="data:image/png;base64,${png.toString('base64')}">`,
-      attachments: [{ filename: 'report.txt', contentType: 'text/plain', content: Buffer.from('Quarterly numbers').toString('base64') }],
+      attachments: [
+        {
+          filename: 'report.txt',
+          contentType: 'text/plain',
+          content: Buffer.from('Quarterly numbers').toString('base64'),
+        },
+      ],
     })
     const [mail] = await received(to)
     const inline = mail.attachments.find((a) => a.contentType === 'image/png')!
@@ -90,19 +125,37 @@ describe('sending now', () => {
   it('forwards a message with its attachments', async () => {
     const { browser, accountId, email } = await sender()
     // A message with an attachment arrives in our own inbox first.
-    await browser.json('POST', '/api/send', { accountId, to: [email], subject: 'Original', text: 'x', attachments: [{ filename: 'plan.txt', contentType: 'text/plain', content: Buffer.from('The plan').toString('base64') }] })
+    await browser.json('POST', '/api/send', {
+      accountId,
+      to: [email],
+      subject: 'Original',
+      text: 'x',
+      attachments: [
+        { filename: 'plan.txt', contentType: 'text/plain', content: Buffer.from('The plan').toString('base64') },
+      ],
+    })
     await syncAccount(accountId)
-    const original = (await browser.json<{ id: string; subject: string }[]>('GET', '/api/messages')).find((m) => m.subject === 'Original')!
+    const original = (await browser.json<{ id: string; subject: string }[]>('GET', '/api/messages')).find(
+      (m) => m.subject === 'Original',
+    )!
 
     const to = uniqueAddress()
-    await browser.json('POST', '/api/send', { accountId, to: [to], subject: 'Fwd: Original', text: 'FYI', forwardOf: original.id })
+    await browser.json('POST', '/api/send', {
+      accountId,
+      to: [to],
+      subject: 'Fwd: Original',
+      text: 'FYI',
+      forwardOf: original.id,
+    })
     const [mail] = await received(to)
     expect(mail.attachments.map((a) => [a.filename, a.content.toString()])).toEqual([['plan.txt', 'The plan']])
   })
 
   it('explains what is wrong instead of sending', async () => {
     const { browser, accountId } = await sender()
-    expect((await browser.post('/api/send', { accountId, subject: 'Nobody', text: 'x' })).json().error).toMatch(/at least one recipient/)
+    expect((await browser.post('/api/send', { accountId, subject: 'Nobody', text: 'x' })).json().error).toMatch(
+      /at least one recipient/,
+    )
     expect((await browser.post('/api/send', { accountId, to: ['not an address'], text: 'x' })).statusCode).toBe(400)
 
     await db.account.update({ where: { id: accountId }, data: { smtpPort: 1 } })
@@ -115,16 +168,32 @@ describe('sending now', () => {
 describe('drafts', () => {
   it('saves, updates, lists, sends and discards drafts', async () => {
     const { browser, accountId } = await sender()
-    const { id } = await browser.json('PUT', '/api/drafts', { accountId, to: ['half-typed@'], subject: 'Draft 1', text: 'first' })
-    expect(await browser.json('PUT', '/api/drafts', { id, accountId, to: [], subject: 'Draft 1b', text: 'second' })).toEqual({ id })
+    const { id } = await browser.json('PUT', '/api/drafts', {
+      accountId,
+      to: ['half-typed@'],
+      subject: 'Draft 1',
+      text: 'first',
+    })
+    expect(
+      await browser.json('PUT', '/api/drafts', { id, accountId, to: [], subject: 'Draft 1b', text: 'second' }),
+    ).toEqual({ id })
 
-    const drafts = await browser.json<{ id: string; subject: string; text: string; outgoing: boolean }[]>('GET', '/api/messages?folder=drafts')
+    const drafts = await browser.json<{ id: string; subject: string; text: string; outgoing: boolean }[]>(
+      'GET',
+      '/api/messages?folder=drafts',
+    )
     expect(drafts.map((d) => [d.subject, d.text, d.outgoing])).toEqual([['Draft 1b', 'second', true]])
     expect((await browser.json('GET', `/api/messages/${id}`)).subject).toBe('Draft 1b')
     expect((await browser.json('GET', '/api/counts')).folders.drafts).toBe(1)
 
     // Sending from a draft removes the draft.
-    await browser.json('POST', '/api/send', { accountId, to: [uniqueAddress()], subject: 'Draft 1b', text: 'second', draftId: id })
+    await browser.json('POST', '/api/send', {
+      accountId,
+      to: [uniqueAddress()],
+      subject: 'Draft 1b',
+      text: 'second',
+      draftId: id,
+    })
     expect(await browser.json('GET', '/api/messages?folder=drafts')).toEqual([])
 
     const { id: other } = await browser.json('PUT', '/api/drafts', { accountId, subject: 'Throwaway', text: '' })
@@ -148,16 +217,31 @@ describe('scheduled send', () => {
     const later = new Date(Date.now() + 3_600_000).toISOString()
     const to = uniqueAddress()
 
-    const first = await browser.json('POST', '/api/send', { accountId, to: [to], subject: 'Later 1', text: 'x', scheduledFor: later })
+    const first = await browser.json('POST', '/api/send', {
+      accountId,
+      to: [to],
+      subject: 'Later 1',
+      text: 'x',
+      scheduledFor: later,
+    })
     expect(first).toMatchObject({ scheduled: true })
-    const scheduled = await browser.json<{ id: string; subject: string; scheduledFor: string }[]>('GET', '/api/messages?folder=scheduled')
+    const scheduled = await browser.json<{ id: string; subject: string; scheduledFor: string }[]>(
+      'GET',
+      '/api/messages?folder=scheduled',
+    )
     expect(scheduled.map((m) => [m.subject, m.scheduledFor])).toEqual([['Later 1', later]])
     expect(await received(to)).toEqual([])
 
     await browser.json('DELETE', `/api/outgoing/${first.id}`)
     expect(await browser.json('GET', '/api/messages?folder=scheduled')).toEqual([])
 
-    const second = await browser.json('POST', '/api/send', { accountId, to: [to], subject: 'Later 2', text: 'x', scheduledFor: later })
+    const second = await browser.json('POST', '/api/send', {
+      accountId,
+      to: [to],
+      subject: 'Later 2',
+      text: 'x',
+      scheduledFor: later,
+    })
     expect(await browser.json('POST', `/api/outgoing/${second.id}/send-now`)).toEqual({ sent: true })
     expect((await received(to)).map((m) => m.subject)).toEqual(['Later 2'])
     expect(await browser.json('GET', '/api/messages?folder=scheduled')).toEqual([])
@@ -166,7 +250,15 @@ describe('scheduled send', () => {
   it('sends right away when the chosen time has already passed', async () => {
     const { browser, accountId } = await sender()
     const to = uniqueAddress()
-    expect(await browser.json('POST', '/api/send', { accountId, to: [to], subject: 'Past', text: 'x', scheduledFor: new Date(Date.now() - 60_000).toISOString() })).toEqual({ sent: true })
+    expect(
+      await browser.json('POST', '/api/send', {
+        accountId,
+        to: [to],
+        subject: 'Past',
+        text: 'x',
+        scheduledFor: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    ).toEqual({ sent: true })
     expect((await received(to)).map((m) => m.subject)).toEqual(['Past'])
   })
 })
@@ -177,7 +269,10 @@ describe('S/MIME', () => {
     const ann = await sender('Ann')
     const bea = await sender('Bea')
     for (const person of [ann, bea]) {
-      await person.browser.json('POST', '/api/smime', { p12: (await makeP12(person.email, 'p12 password')).toString('base64'), password: 'p12 password' })
+      await person.browser.json('POST', '/api/smime', {
+        p12: (await makeP12(person.email, 'p12 password')).toString('base64'),
+        password: 'p12 password',
+      })
     }
     return { ann, bea }
   }
@@ -198,7 +293,13 @@ describe('S/MIME', () => {
 
   it('signs mail; the receiver sees an intact signature and keeps the certificate', async () => {
     const { ann, bea } = await twoPeopleWithCertificates()
-    await bea.browser.json('POST', '/api/send', { accountId: bea.accountId, to: [ann.email], subject: 'Signed hello', text: 'It is really me', smime: { sign: true, encrypt: false } })
+    await bea.browser.json('POST', '/api/send', {
+      accountId: bea.accountId,
+      to: [ann.email],
+      subject: 'Signed hello',
+      text: 'It is really me',
+      smime: { sign: true, encrypt: false },
+    })
 
     await syncAccount(ann.accountId)
     const [row] = await ann.browser.json<{ id: string; security: string }[]>('GET', '/api/messages')
@@ -215,15 +316,33 @@ describe('S/MIME', () => {
   it('encrypts mail that only the recipient can read, and refuses when a certificate is missing', async () => {
     const { ann, bea } = await twoPeopleWithCertificates()
     // Ann can't encrypt to Bea before she has Bea's certificate.
-    const tooEarly = await ann.browser.post('/api/send', { accountId: ann.accountId, to: [bea.email], subject: 'x', text: 'x', smime: { sign: false, encrypt: true } })
+    const tooEarly = await ann.browser.post('/api/send', {
+      accountId: ann.accountId,
+      to: [bea.email],
+      subject: 'x',
+      text: 'x',
+      smime: { sign: false, encrypt: true },
+    })
     expect(tooEarly.json().error).toMatch(/No S\/MIME certificate for/)
 
-    await bea.browser.json('POST', '/api/send', { accountId: bea.accountId, to: [ann.email], subject: 'My certificate', text: 'x', smime: { sign: true, encrypt: false } })
+    await bea.browser.json('POST', '/api/send', {
+      accountId: bea.accountId,
+      to: [ann.email],
+      subject: 'My certificate',
+      text: 'x',
+      smime: { sign: true, encrypt: false },
+    })
     await syncAccount(ann.accountId)
     const [signed] = await ann.browser.json<{ id: string }[]>('GET', '/api/messages')
     await ann.browser.json('GET', `/api/messages/${signed.id}`) // reading it saves Bea's certificate
 
-    await ann.browser.json('POST', '/api/send', { accountId: ann.accountId, to: [bea.email], subject: 'Secret', text: 'The eagle has landed', smime: { sign: true, encrypt: true } })
+    await ann.browser.json('POST', '/api/send', {
+      accountId: ann.accountId,
+      to: [bea.email],
+      subject: 'Secret',
+      text: 'The eagle has landed',
+      smime: { sign: true, encrypt: true },
+    })
     const [onServer] = await received(bea.email)
     expect(onServer.text ?? '').not.toContain('eagle') // unreadable on the mail server
 
@@ -236,7 +355,12 @@ describe('S/MIME', () => {
 
   it('asks for a certificate before signing', async () => {
     const { browser, accountId } = await sender()
-    const response = await browser.post('/api/send', { accountId, to: [uniqueAddress()], text: 'x', smime: { sign: true, encrypt: false } })
+    const response = await browser.post('/api/send', {
+      accountId,
+      to: [uniqueAddress()],
+      text: 'x',
+      smime: { sign: true, encrypt: false },
+    })
     expect(response.json().error).toMatch(/Upload an S\/MIME certificate/)
   })
 })
@@ -246,10 +370,17 @@ describe('sending from a shared account', () => {
   it('lets an editor send as the shared address', async () => {
     const owner = await sender()
     const editor = await signedInUser(app)
-    await owner.browser.json('PUT', `/api/accounts/${owner.accountId}/members`, { userId: editor.user.id, role: 'editor' })
+    await owner.browser.json('PUT', `/api/accounts/${owner.accountId}/members`, {
+      userId: editor.user.id,
+      role: 'editor',
+    })
     const to = uniqueAddress()
-    await editor.browser.json('POST', '/api/send', { accountId: owner.accountId, to: [to], subject: 'From the team', text: 'x' })
+    await editor.browser.json('POST', '/api/send', {
+      accountId: owner.accountId,
+      to: [to],
+      subject: 'From the team',
+      text: 'x',
+    })
     expect((await received(to))[0].from?.value[0].address).toBe(owner.email)
   })
 })
-

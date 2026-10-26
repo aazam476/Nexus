@@ -9,7 +9,14 @@ import { db } from '../../db.ts'
 import { decrypt, encrypt, hashPassword, randomToken, sha256, verifyPassword } from '../../lib/crypto.ts'
 import { HttpError, badRequest, forbidden, parse } from '../../lib/http.ts'
 import { lockWithPassword, newStorageKeys, unlockWithPassword, unlockWithToken } from '../../lib/sealed.ts'
-import { endSession, findSession, requireUser, sessionToken, setSessionStorageKey, startSession } from '../../lib/session.ts'
+import {
+  endSession,
+  findSession,
+  requireUser,
+  sessionToken,
+  setSessionStorageKey,
+  startSession,
+} from '../../lib/session.ts'
 import { sealAccounts, unsealAccounts } from '../mail/private.ts'
 
 // Accept the code before and after the current one: phone clocks drift and people type slowly.
@@ -40,13 +47,17 @@ export async function authRoutes(app: FastifyInstance) {
         async (tx) => {
           const isFirst = (await tx.user.count()) === 0
           if (!isFirst && !config.ALLOW_SIGNUP) throw forbidden('Sign-up is closed. Ask an admin to add you.')
-          if (await tx.user.findUnique({ where: { email: body.email } })) throw badRequest('That email is already registered')
-          return tx.user.create({ data: { name: body.name, email: body.email, passwordHash, role: isFirst ? 'admin' : 'user' } })
+          if (await tx.user.findUnique({ where: { email: body.email } }))
+            throw badRequest('That email is already registered')
+          return tx.user.create({
+            data: { name: body.name, email: body.email, passwordHash, role: isFirst ? 'admin' : 'user' },
+          })
         },
         { isolationLevel: 'Serializable' },
       )
       .catch((error) => {
-        if ((error as { code?: string }).code === 'P2034') throw new HttpError(409, 'Someone else is signing up at the same moment. Try again.')
+        if ((error as { code?: string }).code === 'P2034')
+          throw new HttpError(409, 'Someone else is signing up at the same moment. Try again.')
         throw error
       })
     await startSession(request, reply, user.id, false)
@@ -79,7 +90,10 @@ export async function authRoutes(app: FastifyInstance) {
       const hash = sha256(normalizeCode(body.recoveryCode))
       if (user.recoveryCodes.includes(hash)) {
         ok = true
-        await db.user.update({ where: { id: user.id }, data: { recoveryCodes: user.recoveryCodes.filter((c) => c !== hash) } })
+        await db.user.update({
+          where: { id: user.id },
+          data: { recoveryCodes: user.recoveryCodes.filter((c) => c !== hash) },
+        })
       }
     }
     if (!ok) throw new HttpError(401, 'That code is not valid')
@@ -124,7 +138,11 @@ export async function authRoutes(app: FastifyInstance) {
         }),
         request.body,
       )
-      return db.preference.upsert({ where: { userId: request.user.id }, create: { userId: request.user.id, ...body }, update: body })
+      return db.preference.upsert({
+        where: { userId: request.user.id },
+        create: { userId: request.user.id, ...body },
+        update: body,
+      })
     })
 
     signedIn.post('/password', strict, async (request) => {
@@ -132,8 +150,13 @@ export async function authRoutes(app: FastifyInstance) {
       const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
       if (!(await verifyPassword(body.current, user.passwordHash))) throw badRequest('Your current password is wrong')
       // The private-storage key is locked with the password, so lock it again with the new one.
-      const storagePrivateKey = user.storagePrivateKey ? await lockWithPassword(await unlockWithPassword(user.storagePrivateKey, body.current), body.next) : undefined
-      await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(body.next), storagePrivateKey } })
+      const storagePrivateKey = user.storagePrivateKey
+        ? await lockWithPassword(await unlockWithPassword(user.storagePrivateKey, body.current), body.next)
+        : undefined
+      await db.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await hashPassword(body.next), storagePrivateKey },
+      })
       // Sign out every other device.
       await db.session.deleteMany({ where: { userId: user.id, NOT: { id: request.sessionId } } })
       return { ok: true }
@@ -148,7 +171,10 @@ export async function authRoutes(app: FastifyInstance) {
     })
 
     signedIn.post('/2fa/enable', strict, async (request) => {
-      const { code, secret } = parse(z.object({ code: z.string(), secret: z.string().regex(/^[A-Z2-7]{16,}$/) }), request.body)
+      const { code, secret } = parse(
+        z.object({ code: z.string(), secret: z.string().regex(/^[A-Z2-7]{16,}$/) }),
+        request.body,
+      )
       if (!authenticator.verify({ token: code.replace(/\s/g, ''), secret })) {
         throw badRequest('That code is not valid. Check the time on your phone and try again.')
       }
@@ -160,7 +186,10 @@ export async function authRoutes(app: FastifyInstance) {
       const { password: current } = parse(z.object({ password: z.string() }), request.body)
       const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
       if (!(await verifyPassword(current, user.passwordHash))) throw badRequest('Wrong password')
-      await db.user.update({ where: { id: user.id }, data: { totpEnabled: false, totpSecret: null, recoveryCodes: [] } })
+      await db.user.update({
+        where: { id: user.id },
+        data: { totpEnabled: false, totpSecret: null, recoveryCodes: [] },
+      })
       return { ok: true }
     })
 
@@ -177,22 +206,36 @@ export async function authRoutes(app: FastifyInstance) {
       const body = parse(z.object({ enabled: z.boolean(), password: z.string() }), request.body)
       const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
       if (!(await verifyPassword(body.password, user.passwordHash))) throw badRequest('Wrong password')
-      const owned = await db.account.findMany({ where: { ownerId: user.id }, include: { _count: { select: { members: true } } } })
+      const owned = await db.account.findMany({
+        where: { ownerId: user.id },
+        include: { _count: { select: { members: true } } },
+      })
       const accountIds = owned.map((a) => a.id)
 
       if (body.enabled) {
         const pop3 = owned.filter((a) => a.protocol === 'pop3').map((a) => a.email)
-        if (pop3.length) throw badRequest(`POP3 accounts can't use private storage, because Nexus holds the only copy of their mail: ${pop3.join(', ')}`)
+        if (pop3.length)
+          throw badRequest(
+            `POP3 accounts can't use private storage, because Nexus holds the only copy of their mail: ${pop3.join(', ')}`,
+          )
         const shared = owned.filter((a) => a._count.members > 0).map((a) => a.email)
-        if (shared.length) throw badRequest(`Stop sharing ${shared.join(', ')} first. People you share with couldn't read private mail.`)
+        if (shared.length)
+          throw badRequest(`Stop sharing ${shared.join(', ')} first. People you share with couldn't read private mail.`)
 
         // Reuse the old key if private storage was on before, so mail sealed back then still opens.
         const keys = user.storagePrivateKey
-          ? { privateKey: await unlockWithPassword(user.storagePrivateKey, body.password), publicKey: user.storagePublicKey! }
+          ? {
+              privateKey: await unlockWithPassword(user.storagePrivateKey, body.password),
+              publicKey: user.storagePublicKey!,
+            }
           : newStorageKeys()
         await db.user.update({
           where: { id: user.id },
-          data: { privateStorage: true, storagePublicKey: keys.publicKey, storagePrivateKey: await lockWithPassword(keys.privateKey, body.password) },
+          data: {
+            privateStorage: true,
+            storagePublicKey: keys.publicKey,
+            storagePrivateKey: await lockWithPassword(keys.privateKey, body.password),
+          },
         })
         await setSessionStorageKey(request, keys.privateKey)
         // Other devices have no key and couldn't read anything; signing in again gives them one.
@@ -209,8 +252,17 @@ export async function authRoutes(app: FastifyInstance) {
     })
 
     signedIn.get('/sessions', async (request) => {
-      const sessions = await db.session.findMany({ where: { userId: request.user.id, pending2fa: false }, orderBy: { lastSeenAt: 'desc' } })
-      return sessions.map((s) => ({ id: s.id, userAgent: s.userAgent, ip: s.ip, lastSeenAt: s.lastSeenAt, current: s.id === request.sessionId }))
+      const sessions = await db.session.findMany({
+        where: { userId: request.user.id, pending2fa: false },
+        orderBy: { lastSeenAt: 'desc' },
+      })
+      return sessions.map((s) => ({
+        id: s.id,
+        userAgent: s.userAgent,
+        ip: s.ip,
+        lastSeenAt: s.lastSeenAt,
+        current: s.id === request.sessionId,
+      }))
     })
 
     signedIn.delete<{ Params: { id: string } }>('/sessions/:id', async (request) => {
@@ -222,8 +274,15 @@ export async function authRoutes(app: FastifyInstance) {
 
 // Ten single-use codes, shown once. Only their hashes are kept.
 async function newRecoveryCodes(userId: string, extra: { totpEnabled?: boolean; totpSecret?: string } = {}) {
-  const codes = Array.from({ length: 10 }, () => randomBytes(5).toString('hex').replace(/(.{5})/, '$1-')) // e.g. "3f9a1-0c7d2"
-  await db.user.update({ where: { id: userId }, data: { ...extra, recoveryCodes: codes.map((c) => sha256(normalizeCode(c))) } })
+  const codes = Array.from({ length: 10 }, () =>
+    randomBytes(5)
+      .toString('hex')
+      .replace(/(.{5})/, '$1-'),
+  ) // e.g. "3f9a1-0c7d2"
+  await db.user.update({
+    where: { id: userId },
+    data: { ...extra, recoveryCodes: codes.map((c) => sha256(normalizeCode(c))) },
+  })
   return codes
 }
 

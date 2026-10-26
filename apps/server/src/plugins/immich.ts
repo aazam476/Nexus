@@ -30,15 +30,38 @@ export const immich: NexusPlugin = {
     form.append('deviceId', 'nexus')
     form.append('fileCreatedAt', now)
     form.append('fileModifiedAt', now)
-    const asset = (await (await request(`${base}/api/assets`, { method: 'POST', headers, body: form }, 'Immich')).json()) as { id: string }
+    const asset = (await (
+      await request(`${base}/api/assets`, { method: 'POST', headers, body: form }, 'Immich')
+    ).json()) as { id: string }
 
     if (settings.album) {
-      const albums = (await (await request(`${base}/api/albums`, { headers }, 'Immich')).json()) as { id: string; albumName: string }[]
+      const albums = (await (await request(`${base}/api/albums`, { headers }, 'Immich')).json()) as {
+        id: string
+        albumName: string
+      }[]
       let album = albums.find((a) => a.albumName === settings.album)
       if (!album) {
-        album = (await (await request(`${base}/api/albums`, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ albumName: settings.album }) }, 'Immich')).json()) as { id: string; albumName: string }
+        album = (await (
+          await request(
+            `${base}/api/albums`,
+            {
+              method: 'POST',
+              headers: { ...headers, 'content-type': 'application/json' },
+              body: JSON.stringify({ albumName: settings.album }),
+            },
+            'Immich',
+          )
+        ).json()) as { id: string; albumName: string }
       }
-      await request(`${base}/api/albums/${album.id}/assets`, { method: 'PUT', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ ids: [asset.id] }) }, 'Immich')
+      await request(
+        `${base}/api/albums/${album.id}/assets`,
+        {
+          method: 'PUT',
+          headers: { ...headers, 'content-type': 'application/json' },
+          body: JSON.stringify({ ids: [asset.id] }),
+        },
+        'Immich',
+      )
     }
     return { url: `${base}/photos/${asset.id}` }
   },

@@ -32,8 +32,13 @@ export function SafeHtml({ html }: { html: string }) {
       {safe.blockedImages > 0 && (
         <div className="flex items-center gap-3 rounded-xl border border-line bg-raise px-3.5 py-2.5 text-[13px] text-ink-2">
           <ImageOff size={16} className="shrink-0 text-muted" />
-          <span className="min-w-0 flex-1">Remote images blocked <span className="sm:hidden">for privacy</span><span className="hidden sm:inline">to stop tracking</span>.</span>
-          <Button variant="ghost" className="shrink-0" onClick={() => setAllowImages(true)}>Load images</Button>
+          <span className="min-w-0 flex-1">
+            Remote images blocked <span className="sm:hidden">for privacy</span>
+            <span className="hidden sm:inline">to stop tracking</span>.
+          </span>
+          <Button variant="ghost" className="shrink-0" onClick={() => setAllowImages(true)}>
+            Load images
+          </Button>
         </div>
       )}
       <iframe

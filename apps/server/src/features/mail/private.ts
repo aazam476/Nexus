@@ -23,10 +23,24 @@ interface Body {
 }
 
 // The columns to write when sealing. Plain columns are blanked so nothing readable is left behind.
-export function sealedFields(plain: { raw: Buffer; html: string | null; text: string | null; preview: string; attachments: unknown; event: unknown }, publicKey: string) {
+export function sealedFields(
+  plain: {
+    raw: Buffer
+    html: string | null
+    text: string | null
+    preview: string
+    attachments: unknown
+    event: unknown
+  },
+  publicKey: string,
+) {
   return {
-    sealedSummary: Uint8Array.from(sealJson({ preview: plain.preview, attachments: plain.attachments, event: plain.event ?? null }, publicKey)),
-    sealedBody: Uint8Array.from(sealJson({ raw: plain.raw.toString('base64'), html: plain.html, text: plain.text }, publicKey)),
+    sealedSummary: Uint8Array.from(
+      sealJson({ preview: plain.preview, attachments: plain.attachments, event: plain.event ?? null }, publicKey),
+    ),
+    sealedBody: Uint8Array.from(
+      sealJson({ raw: plain.raw.toString('base64'), html: plain.html, text: plain.text }, publicKey),
+    ),
     raw: new Uint8Array(),
     html: null,
     text: null,
@@ -40,13 +54,21 @@ type Stored = Pick<Message, 'preview' | 'attachments' | 'event' | 'sealedSummary
 
 // For list rows. Without the key, a sealed message shows no preview rather than failing the whole list.
 export function openSummary(message: Stored, key: KeyObject | null): Summary {
-  if (!message.sealedSummary) return { preview: message.preview, attachments: message.attachments as unknown as AttachmentInfo[], event: message.event as CalendarEvent | null }
+  if (!message.sealedSummary)
+    return {
+      preview: message.preview,
+      attachments: message.attachments as unknown as AttachmentInfo[],
+      event: message.event as CalendarEvent | null,
+    }
   if (!key) return { preview: '', attachments: [], event: null }
   return unsealJson<Summary>(message.sealedSummary, key)
 }
 
 // For reading a message, its attachments, or exporting it.
-export function openBody(message: Pick<Message, 'raw' | 'html' | 'text' | 'sealedBody'>, key: KeyObject | null): { raw: Buffer; html: string | null; text: string | null } {
+export function openBody(
+  message: Pick<Message, 'raw' | 'html' | 'text' | 'sealedBody'>,
+  key: KeyObject | null,
+): { raw: Buffer; html: string | null; text: string | null } {
   if (!message.sealedBody) return { raw: Buffer.from(message.raw), html: message.html, text: message.text }
   if (!key) throw forbidden('This message is in private storage. Only its owner can read it, while signed in.')
   const body = unsealJson<Body>(message.sealedBody, key)
@@ -69,7 +91,10 @@ export async function sealAccounts(accountIds: string[], publicKey: string) {
 
 export async function unsealAccounts(accountIds: string[], key: KeyObject) {
   for (;;) {
-    const batch = await db.message.findMany({ where: { accountId: { in: accountIds }, sealedBody: { not: null } }, take: BATCH })
+    const batch = await db.message.findMany({
+      where: { accountId: { in: accountIds }, sealedBody: { not: null } },
+      take: BATCH,
+    })
     if (!batch.length) return
     for (const m of batch) {
       const summary = openSummary(m, key)

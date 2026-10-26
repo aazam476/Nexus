@@ -14,7 +14,14 @@ export const providers = {
     tokenUrl: 'https://oauth2.googleapis.com/token',
     scope: 'openid email profile https://mail.google.com/',
     extraParams: { access_type: 'offline', prompt: 'consent' },
-    servers: { inHost: 'imap.gmail.com', inPort: 993, inTls: true, smtpHost: 'smtp.gmail.com', smtpPort: 465, smtpTls: true },
+    servers: {
+      inHost: 'imap.gmail.com',
+      inPort: 993,
+      inTls: true,
+      smtpHost: 'smtp.gmail.com',
+      smtpPort: 465,
+      smtpTls: true,
+    },
   },
   microsoft: {
     auth: 'oauth-microsoft',
@@ -22,9 +29,17 @@ export const providers = {
     clientSecret: config.MICROSOFT_CLIENT_SECRET,
     authorizeUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
     tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-    scope: 'openid email profile offline_access https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send',
+    scope:
+      'openid email profile offline_access https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send',
     extraParams: {},
-    servers: { inHost: 'outlook.office365.com', inPort: 993, inTls: true, smtpHost: 'smtp.office365.com', smtpPort: 587, smtpTls: false },
+    servers: {
+      inHost: 'outlook.office365.com',
+      inPort: 993,
+      inTls: true,
+      smtpHost: 'smtp.office365.com',
+      smtpPort: 587,
+      smtpTls: false,
+    },
   },
 } as const
 
@@ -33,7 +48,11 @@ export type ProviderName = keyof typeof providers
 export function getProvider(name: string) {
   const provider = providers[name as ProviderName]
   if (!provider) throw new HttpError(404, 'Unknown sign-in provider')
-  if (!provider.clientId || !provider.clientSecret) throw new HttpError(400, `${name} sign-in is not set up on this server. An admin needs to add its client ID and secret.`)
+  if (!provider.clientId || !provider.clientSecret)
+    throw new HttpError(
+      400,
+      `${name} sign-in is not set up on this server. An admin needs to add its client ID and secret.`,
+    )
   return provider
 }
 
@@ -72,12 +91,22 @@ async function tokenRequest(name: string, params: Record<string, string>): Promi
 
 export async function exchangeCode(name: string, code: string) {
   const tokens = await tokenRequest(name, { grant_type: 'authorization_code', code, redirect_uri: redirectUri(name) })
-  if (!tokens.refresh_token) throw new HttpError(502, 'The provider did not return a refresh token. Remove Nexus from your account’s connected apps and try again.')
+  if (!tokens.refresh_token)
+    throw new HttpError(
+      502,
+      'The provider did not return a refresh token. Remove Nexus from your account’s connected apps and try again.',
+    )
   // The ID token came straight from the provider over TLS, so reading it without verifying the signature is safe here.
   const claims = JSON.parse(Buffer.from(tokens.id_token?.split('.')[1] ?? '', 'base64url').toString() || '{}')
   const email = String(claims.email ?? claims.preferred_username ?? '').toLowerCase()
   if (!email) throw new HttpError(502, 'The provider did not say which email address you signed in with')
-  return { email, name: String(claims.name ?? email), refreshToken: tokens.refresh_token, accessToken: tokens.access_token, expiresIn: tokens.expires_in }
+  return {
+    email,
+    name: String(claims.name ?? email),
+    refreshToken: tokens.refresh_token,
+    accessToken: tokens.access_token,
+    expiresIn: tokens.expires_in,
+  }
 }
 
 // Access tokens live about an hour. Keep them in memory and refresh a minute early.

@@ -18,6 +18,8 @@ describe('signatures', () => {
 
 describe('quoteReply', () => {
   it('escapes the original and keeps its line breaks', () => {
-    expect(quoteReply('Sara wrote:', 'a <b>\nb')).toBe('<p><br></p><blockquote>Sara wrote:<br>a &lt;b&gt;<br>b</blockquote>')
+    expect(quoteReply('Sara wrote:', 'a <b>\nb')).toBe(
+      '<p><br></p><blockquote>Sara wrote:<br>a &lt;b&gt;<br>b</blockquote>',
+    )
   })
 })

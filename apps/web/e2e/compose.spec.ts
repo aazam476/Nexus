@@ -7,7 +7,10 @@ const subject = (name: string) => `${name} ${Date.now().toString(36)}`
 // Opens the composer and fills in one recipient, a subject and a body.
 async function write(page: import('@playwright/test').Page, to: string, title: string, body: string) {
   await page.goto('/mail/inbox')
-  await page.getByRole('button', { name: /^New message/ }).first().click()
+  await page
+    .getByRole('button', { name: /^New message/ })
+    .first()
+    .click()
   await page.getByLabel('To', { exact: true }).fill(to)
   await page.getByLabel('To', { exact: true }).press('Enter')
   await page.getByLabel('Subject').fill(title)
@@ -33,7 +36,10 @@ test('sends a formatted message with an attachment', async ({ page }) => {
 
 test('refuses to send without a recipient, saying why', async ({ page }) => {
   await page.goto('/mail/inbox')
-  await page.getByRole('button', { name: /^New message/ }).first().click()
+  await page
+    .getByRole('button', { name: /^New message/ })
+    .first()
+    .click()
   await page.getByLabel('Subject').fill('Nobody to send to')
   await page.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('recipient')
@@ -73,7 +79,10 @@ test('explains Bcc-only mail before it is sent', async ({ page }) => {
   const hidden = uniqueAddress('bcc')
   const title = subject('Quiet note')
   await page.goto('/mail/inbox')
-  await page.getByRole('button', { name: /^New message/ }).first().click()
+  await page
+    .getByRole('button', { name: /^New message/ })
+    .first()
+    .click()
   await page.getByRole('button', { name: 'Cc / Bcc' }).click()
   await page.getByLabel('Bcc', { exact: true }).fill(hidden)
   await page.getByLabel('Bcc', { exact: true }).press('Enter')
@@ -105,7 +114,10 @@ test('formats text, links, lists, fonts, images and raw HTML, and the recipient 
 
   const picker = page.waitForEvent('filechooser')
   await toolbar.getByRole('button', { name: 'Insert image' }).click()
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+    'base64',
+  )
   await (await picker).setFiles({ name: 'dot.png', mimeType: 'image/png', buffer: png })
   await expect(page.getByLabel('Message body').locator('img[alt="dot.png"]')).toBeVisible()
 

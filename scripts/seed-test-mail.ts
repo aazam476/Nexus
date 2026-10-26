@@ -23,15 +23,34 @@ const flight = {
 }
 
 const messages = [
-  { from: 'Sara Okafor <sara@okafor.dev>', subject: 'Re: Paperless tags for the tax folder', html: '<p>Hi Ali,</p><p>I tried your rule set and it caught everything except the <b>2024 Hetzner invoices</b>.</p>' },
+  {
+    from: 'Sara Okafor <sara@okafor.dev>',
+    subject: 'Re: Paperless tags for the tax folder',
+    html: '<p>Hi Ali,</p><p>I tried your rule set and it caught everything except the <b>2024 Hetzner invoices</b>.</p>',
+  },
   {
     from: 'KLM Royal Dutch Airlines <noreply@klm.com>',
     subject: 'Booking confirmed AMS → SFO, 14 Nov',
     html: `<script type="application/ld+json">${JSON.stringify(flight)}</script><h1>Your trip to San Francisco</h1><p>Booking code <b>QX7T2M</b></p><img src="https://example.com/banner.png">`,
   },
-  { from: 'selfh.st <newsletter@selfh.st>', subject: 'This week in self-hosting', html: '<h2>18 new releases</h2>', headers: { 'List-Unsubscribe': '<mailto:unsub@selfh.st>' } },
-  { from: 'GitHub <notifications@github.com>', subject: '[nexus] PR #14 ready for review', text: 'jdoe requested your review.', headers: { 'List-Id': 'nexus.github.com' } },
-  { from: 'Crypto Winner <win@claim-prize.biz>', subject: 'You won 2.5 BTC', text: 'Claim now!', headers: { 'X-Spam-Flag': 'YES', 'X-Spam-Status': 'Yes, score=12.4' } },
+  {
+    from: 'selfh.st <newsletter@selfh.st>',
+    subject: 'This week in self-hosting',
+    html: '<h2>18 new releases</h2>',
+    headers: { 'List-Unsubscribe': '<mailto:unsub@selfh.st>' },
+  },
+  {
+    from: 'GitHub <notifications@github.com>',
+    subject: '[nexus] PR #14 ready for review',
+    text: 'jdoe requested your review.',
+    headers: { 'List-Id': 'nexus.github.com' },
+  },
+  {
+    from: 'Crypto Winner <win@claim-prize.biz>',
+    subject: 'You won 2.5 BTC',
+    text: 'Claim now!',
+    headers: { 'X-Spam-Flag': 'YES', 'X-Spam-Status': 'Yes, score=12.4' },
+  },
   {
     from: 'Hetzner Online <billing@hetzner.com>',
     subject: 'Invoice R0034871 for October',

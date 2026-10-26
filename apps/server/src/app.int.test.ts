@@ -62,7 +62,9 @@ describe('errors', () => {
   })
 
   it('reports a malformed request body as a 400', async () => {
-    const response = await new Browser(app).request('POST', '/api/auth/login', '{not json', { 'content-type': 'application/json' })
+    const response = await new Browser(app).request('POST', '/api/auth/login', '{not json', {
+      'content-type': 'application/json',
+    })
     expect(response.statusCode).toBe(400)
   })
 })

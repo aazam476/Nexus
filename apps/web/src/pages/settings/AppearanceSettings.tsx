@@ -3,8 +3,20 @@ import { Columns2, Monitor, Moon, Rows3, Sun } from 'lucide-react'
 import { Card } from '../../components/ui'
 import { useStore, type Layout, type Theme } from '../../lib/store'
 
-function Choice<T extends string>({ value, current, onPick, icon: Icon, title, detail }: {
-  value: T; current: T; onPick: (v: T) => void; icon: typeof Sun; title: string; detail: string
+function Choice<T extends string>({
+  value,
+  current,
+  onPick,
+  icon: Icon,
+  title,
+  detail,
+}: {
+  value: T
+  current: T
+  onPick: (v: T) => void
+  icon: typeof Sun
+  title: string
+  detail: string
 }) {
   return (
     <button
@@ -26,15 +38,50 @@ export function AppearanceSettings() {
     <>
       <Card title="Theme">
         <div className="grid gap-2 sm:grid-cols-3">
-          <Choice<Theme> value="system" current={theme} onPick={setTheme} icon={Monitor} title="System" detail="Follow your device" />
-          <Choice<Theme> value="dark" current={theme} onPick={setTheme} icon={Moon} title="Dark" detail="Easy on the eyes at night" />
-          <Choice<Theme> value="light" current={theme} onPick={setTheme} icon={Sun} title="Light" detail="Bright rooms, daylight" />
+          <Choice<Theme>
+            value="system"
+            current={theme}
+            onPick={setTheme}
+            icon={Monitor}
+            title="System"
+            detail="Follow your device"
+          />
+          <Choice<Theme>
+            value="dark"
+            current={theme}
+            onPick={setTheme}
+            icon={Moon}
+            title="Dark"
+            detail="Easy on the eyes at night"
+          />
+          <Choice<Theme>
+            value="light"
+            current={theme}
+            onPick={setTheme}
+            icon={Sun}
+            title="Light"
+            detail="Bright rooms, daylight"
+          />
         </div>
       </Card>
       <Card title="Layout" description="On phones, Nexus always shows one pane at a time.">
         <div className="grid gap-2 sm:grid-cols-2">
-          <Choice<Layout> value="three-pane" current={layout} onPick={setLayout} icon={Columns2} title="Three panes" detail="List and message side by side" />
-          <Choice<Layout> value="list" current={layout} onPick={setLayout} icon={Rows3} title="List, then message" detail="Opening a message replaces the list" />
+          <Choice<Layout>
+            value="three-pane"
+            current={layout}
+            onPick={setLayout}
+            icon={Columns2}
+            title="Three panes"
+            detail="List and message side by side"
+          />
+          <Choice<Layout>
+            value="list"
+            current={layout}
+            onPick={setLayout}
+            icon={Rows3}
+            title="List, then message"
+            detail="Opening a message replaces the list"
+          />
         </div>
       </Card>
     </>

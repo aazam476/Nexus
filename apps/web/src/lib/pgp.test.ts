@@ -18,7 +18,11 @@ describe('PGP', () => {
   it('round-trips an encrypted, signed message', async () => {
     const alice = await generateKey('Alice', 'alice@example.com', 'alice pass')
     const bob = await generateKey('Bob', 'bob@example.com', 'bob pass')
-    const armored = await encryptText('Hello Bob', [bob.publicKey], await unlock(alice.encryptedPrivateKey, 'alice pass'))
+    const armored = await encryptText(
+      'Hello Bob',
+      [bob.publicKey],
+      await unlock(alice.encryptedPrivateKey, 'alice pass'),
+    )
     expect(armored).toContain('-----BEGIN PGP MESSAGE-----')
     expect(armored).not.toContain('Hello Bob')
     expect(await decrypt(armored, await unlock(bob.encryptedPrivateKey, 'bob pass'))).toBe('Hello Bob')
@@ -31,7 +35,12 @@ describe('PGP', () => {
   })
 
   it('locks an imported unprotected key with the passphrase, and refuses a wrong one for a protected key', async () => {
-    const { privateKey } = await openpgp.generateKey({ type: 'ecc', curve: 'curve25519Legacy', userIDs: [{ email: 'x@y.z' }], format: 'armored' })
+    const { privateKey } = await openpgp.generateKey({
+      type: 'ecc',
+      curve: 'curve25519Legacy',
+      userIDs: [{ email: 'x@y.z' }],
+      format: 'armored',
+    })
     const imported = await importPrivateKey(privateKey, 'new passphrase')
     expect((await openpgp.readPrivateKey({ armoredKey: imported.encryptedPrivateKey })).isDecrypted()).toBe(false)
     await expect(importPrivateKey(imported.encryptedPrivateKey, 'wrong')).rejects.toThrow('does not unlock')

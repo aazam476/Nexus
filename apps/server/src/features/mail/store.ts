@@ -38,12 +38,32 @@ export interface SortDecision {
 // What should happen to a message that just arrived in the inbox.
 export function sortIncoming(parsed: ParsedMessage, context: SortingContext): SortDecision {
   const outcome = applyRules(
-    { fromEmail: parsed.from.email, fromName: parsed.from.name, to: parsed.to.map((p) => p.email), subject: parsed.subject, text: parsed.text ?? '' },
+    {
+      fromEmail: parsed.from.email,
+      fromName: parsed.from.name,
+      to: parsed.to.map((p) => p.email),
+      subject: parsed.subject,
+      text: parsed.text ?? '',
+    },
     context.rules,
   )
-  const spam = outcome.spam || isSpam({ fromEmail: parsed.from.email, spamFlag: parsed.spamFlag, spamScore: parsed.spamScore }, context.blocked, context.spamThreshold)
+  const spam =
+    outcome.spam ||
+    isSpam(
+      { fromEmail: parsed.from.email, spamFlag: parsed.spamFlag, spamScore: parsed.spamScore },
+      context.blocked,
+      context.spamThreshold,
+    )
   return {
-    category: outcome.category ?? classify({ fromEmail: parsed.from.email, subject: parsed.subject, isMailingList: parsed.isMailingList, isAutomated: parsed.isAutomated, hasEvent: !!parsed.event }),
+    category:
+      outcome.category ??
+      classify({
+        fromEmail: parsed.from.email,
+        subject: parsed.subject,
+        isMailingList: parsed.isMailingList,
+        isAutomated: parsed.isAutomated,
+        hasEvent: !!parsed.event,
+      }),
     labels: outcome.labels,
     markRead: outcome.markRead,
     moveTo: spam ? 'spam' : outcome.moveTo,
@@ -90,7 +110,18 @@ export async function saveMessage(input: SaveInput): Promise<boolean> {
     security: parsed.security,
     event: (parsed.event ?? undefined) as Prisma.InputJsonValue | undefined,
     raw: Uint8Array.from(input.raw),
-    ...(input.sealFor && sealedFields({ raw: input.raw, html: parsed.html, text: parsed.text, preview: parsed.preview, attachments: parsed.attachments, event: parsed.event }, input.sealFor)),
+    ...(input.sealFor &&
+      sealedFields(
+        {
+          raw: input.raw,
+          html: parsed.html,
+          text: parsed.text,
+          preview: parsed.preview,
+          attachments: parsed.attachments,
+          event: parsed.event,
+        },
+        input.sealFor,
+      )),
   }
   try {
     await db.message.create({ data })

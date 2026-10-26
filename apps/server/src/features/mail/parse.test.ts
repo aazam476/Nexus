@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { parseRaw } from './parse.ts'
 
-const mail = (headers: string, body = 'hi') => Buffer.from(`From: Sender <s@example.com>\r\nTo: a@b.c\r\nSubject: Test\r\n${headers}\r\n${body}\r\n`)
+const mail = (headers: string, body = 'hi') =>
+  Buffer.from(`From: Sender <s@example.com>\r\nTo: a@b.c\r\nSubject: Test\r\n${headers}\r\n${body}\r\n`)
 
 describe('parseRaw', () => {
   it('spots mailing lists from any List-* header', async () => {
@@ -17,9 +18,26 @@ describe('parseRaw', () => {
   })
 
   it('detects PGP and S/MIME', async () => {
-    expect((await parseRaw(mail('', '-----BEGIN PGP MESSAGE-----\r\nabc\r\n-----END PGP MESSAGE-----'))).security).toBe('pgp-encrypted')
-    expect((await parseRaw(mail('MIME-Version: 1.0\r\nContent-Type: multipart/signed; protocol="application/pkcs7-signature"; boundary=x\r\n', '--x\r\n\r\nhi\r\n--x--'))).security).toBe('smime-signed')
-    expect((await parseRaw(mail('MIME-Version: 1.0\r\nContent-Type: application/pkcs7-mime; smime-type=enveloped-data\r\n', 'AAAA'))).security).toBe('smime-encrypted')
+    expect((await parseRaw(mail('', '-----BEGIN PGP MESSAGE-----\r\nabc\r\n-----END PGP MESSAGE-----'))).security).toBe(
+      'pgp-encrypted',
+    )
+    expect(
+      (
+        await parseRaw(
+          mail(
+            'MIME-Version: 1.0\r\nContent-Type: multipart/signed; protocol="application/pkcs7-signature"; boundary=x\r\n',
+            '--x\r\n\r\nhi\r\n--x--',
+          ),
+        )
+      ).security,
+    ).toBe('smime-signed')
+    expect(
+      (
+        await parseRaw(
+          mail('MIME-Version: 1.0\r\nContent-Type: application/pkcs7-mime; smime-type=enveloped-data\r\n', 'AAAA'),
+        )
+      ).security,
+    ).toBe('smime-encrypted')
   })
 
   it('treats Auto-Submitted mail as automated, unless it says "no"', async () => {

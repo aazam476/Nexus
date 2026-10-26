@@ -29,7 +29,20 @@ export function buildSafeEmailDocument(dirtyHtml: string, allowRemoteImages: boo
   })
 
   const clean = DOMPurify.sanitize(dirtyHtml, {
-    FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'iframe', 'object', 'embed', 'link', 'meta', 'base'],
+    FORBID_TAGS: [
+      'style',
+      'form',
+      'input',
+      'button',
+      'textarea',
+      'select',
+      'iframe',
+      'object',
+      'embed',
+      'link',
+      'meta',
+      'base',
+    ],
     FORBID_ATTR: ['srcset', 'background', 'action', 'formaction'],
     ALLOW_DATA_ATTR: false,
   })
@@ -57,7 +70,20 @@ export function buildSafeEmailDocument(dirtyHtml: string, allowRemoteImages: boo
 // A shared account's signature can be edited by other people, so it is never trusted as-is.
 export function sanitizeForEditor(dirtyHtml: string): string {
   return DOMPurify.sanitize(dirtyHtml, {
-    FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'iframe', 'object', 'embed', 'link', 'meta', 'base'],
+    FORBID_TAGS: [
+      'style',
+      'form',
+      'input',
+      'button',
+      'textarea',
+      'select',
+      'iframe',
+      'object',
+      'embed',
+      'link',
+      'meta',
+      'base',
+    ],
     ALLOW_DATA_ATTR: false,
     ADD_ATTR: ['data-signature'], // marks where the signature starts, see compose.ts
   })

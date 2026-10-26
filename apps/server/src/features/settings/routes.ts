@@ -21,7 +21,9 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   // ---------- Rules ----------
 
-  app.get('/rules', async (request) => db.rule.findMany({ where: { userId: request.user.id }, orderBy: { position: 'asc' } }))
+  app.get('/rules', async (request) =>
+    db.rule.findMany({ where: { userId: request.user.id }, orderBy: { position: 'asc' } }),
+  )
 
   app.post('/rules', async (request) => {
     const body = parse(ruleFields, request.body)
@@ -49,10 +51,22 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   // ---------- Blocked senders ----------
 
-  app.get('/blocked', async (request) => (await db.blockedSender.findMany({ where: { userId: request.user.id } })).map((b) => b.pattern))
+  app.get('/blocked', async (request) =>
+    (await db.blockedSender.findMany({ where: { userId: request.user.id } })).map((b) => b.pattern),
+  )
 
   app.post('/blocked', async (request) => {
-    const { pattern } = parse(z.object({ pattern: z.string().trim().toLowerCase().min(3).regex(/^[^\s]+\.[^\s]+$/, 'Enter an address or a domain') }), request.body)
+    const { pattern } = parse(
+      z.object({
+        pattern: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .min(3)
+          .regex(/^[^\s]+\.[^\s]+$/, 'Enter an address or a domain'),
+      }),
+      request.body,
+    )
     const key = { userId: request.user.id, pattern: pattern.replace(/^@/, '') }
     await db.blockedSender.upsert({ where: { userId_pattern: key }, create: key, update: {} })
     return { ok: true }
@@ -65,12 +79,21 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   // ---------- Labels ----------
 
-  app.get('/labels', async (request) => db.label.findMany({ where: { userId: request.user.id }, orderBy: { name: 'asc' } }))
+  app.get('/labels', async (request) =>
+    db.label.findMany({ where: { userId: request.user.id }, orderBy: { name: 'asc' } }),
+  )
 
   app.put('/labels', async (request) => {
-    const body = parse(z.object({ name: z.string().trim().min(1).max(40), color: z.string().regex(/^#[0-9a-f]{6}$/i) }), request.body)
+    const body = parse(
+      z.object({ name: z.string().trim().min(1).max(40), color: z.string().regex(/^#[0-9a-f]{6}$/i) }),
+      request.body,
+    )
     const key = { userId: request.user.id, name: body.name }
-    await db.label.upsert({ where: { userId_name: key }, create: { ...key, color: body.color }, update: { color: body.color } })
+    await db.label.upsert({
+      where: { userId_name: key },
+      create: { ...key, color: body.color },
+      update: { color: body.color },
+    })
     return { ok: true }
   })
 

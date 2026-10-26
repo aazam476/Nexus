@@ -32,9 +32,15 @@ export function AppShell() {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (isTyping(event)) return
-      if (event.key === 'c') { event.preventDefault(); openComposer() }
+      if (event.key === 'c') {
+        event.preventDefault()
+        openComposer()
+      }
       if (event.key === '?') setHelpOpen((open) => !open)
-      if (event.key === 'Escape') { setHelpOpen(false); setNavOpen(false) }
+      if (event.key === 'Escape') {
+        setHelpOpen(false)
+        setNavOpen(false)
+      }
       if (event.key === ',') navigate('/settings')
     }
     window.addEventListener('keydown', onKey)
@@ -45,7 +51,11 @@ export function AppShell() {
   if (!me.data) {
     return (
       <div className="grid h-full place-items-center" aria-busy="true">
-        {me.error ? <p className="text-danger">Can’t reach the Nexus server. {me.error.message}</p> : <Logo size={40} />}
+        {me.error ? (
+          <p className="text-danger">Can’t reach the Nexus server. {me.error.message}</p>
+        ) : (
+          <Logo size={40} />
+        )}
       </div>
     )
   }
@@ -58,7 +68,12 @@ export function AppShell() {
 
       {navOpen && (
         <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Mailboxes">
-          <button type="button" aria-label="Close menu" className="absolute inset-0 bg-black/50" onClick={() => setNavOpen(false)} />
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setNavOpen(false)}
+          />
           <aside className="absolute inset-y-0 left-0 w-[280px] border-r border-line shadow-pop">
             <Sidebar onNavigate={() => setNavOpen(false)} />
           </aside>

@@ -37,18 +37,26 @@ const query = (params: Record<string, string | null | undefined>) => {
 // Mail changes in the background (sync runs every 2 minutes), so lists refresh on their own.
 const live = { refetchInterval: 60_000, refetchOnWindowFocus: true }
 
-export const useMe = () => useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/auth/me'), retry: false, staleTime: 5 * 60_000 })
+export const useMe = () =>
+  useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/auth/me'), retry: false, staleTime: 5 * 60_000 })
 export const useAccounts = () => useQuery({ queryKey: ['accounts'], queryFn: () => api<Account[]>('/accounts') })
 export const useCounts = () => useQuery({ queryKey: ['counts'], queryFn: () => api<Counts>('/counts'), ...live })
-export const useLabels = () => useQuery({ queryKey: ['labels'], queryFn: () => api<{ name: string; color: string }[]>('/labels') })
+export const useLabels = () =>
+  useQuery({ queryKey: ['labels'], queryFn: () => api<{ name: string; color: string }[]>('/labels') })
 
 export const useMessages = (q: MessageQuery) =>
-  useQuery({ queryKey: ['messages', q], queryFn: () => api<Message[]>(`/messages${query({ ...q, limit: q.limit ? String(q.limit) : undefined })}`), ...live, placeholderData: (previous) => previous })
+  useQuery({
+    queryKey: ['messages', q],
+    queryFn: () => api<Message[]>(`/messages${query({ ...q, limit: q.limit ? String(q.limit) : undefined })}`),
+    ...live,
+    placeholderData: (previous) => previous,
+  })
 
 export const useMessage = (id: string | undefined) =>
   useQuery({ queryKey: ['message', id], queryFn: () => api<Message>(`/messages/${id}`), enabled: !!id })
 
-export const useContacts = (q = '') => useQuery({ queryKey: ['contacts', q], queryFn: () => api<Contact[]>(`/contacts${query({ q })}`) })
+export const useContacts = (q = '') =>
+  useQuery({ queryKey: ['contacts', q], queryFn: () => api<Contact[]>(`/contacts${query({ q })}`) })
 export const usePlugins = () => useQuery({ queryKey: ['plugins'], queryFn: () => api<Plugin[]>('/plugins') })
 export const useRules = () => useQuery({ queryKey: ['rules'], queryFn: () => api<Rule[]>('/rules') })
 export const useBlocked = () => useQuery({ queryKey: ['blocked'], queryFn: () => api<string[]>('/blocked') })

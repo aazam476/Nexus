@@ -53,7 +53,11 @@ test.describe('in a narrow desktop window', () => {
 
 test('previews and forwards attachments', async ({ page }) => {
   const title = subject('Files inside')
-  await deliver(run().mailbox, { subject: title, text: 'See attached', attachments: [{ filename: 'notes.txt', content: 'Gate B12, seat 14C' }] })
+  await deliver(run().mailbox, {
+    subject: title,
+    text: 'See attached',
+    attachments: [{ filename: 'notes.txt', content: 'Gate B12, seat 14C' }],
+  })
   await page.goto('/mail/inbox')
   await syncUntil(page, title)
   await page.getByRole('button', { name: new RegExp(title) }).click()
@@ -95,7 +99,11 @@ test('saves an attachment to Paperless through its plugin', async ({ page }) => 
     await expect(card.getByRole('switch', { name: 'Turn Paperless-ngx on' })).toHaveAttribute('aria-checked', 'true')
 
     const title = subject('Invoice')
-    await deliver(run().mailbox, { subject: title, text: 'x', attachments: [{ filename: 'invoice.pdf', content: '%PDF-1.4 invoice', contentType: 'application/pdf' }] })
+    await deliver(run().mailbox, {
+      subject: title,
+      text: 'x',
+      attachments: [{ filename: 'invoice.pdf', content: '%PDF-1.4 invoice', contentType: 'application/pdf' }],
+    })
     await page.goto('/mail/inbox')
     await syncUntil(page, title)
     await page.getByRole('button', { name: new RegExp(title) }).click()
@@ -114,7 +122,9 @@ test('imports an .eml file and offers exports', async ({ page }) => {
   await page.locator('input[name=files]').setInputFiles({
     name: 'old.eml',
     mimeType: 'message/rfc822',
-    buffer: Buffer.from(`From: Old <old@friend.test>\r\nTo: me@nexus.test\r\nSubject: ${title}\r\nDate: Mon, 1 Jan 2024 10:00:00 +0000\r\n\r\nHello from the past\r\n`),
+    buffer: Buffer.from(
+      `From: Old <old@friend.test>\r\nTo: me@nexus.test\r\nSubject: ${title}\r\nDate: Mon, 1 Jan 2024 10:00:00 +0000\r\n\r\nHello from the past\r\n`,
+    ),
   })
   await page.getByRole('button', { name: 'Import' }).click()
   await expect(page.getByText(/Imported 1 message/)).toBeVisible()
@@ -126,7 +136,9 @@ test('imports an .eml file and offers exports', async ({ page }) => {
 test('edits an account, its signature, and shares it with another person', async ({ page }) => {
   const { mailbox } = run()
   const friend = `Dana ${Date.now().toString(36)}`
-  await page.request.post('/api/users', { data: { name: friend, email: uniqueAddress('dana'), password: 'danas long password' } })
+  await page.request.post('/api/users', {
+    data: { name: friend, email: uniqueAddress('dana'), password: 'danas long password' },
+  })
 
   await page.goto('/settings/accounts')
   await page.getByRole('button', { name: 'Edit' }).first().click()
@@ -139,7 +151,11 @@ test('edits an account, its signature, and shares it with another person', async
   await signature.click()
   await page.keyboard.type('Ada, from Nexus')
   await page.getByRole('heading', { name: 'Signatures' }).click() // saved when you click away
-  await expect.poll(async () => ((await (await page.request.get('/api/accounts')).json()) as { signature: string }[])[0].signature).toContain('Ada, from Nexus')
+  await expect
+    .poll(
+      async () => ((await (await page.request.get('/api/accounts')).json()) as { signature: string }[])[0].signature,
+    )
+    .toContain('Ada, from Nexus')
 
   await page.goto('/settings/sharing')
   const person = page.getByLabel('Person to share with').first()
@@ -156,7 +172,13 @@ test('imports vCards, and emails a contact from their page', async ({ page }) =>
   await page.goto('/contacts')
   const picker = page.waitForEvent('filechooser')
   await page.getByRole('button', { name: 'Import vCard' }).click()
-  await (await picker).setFiles({ name: 'friends.vcf', mimeType: 'text/vcard', buffer: Buffer.from(`BEGIN:VCARD\r\nVERSION:3.0\r\nFN:${name}\r\nEMAIL:lin@example.test\r\nEND:VCARD\r\n`) })
+  await (
+    await picker
+  ).setFiles({
+    name: 'friends.vcf',
+    mimeType: 'text/vcard',
+    buffer: Buffer.from(`BEGIN:VCARD\r\nVERSION:3.0\r\nFN:${name}\r\nEMAIL:lin@example.test\r\nEND:VCARD\r\n`),
+  })
   await page.getByRole('link', { name: new RegExp(name) }).click()
   await page.getByRole('button', { name: 'Email' }).click()
   await expect(page.getByRole('region', { name: 'New message' }).getByText('lin@example.test')).toBeVisible()

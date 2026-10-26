@@ -6,7 +6,10 @@ function fakeServer(status: number, body: unknown, contentType = 'application/js
   const calls: { url: string; init: RequestInit }[] = []
   vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
     calls.push({ url, init })
-    return new Response(contentType ? JSON.stringify(body) : null, { status, headers: contentType ? { 'content-type': contentType } : {} })
+    return new Response(contentType ? JSON.stringify(body) : null, {
+      status,
+      headers: contentType ? { 'content-type': contentType } : {},
+    })
   })
   return calls
 }
@@ -19,7 +22,11 @@ describe('api', () => {
     expect(await api('/accounts')).toEqual({ ok: true })
     await api('/send', { body: { to: ['a@b.test'] } })
     expect(calls[0]).toMatchObject({ url: '/api/accounts', init: { method: 'GET', credentials: 'same-origin' } })
-    expect(calls[1].init).toMatchObject({ method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"to":["a@b.test"]}' })
+    expect(calls[1].init).toMatchObject({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"to":["a@b.test"]}',
+    })
   })
 
   it('has short forms for PUT, PATCH and DELETE', async () => {

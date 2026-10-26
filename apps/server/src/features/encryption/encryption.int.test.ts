@@ -27,7 +27,10 @@ describe('PGP keys', () => {
 
     await browser.json('POST', `/api/pgp/keys/${second.id}/default`)
     const keys = await browser.json<{ id: string; isDefault: boolean }[]>('GET', '/api/pgp/keys')
-    expect(keys.map((k) => [k.id, k.isDefault])).toEqual([[first.id, false], [second.id, true]])
+    expect(keys.map((k) => [k.id, k.isDefault])).toEqual([
+      [first.id, false],
+      [second.id, true],
+    ])
 
     await browser.json('DELETE', `/api/pgp/keys/${first.id}`)
     expect(await browser.json('GET', '/api/pgp/keys')).toHaveLength(1)
@@ -42,8 +45,15 @@ describe('PGP keys', () => {
   it('finds the keys to encrypt to: contacts’ keys, plus your own so you can read what you sent', async () => {
     const { browser } = await signedInUser(app)
     await browser.json('POST', '/api/pgp/keys', key('c'.repeat(40)))
-    await browser.json('POST', '/api/contacts', { name: 'Has key', emails: ['friend@x.test'], pgpPublicKey: 'FRIEND KEY' })
+    await browser.json('POST', '/api/contacts', {
+      name: 'Has key',
+      emails: ['friend@x.test'],
+      pgpPublicKey: 'FRIEND KEY',
+    })
     const result = await browser.json('POST', '/api/pgp/recipients', { emails: ['Friend@x.test', 'stranger@x.test'] })
-    expect(result).toEqual({ keys: { 'friend@x.test': 'FRIEND KEY', 'stranger@x.test': null }, ownKey: key('c'.repeat(40)).publicKey })
+    expect(result).toEqual({
+      keys: { 'friend@x.test': 'FRIEND KEY', 'stranger@x.test': null },
+      ownKey: key('c'.repeat(40)).publicKey,
+    })
   })
 })

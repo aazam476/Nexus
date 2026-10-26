@@ -2,7 +2,12 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 
-const scryptAsync = promisify(scrypt) as (password: string, salt: Buffer, keylen: number, options: object) => Promise<Buffer>
+const scryptAsync = promisify(scrypt) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+  options: object,
+) => Promise<Buffer>
 
 // ---------- Passwords ----------
 // scrypt with a random salt. Stored as "scrypt$N$r$p$salt$hash" so parameters can change later.
@@ -18,7 +23,12 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const [algorithm, N, r, p, salt, hash] = stored.split('$')
   if (algorithm !== 'scrypt') return false
   const expected = Buffer.from(hash, 'base64')
-  const actual = await scryptAsync(password, Buffer.from(salt, 'base64'), expected.length, { N: Number(N), r: Number(r), p: Number(p), maxmem: SCRYPT.maxmem })
+  const actual = await scryptAsync(password, Buffer.from(salt, 'base64'), expected.length, {
+    N: Number(N),
+    r: Number(r),
+    p: Number(p),
+    maxmem: SCRYPT.maxmem,
+  })
   return timingSafeEqual(actual, expected)
 }
 

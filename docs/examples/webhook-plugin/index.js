@@ -8,12 +8,22 @@ export default {
   description: 'POST attachments and events to a URL of your choice (n8n, Node-RED, Home Assistant…).',
   author: 'Your name',
   settings: [
-    { key: 'url', label: 'Webhook URL', type: 'url', placeholder: 'https://n8n.example.com/webhook/nexus', required: true },
+    {
+      key: 'url',
+      label: 'Webhook URL',
+      type: 'url',
+      placeholder: 'https://n8n.example.com/webhook/nexus',
+      required: true,
+    },
     { key: 'secret', label: 'Shared secret (sent as X-Nexus-Secret)', type: 'password' },
   ],
 
   async testConnection(settings) {
-    const response = await fetch(settings.url, { method: 'POST', headers: headers(settings), body: JSON.stringify({ type: 'test' }) })
+    const response = await fetch(settings.url, {
+      method: 'POST',
+      headers: headers(settings),
+      body: JSON.stringify({ type: 'test' }),
+    })
     if (!response.ok) throw new Error(`The webhook answered ${response.status}`)
   },
 
@@ -21,14 +31,23 @@ export default {
     const response = await fetch(settings.url, {
       method: 'POST',
       headers: headers(settings),
-      body: JSON.stringify({ type: 'attachment', filename: file.filename, contentType: file.contentType, content: file.content.toString('base64') }),
+      body: JSON.stringify({
+        type: 'attachment',
+        filename: file.filename,
+        contentType: file.contentType,
+        content: file.content.toString('base64'),
+      }),
     })
     if (!response.ok) throw new Error(`The webhook answered ${response.status}`)
     return {}
   },
 
   async createEvent(event, settings) {
-    const response = await fetch(settings.url, { method: 'POST', headers: headers(settings), body: JSON.stringify({ type: 'event', event }) })
+    const response = await fetch(settings.url, {
+      method: 'POST',
+      headers: headers(settings),
+      body: JSON.stringify({ type: 'event', event }),
+    })
     if (!response.ok) throw new Error(`The webhook answered ${response.status}`)
     return {}
   },

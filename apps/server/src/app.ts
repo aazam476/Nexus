@@ -66,7 +66,16 @@ export async function buildApp() {
 
   await app.register(authRoutes, { prefix: '/api/auth' })
   await app.register(userRoutes, { prefix: '/api/users' })
-  for (const routes of [accountRoutes, mailRoutes, sendRoutes, contactRoutes, settingsRoutes, encryptionRoutes, pluginRoutes, importExportRoutes]) {
+  for (const routes of [
+    accountRoutes,
+    mailRoutes,
+    sendRoutes,
+    contactRoutes,
+    settingsRoutes,
+    encryptionRoutes,
+    pluginRoutes,
+    importExportRoutes,
+  ]) {
     await app.register(routes, { prefix: '/api' })
   }
 

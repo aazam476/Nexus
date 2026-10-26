@@ -19,5 +19,7 @@ for (const [name, file] of reports) {
   const path = resolve(import.meta.dirname, '..', file)
   if (!existsSync(path)) continue
   const { total } = JSON.parse(readFileSync(path, 'utf8'))
-  console.log(`| ${name} | ${percent(total.lines)} | ${percent(total.statements)} | ${percent(total.branches)} | ${percent(total.functions)} |`)
+  console.log(
+    `| ${name} | ${percent(total.lines)} | ${percent(total.statements)} | ${percent(total.branches)} | ${percent(total.functions)} |`,
+  )
 }

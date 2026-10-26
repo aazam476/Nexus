@@ -12,8 +12,19 @@ afterAll(() => app.close())
 describe('rules', () => {
   it('adds rules in order, edits, turns off and deletes them', async () => {
     const { browser } = await signedInUser(app)
-    const first = await browser.json('POST', '/api/rules', { name: 'Shop', field: 'from', contains: 'shop.test', action: 'move', value: 'archive' })
-    const second = await browser.json('POST', '/api/rules', { name: 'Read', field: 'subject', contains: 'digest', action: 'mark-read' })
+    const first = await browser.json('POST', '/api/rules', {
+      name: 'Shop',
+      field: 'from',
+      contains: 'shop.test',
+      action: 'move',
+      value: 'archive',
+    })
+    const second = await browser.json('POST', '/api/rules', {
+      name: 'Read',
+      field: 'subject',
+      contains: 'digest',
+      action: 'mark-read',
+    })
     expect([first.position, second.position]).toEqual([0, 1])
 
     await browser.json('PATCH', `/api/rules/${first.id}`, { enabled: false, contains: 'store.test' })
@@ -26,14 +37,24 @@ describe('rules', () => {
 
   it('creates the label a rule adds, so it shows in the sidebar', async () => {
     const { browser } = await signedInUser(app)
-    await browser.json('POST', '/api/rules', { name: 'Invoices', field: 'subject', contains: 'invoice', action: 'label', value: 'Receipts' })
+    await browser.json('POST', '/api/rules', {
+      name: 'Invoices',
+      field: 'subject',
+      contains: 'invoice',
+      action: 'label',
+      value: 'Receipts',
+    })
     expect((await browser.json('GET', '/api/labels')).map((l: { name: string }) => l.name)).toEqual(['Receipts'])
   })
 
   it('rejects rules with unknown fields or actions', async () => {
     const { browser } = await signedInUser(app)
-    expect((await browser.post('/api/rules', { name: 'x', field: 'cc', contains: 'a', action: 'label' })).statusCode).toBe(400)
-    expect((await browser.post('/api/rules', { name: 'x', field: 'from', contains: 'a', action: 'forward' })).statusCode).toBe(400)
+    expect(
+      (await browser.post('/api/rules', { name: 'x', field: 'cc', contains: 'a', action: 'label' })).statusCode,
+    ).toBe(400)
+    expect(
+      (await browser.post('/api/rules', { name: 'x', field: 'from', contains: 'a', action: 'forward' })).statusCode,
+    ).toBe(400)
   })
 })
 

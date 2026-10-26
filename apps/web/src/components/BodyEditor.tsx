@@ -80,7 +80,8 @@ function insertImages(files: Iterable<File>) {
     if (!file.type.startsWith('image/')) continue
     const reader = new FileReader()
     // Inline as a data: URL while composing; the server turns these into cid: attachments on send.
-    reader.onload = () => run('insertHTML', `<img src="${reader.result}" alt="${file.name.replace(/"/g, '')}" style="max-width:100%">`)
+    reader.onload = () =>
+      run('insertHTML', `<img src="${reader.result}" alt="${file.name.replace(/"/g, '')}" style="max-width:100%">`)
     reader.readAsDataURL(file)
   }
 }
@@ -91,36 +92,84 @@ function RichToolbar() {
     { icon: Bold, label: 'Bold', action: () => run('bold') },
     { icon: Italic, label: 'Italic', action: () => run('italic') },
     { icon: Underline, label: 'Underline', action: () => run('underline') },
-    { icon: Link2, label: 'Link', action: () => { const url = prompt('Link address'); if (url) run('createLink', url) } },
+    {
+      icon: Link2,
+      label: 'Link',
+      action: () => {
+        const url = prompt('Link address')
+        if (url) run('createLink', url)
+      },
+    },
     { icon: List, label: 'Bulleted list', action: () => run('insertUnorderedList') },
     { icon: ListOrdered, label: 'Numbered list', action: () => run('insertOrderedList') },
     { icon: Quote, label: 'Quote', action: () => run('formatBlock', 'blockquote') },
     { icon: ImagePlus, label: 'Insert image', action: () => picker.current?.click() },
   ]
   return (
-    <div role="toolbar" aria-label="Formatting" className="flex min-w-0 items-center gap-0.5 overflow-x-auto max-sm:[mask-image:linear-gradient(to_right,black_85%,transparent)] max-sm:pr-6 [&>*]:shrink-0">
+    <div
+      role="toolbar"
+      aria-label="Formatting"
+      className="flex min-w-0 items-center gap-0.5 overflow-x-auto max-sm:[mask-image:linear-gradient(to_right,black_85%,transparent)] max-sm:pr-6 [&>*]:shrink-0"
+    >
       <select
         aria-label="Font"
         defaultValue=""
         onFocus={saveSelection}
-        onChange={(e) => { restoreSelection(); run('styleWithCSS', 'true'); run('fontName', e.target.value); e.target.value = '' }}
+        onChange={(e) => {
+          restoreSelection()
+          run('styleWithCSS', 'true')
+          run('fontName', e.target.value)
+          e.target.value = ''
+        }}
         className="mr-1 rounded-md bg-transparent px-1.5 py-1 text-[12.5px] hover:bg-raise hover:text-ink"
       >
-        <option value="" disabled>Font</option>
-        {fonts.map((font) => <option key={font.label} value={font.value} style={{ fontFamily: font.value }}>{font.label}</option>)}
+        <option value="" disabled>
+          Font
+        </option>
+        {fonts.map((font) => (
+          <option key={font.label} value={font.value} style={{ fontFamily: font.value }}>
+            {font.label}
+          </option>
+        ))}
       </select>
       {tools.map(({ icon: Icon, label, action }) => (
         // preventDefault on mousedown keeps the text selection in the editor.
-        <button key={label} type="button" title={label} aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={action} className="rounded-md p-1.5 hover:bg-raise hover:text-ink">
+        <button
+          key={label}
+          type="button"
+          title={label}
+          aria-label={label}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={action}
+          className="rounded-md p-1.5 hover:bg-raise hover:text-ink"
+        >
           <Icon size={15} />
         </button>
       ))}
-      <input ref={picker} type="file" accept="image/*" multiple hidden onChange={(e) => { insertImages(e.target.files ?? []); e.target.value = '' }} />
+      <input
+        ref={picker}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          insertImages(e.target.files ?? [])
+          e.target.value = ''
+        }}
+      />
     </div>
   )
 }
 
-function RichEditor({ content, version, onChange }: { content: string; version: number; onChange: (html: string) => void }) {
+function RichEditor({
+  content,
+  version,
+  onChange,
+}: {
+  content: string
+  version: number
+  onChange: (html: string) => void
+}) {
   const editor = useRef<HTMLDivElement>(null)
 
   // Load content only when the composer replaces it; otherwise the browser owns the DOM while typing.
@@ -130,12 +179,18 @@ function RichEditor({ content, version, onChange }: { content: string; version: 
 
   function onPaste(event: ClipboardEvent<HTMLDivElement>) {
     const images = Array.from(event.clipboardData.files).filter((f) => f.type.startsWith('image/'))
-    if (images.length) { event.preventDefault(); insertImages(images) }
+    if (images.length) {
+      event.preventDefault()
+      insertImages(images)
+    }
   }
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
     const images = Array.from(event.dataTransfer.files).filter((f) => f.type.startsWith('image/'))
-    if (images.length) { event.preventDefault(); insertImages(images) }
+    if (images.length) {
+      event.preventDefault()
+      insertImages(images)
+    }
   }
 
   return (

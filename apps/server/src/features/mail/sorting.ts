@@ -11,12 +11,14 @@ interface Classifiable {
   hasEvent: boolean
 }
 
-const automatedSender = /^(no-?reply|do-?not-?reply|notifications?|notify|alerts?|mailer-daemon|postmaster|bounces?|billing|invoices?|receipts?|accounts?|security|admin|system)([+.\-_@]|$)/i
+const automatedSender =
+  /^(no-?reply|do-?not-?reply|notifications?|notify|alerts?|mailer-daemon|postmaster|bounces?|billing|invoices?|receipts?|accounts?|security|admin|system)([+.\-_@]|$)/i
 const travelSubject = /\b(booking|itinerary|boarding pass|e-?ticket|flight|check-?in|reservation|your trip)\b/i
 
 export function classify(message: Classifiable): Category {
   if (message.hasEvent || travelSubject.test(message.subject)) return 'travel'
-  if (message.isAutomated || automatedSender.test(message.fromEmail) || message.fromEmail.includes('noreply')) return 'notifications'
+  if (message.isAutomated || automatedSender.test(message.fromEmail) || message.fromEmail.includes('noreply'))
+    return 'notifications'
   if (message.isMailingList) return 'newsletters'
   return 'people'
 }
@@ -51,12 +53,13 @@ export function applyRules(message: Matchable, rules: RuleInput[]): RuleOutcome 
   const outcome: RuleOutcome = { labels: [], markRead: false, spam: false }
   for (const rule of rules) {
     if (!rule.enabled || !rule.contains) continue
-    const haystack = {
-      from: `${message.fromName} ${message.fromEmail}`,
-      to: message.to.join(' '),
-      subject: message.subject,
-      body: message.text,
-    }[rule.field] ?? ''
+    const haystack =
+      {
+        from: `${message.fromName} ${message.fromEmail}`,
+        to: message.to.join(' '),
+        subject: message.subject,
+        body: message.text,
+      }[rule.field] ?? ''
     if (!haystack.toLowerCase().includes(rule.contains.toLowerCase())) continue
 
     if (rule.action === 'label' && rule.value) outcome.labels.push(rule.value)
@@ -80,7 +83,11 @@ export function isBlocked(fromEmail: string, patterns: string[]): boolean {
   })
 }
 
-export function isSpam(message: { fromEmail: string; spamFlag: boolean; spamScore: number | null }, blocked: string[], threshold: number): boolean {
+export function isSpam(
+  message: { fromEmail: string; spamFlag: boolean; spamScore: number | null },
+  blocked: string[],
+  threshold: number,
+): boolean {
   if (isBlocked(message.fromEmail, blocked)) return true
   if (message.spamScore != null) return message.spamScore >= threshold
   return message.spamFlag
@@ -96,5 +103,10 @@ export function nothingChanged(
   now: { highestModseq: bigint | null; exists: number },
   newMessages: number,
 ): boolean {
-  return now.highestModseq != null && saved.highestModseq === now.highestModseq && saved.lastExists === now.exists && newMessages === 0
+  return (
+    now.highestModseq != null &&
+    saved.highestModseq === now.highestModseq &&
+    saved.lastExists === now.exists &&
+    newMessages === 0
+  )
 }

@@ -38,7 +38,25 @@ describe('POP3 client against a server', async () => {
 
   // A throwaway self-signed certificate for the fake server.
   const dir = mkdtempSync(join(tmpdir(), 'pop3-test-'))
-  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dir, 'key.pem'), '-out', join(dir, 'cert.pem'), '-days', '1', '-subj', '/CN=localhost'], { stdio: 'ignore' })
+  execFileSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-keyout',
+      join(dir, 'key.pem'),
+      '-out',
+      join(dir, 'cert.pem'),
+      '-days',
+      '1',
+      '-subj',
+      '/CN=localhost',
+    ],
+    { stdio: 'ignore' },
+  )
   const tlsOptions = { key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(join(dir, 'cert.pem')) }
   rmSync(dir, { recursive: true, force: true })
 
@@ -68,9 +86,13 @@ describe('POP3 client against a server', async () => {
           else if (verb === 'PASS') send(arg === 'right' ? '+OK logged in' : '-ERR [AUTH] Wrong password')
           else if (verb === 'UIDL') send(`+OK\r\n${mailbox.map((_, i) => `${i + 1} uid-${i + 1}`).join('\r\n')}\r\n.`)
           else if (verb === 'RETR') send(`+OK\r\n${mailbox[Number(arg) - 1].replace(/^\./gm, '..')}.`)
-          else if (verb === 'DELE') { deleted.push(Number(arg)); send('+OK') }
-          else if (verb === 'QUIT') { send('+OK bye'); s.end() }
-          else send('-ERR unknown command')
+          else if (verb === 'DELE') {
+            deleted.push(Number(arg))
+            send('+OK')
+          } else if (verb === 'QUIT') {
+            send('+OK bye')
+            s.end()
+          } else send('-ERR unknown command')
         }
       })
     }
@@ -79,11 +101,21 @@ describe('POP3 client against a server', async () => {
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const port = (server.address() as { port: number }).port
-  const settings = { host: '127.0.0.1', port, tls: false, user: 'ann', password: 'right', tlsOptions: { rejectUnauthorized: false } }
+  const settings = {
+    host: '127.0.0.1',
+    port,
+    tls: false,
+    user: 'ann',
+    password: 'right',
+    tlsOptions: { rejectUnauthorized: false },
+  }
 
   it('upgrades to TLS with STLS, lists, downloads, deletes and quits', async () => {
     const pop3 = await Pop3.open(settings)
-    expect(await pop3.uidl()).toEqual([[1, 'uid-1'], [2, 'uid-2']])
+    expect(await pop3.uidl()).toEqual([
+      [1, 'uid-1'],
+      [2, 'uid-2'],
+    ])
     expect((await pop3.retrieve(2)).toString()).toBe('Subject: Two\r\n\r\n.a line with a dot\r\n')
     await pop3.delete(1)
     await pop3.quit()
