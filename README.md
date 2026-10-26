@@ -247,7 +247,8 @@ never touched.
 ### How the code is laid out
 
 New here? Read [docs/architecture.md](docs/architecture.md) first: it follows a request and a
-message through the code. Email terms are explained in [docs/glossary.md](docs/glossary.md).
+message through the code. Email terms are explained in [docs/glossary.md](docs/glossary.md),
+and [docs/testing.md](docs/testing.md) shows how the tests work and how to write one.
 
 ```
 apps/server/            Fastify API and background jobs. Node runs the .ts files directly, no build step.
@@ -258,8 +259,9 @@ apps/server/            Fastify API and background jobs. Node runs the .ts files
   src/lib/              sessions, access control, encryption, errors
 apps/web/               React + Vite + Tailwind web app
   src/pages/            one file per screen
-  src/components/       pieces shared between screens
-  src/lib/              talking to the API (api.ts, queries.ts), PGP, sanitizing email HTML
+  src/components/       pieces shared between screens; message/ and composer/ hold the parts of
+                        the message reader and the composer
+  src/lib/              talking to the API (api.ts, queries.ts), PGP, sanitizing email HTML, helpers
   e2e/                  browser tests (Playwright)
 .github/workflows/      CI on every push; Docker image publishing on version tags
 ```

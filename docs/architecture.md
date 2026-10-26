@@ -99,3 +99,4 @@ calendar event. Built-in ones live in `apps/server/src/plugins/`; others are loa
 
 Integration and browser tests use their own databases (`nexus_test`, `nexus_e2e_test`), so they
 never touch your development data. CI (`.github/workflows/ci.yml`) runs all of them on every push.
+[testing.md](testing.md) explains how they're set up and how to write one.
