@@ -1,3 +1,4 @@
+// Settings → Password & 2FA: change password, two-factor sign-in, private storage, signed-in devices.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Laptop, Smartphone } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
@@ -214,7 +215,7 @@ function PrivateStorageCard() {
           </form>
         ) : (
           <Button variant={turningOn ? 'primary' : 'secondary'} className="justify-self-start" onClick={() => setAsking(true)}>
-            {turningOn ? 'Turn on private storage' : 'Turn off'}
+            {turningOn ? 'Turn on private storage' : 'Turn off private storage'}
           </Button>
         )}
         {error && <p role="alert" className="text-[13px] text-danger">{error}</p>}

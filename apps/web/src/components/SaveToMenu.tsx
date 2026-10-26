@@ -1,3 +1,4 @@
+// The "Save to…" button on an attachment: sends it to a storage plugin (Immich, Nextcloud, Paperless…).
 import { Check, CloudUpload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
@@ -35,7 +36,8 @@ export function SaveToMenu({ messageId, attachmentId, filename, compact = false 
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Save ${filename} to…`}
+        // The compact button is only an icon, so its name also says how saving went, for screen readers.
+        aria-label={state.busy || state.savedTo || state.error ? `${filename}: ${state.error ?? label}` : `Save ${filename} to…`}
         title={state.error ?? label}
         disabled={!!state.busy}
         onClick={() => setOpen(!open)}

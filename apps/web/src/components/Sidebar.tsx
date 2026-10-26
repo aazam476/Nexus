@@ -1,5 +1,8 @@
-import { Archive, BookUser, Clock, FileText, Inbox, PenLine, Send, Settings, ShieldAlert, Star, Trash2, type LucideIcon } from 'lucide-react'
-import { NavLink, useLocation } from 'react-router'
+// The left-hand navigation: folders with unread counts, accounts, labels, contacts, settings and sync status.
+import { useQueryClient } from '@tanstack/react-query'
+import { Archive, BookUser, Clock, FileText, Inbox, LogOut, PenLine, Send, Settings, ShieldAlert, Star, Trash2, type LucideIcon } from 'lucide-react'
+import { NavLink, useLocation, useNavigate } from 'react-router'
+import { api } from '../lib/api'
 import { useAccounts, useCounts, useLabels } from '../lib/queries'
 import { useStore } from '../lib/store'
 import { timeAgo } from '../lib/format'
@@ -33,6 +36,14 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const counts = useCounts().data
 
   const unreadIn = (role: FolderRole) => counts?.folders[role] ?? 0
+  const client = useQueryClient()
+  const navigate = useNavigate()
+
+  async function signOut() {
+    await api('/auth/logout', { body: {} })
+    client.clear() // forget everything cached for this user
+    navigate('/login')
+  }
 
   return (
     <nav aria-label="Mailboxes" className="flex h-full flex-col gap-4 overflow-y-auto bg-gradient-to-b from-side to-ground px-2.5 py-3.5">
@@ -96,6 +107,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink to="/settings" onClick={onNavigate} className={({ isActive }) => itemClass(isActive)}>
           <Settings size={16} strokeWidth={1.8} /> Settings
         </NavLink>
+        <button type="button" onClick={signOut} className={itemClass(false)}>
+          <LogOut size={16} strokeWidth={1.8} /> Sign out
+        </button>
         <SyncStatus accounts={accounts} />
       </div>
     </nav>
