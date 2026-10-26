@@ -1,3 +1,4 @@
+// Settings → Appearance: light, dark or system theme, and the three-pane or list layout.
 import { Columns2, Monitor, Moon, Rows3, Sun } from 'lucide-react'
 import { Card } from '../../components/ui'
 import { useStore, type Layout, type Theme } from '../../lib/store'

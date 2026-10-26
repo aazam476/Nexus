@@ -1,3 +1,4 @@
+// The keyboard shortcuts overlay, opened with ?.
 import { X } from 'lucide-react'
 import { Kbd } from './ui'
 

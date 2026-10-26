@@ -1,3 +1,5 @@
+// The message body in the composer: a rich-text editor with a formatting toolbar, or the raw HTML
+// with a live, sandboxed preview.
 import { Bold, ImagePlus, Italic, Link2, List, ListOrdered, Quote, Underline } from 'lucide-react'
 import { useEffect, useMemo, useRef, type ClipboardEvent, type DragEvent } from 'react'
 import type { BodyMode } from '../lib/compose'

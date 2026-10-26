@@ -1,3 +1,4 @@
+// Shows an email's HTML safely. See the comments below and lib/sanitize.ts for how.
 import { ImageOff } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildSafeEmailDocument } from '../lib/sanitize'

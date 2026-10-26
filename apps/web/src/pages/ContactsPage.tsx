@@ -1,3 +1,4 @@
+// The address book: list and search contacts, add or edit one, vCard import/export, and PGP keys per contact.
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Download, KeyRound, Mail, Menu, Plus, Search, Trash2, Upload } from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'

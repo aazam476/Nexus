@@ -2,6 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/aazam476/Nexus/stargazers"><img src="https://img.shields.io/github/stars/aazam476/Nexus?style=flat-square&color=4b55f0&label=stars" alt="Stars"></a>
+  <a href="https://github.com/aazam476/Nexus/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/aazam476/Nexus/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status"></a>
   <a href="https://github.com/aazam476/Nexus/commits/main"><img src="https://img.shields.io/github/last-commit/aazam476/Nexus?style=flat-square&color=4b55f0&label=last%20update" alt="Last update"></a>
   <img src="https://img.shields.io/badge/mail-IMAP%20%7C%20POP3%20%7C%20SMTP%20%7C%20Gmail%20%7C%20Outlook-4b55f0?style=flat-square" alt="IMAP, POP3, SMTP, Gmail and Outlook">
   <img src="https://img.shields.io/badge/runs%20on-Docker-4b55f0?style=flat-square" alt="Runs on Docker">
@@ -223,9 +224,30 @@ password, then fill it with sample mail:
 node scripts/seed-test-mail.ts you@nexus.test
 ```
 
-Run the tests with `npm test`.
+### Tests
+
+Every push runs all of these in CI ([ci.yml](.github/workflows/ci.yml)), and the coverage
+appears in the run's summary.
+
+| Tests | What they check | Run |
+|---|---|---|
+| Unit (`*.test.ts`) | parsing, sorting, encryption and other logic, on their own | `npm test` |
+| Server integration (`*.int.test.ts`) | every API route, against a real database, Redis and the GreenMail test mail server | `npm test` (needs the dev compose services; skipped without them) |
+| Browser (`apps/web/e2e/`) | the main flows in a real Chromium: setup, reading, sending, settings, phones | `npm run test:e2e -w apps/web` |
+
+Before the first browser test run, install Chromium once:
+
+```bash
+npx -w apps/web playwright install chromium
+```
+
+The tests use their own databases (`nexus_test` and `nexus_e2e_test`), so your development data is
+never touched.
 
 ### How the code is laid out
+
+New here? Read [docs/architecture.md](docs/architecture.md) first: it follows a request and a
+message through the code. Email terms are explained in [docs/glossary.md](docs/glossary.md).
 
 ```
 apps/server/            Fastify API and background jobs. Node runs the .ts files directly, no build step.
@@ -238,6 +260,8 @@ apps/web/               React + Vite + Tailwind web app
   src/pages/            one file per screen
   src/components/       pieces shared between screens
   src/lib/              talking to the API (api.ts, queries.ts), PGP, sanitizing email HTML
+  e2e/                  browser tests (Playwright)
+.github/workflows/      CI on every push; Docker image publishing on version tags
 ```
 
 ### How to contribute
@@ -246,12 +270,14 @@ apps/web/               React + Vite + Tailwind web app
   it. Routes stay thin: validate the input with zod (`parse`), check access
   (`requireAccountRole`), then call a plain function.
 - Anything that parses, sorts, encrypts or checks permissions gets a small
-  test next to it (`*.test.ts`).
+  test next to it (`*.test.ts`). A new API route gets an integration test
+  (`*.int.test.ts`), and a new screen or flow a browser test (`apps/web/e2e/`).
 - Write comments that say *why*, not what. If something is knowingly
   incomplete, mark it `shortcut: <the limit>, <when to upgrade>` so it's easy
   to find later.
-- Run `npm test` and the typecheckers (`npx tsc` in `apps/server`,
-  `npx tsc --noEmit` in `apps/web`) before opening a pull request.
+- Run `npm test`, the browser tests and the typecheckers (`npx tsc` in
+  `apps/server`, `npx tsc --noEmit` in `apps/web`) before opening a pull
+  request. CI runs them all too.
 
 ### Security
 

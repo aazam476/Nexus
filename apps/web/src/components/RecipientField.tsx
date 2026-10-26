@@ -1,3 +1,4 @@
+// A To/Cc/Bcc field: addresses become chips, with suggestions from your contacts as you type.
 import { KeyRound, X } from 'lucide-react'
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import { useContacts } from '../lib/queries'

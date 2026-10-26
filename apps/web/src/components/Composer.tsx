@@ -1,3 +1,5 @@
+// Writing a message: recipients, subject, body, attachments, encryption, and sending now or later.
+// Drafts are saved to the server as you type.
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, Clock, Lock, Maximize2, Minimize2, Paperclip, Send, ShieldCheck, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'

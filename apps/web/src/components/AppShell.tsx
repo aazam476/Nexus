@@ -1,3 +1,5 @@
+// The frame around every signed-in page: sidebar, the page itself, the composer and app-wide shortcuts.
+// Sends you to the sign-in page when your session has ended.
 import { useEffect, useState } from 'react'
 import { Navigate, Outlet, useNavigate } from 'react-router'
 import { ApiError } from '../lib/api'

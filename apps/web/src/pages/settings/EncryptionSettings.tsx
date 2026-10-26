@@ -1,3 +1,5 @@
+// Settings → PGP & S/MIME: create or import PGP keys (made and used in this browser) and upload
+// S/MIME certificates (used on the server).
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, KeyRound, Plus, Trash2, Upload } from 'lucide-react'
 import { useState, type FormEvent } from 'react'

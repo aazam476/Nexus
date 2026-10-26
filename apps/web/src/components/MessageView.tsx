@@ -1,3 +1,5 @@
+// Reading one message: the toolbar (reply, archive, spam…), sender and security details, the body,
+// a calendar card for bookings, and the attachments.
 import {
   Archive, ArrowLeft, CalendarPlus, Check, Download, Eye, FileText, Forward, Image, Inbox, KeyRound, Lock, MailOpen, Reply, ReplyAll, ShieldAlert, ShieldCheck, ShieldX, Star, Trash2, X,
 } from 'lucide-react'

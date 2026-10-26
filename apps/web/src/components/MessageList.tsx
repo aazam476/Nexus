@@ -1,3 +1,4 @@
+// The list of messages in a folder, grouped into smart sections (People, Travel, Notifications…) in the inbox.
 import { Archive, ChevronDown, Clock, Columns2, Lock, Menu, Paperclip, PenLine, Rows3, Search, Star } from 'lucide-react'
 import { forwardRef, useState } from 'react'
 import { Link } from 'react-router'

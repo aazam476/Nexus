@@ -1,3 +1,4 @@
+// Settings → Users & sharing: admins add people; owners share their mail accounts as editor or viewer.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { UserPlus } from 'lucide-react'
 import { useState, type FormEvent } from 'react'

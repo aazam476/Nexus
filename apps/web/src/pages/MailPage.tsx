@@ -1,3 +1,5 @@
+// The main mail screen: the message list and the open message, side by side on wide screens,
+// plus the mail keyboard shortcuts (j/k, e, #, !, s, u, r, f).
 import { useQueryClient } from '@tanstack/react-query'
 import { Inbox } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'

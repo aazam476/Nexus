@@ -1,3 +1,4 @@
+// Settings → Rules & spam: rules that sort new mail, and blocked senders.
 import { useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'

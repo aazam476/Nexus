@@ -1,3 +1,4 @@
+// Signing in, and creating the first (admin) account on a new server.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'

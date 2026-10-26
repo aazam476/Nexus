@@ -1,3 +1,4 @@
+// Settings → Plugins: turn plugins on, fill in their settings, and test the connection.
 import { useQueryClient } from '@tanstack/react-query'
 import { CalendarPlus, CloudUpload } from 'lucide-react'
 import { useState, type FormEvent } from 'react'

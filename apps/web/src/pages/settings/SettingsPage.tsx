@@ -1,3 +1,4 @@
+// The settings screen: the list of sections on the left, the chosen section on the right.
 import { ArrowLeft, ArrowRightLeft, AtSign, Filter, KeyRound, Menu, Palette, Puzzle, Shield, Users, type LucideIcon } from 'lucide-react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import type { ShellContext } from '../../components/AppShell'

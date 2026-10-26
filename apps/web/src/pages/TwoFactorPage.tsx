@@ -1,3 +1,4 @@
+// The second sign-in step: a 6-digit code from an authenticator app, or a recovery code.
 import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from 'react-router'

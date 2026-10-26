@@ -1,3 +1,5 @@
+// Settings → Mail accounts: add (Google, Microsoft or any IMAP/POP3 server), edit, sync and remove
+// accounts, and set each one's signature.
 import { useQueryClient } from '@tanstack/react-query'
 import { Plus, RefreshCw } from 'lucide-react'
 import { useState, type FormEvent } from 'react'

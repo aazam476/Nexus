@@ -1,3 +1,4 @@
+// Settings → Import & export: upload .eml/.mbox files into an account, download mail as .mbox.
 import { Download, Upload } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Button, Card, Field } from '../../components/ui'
