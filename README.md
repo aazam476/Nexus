@@ -275,6 +275,7 @@ apps/web/               React + Vite + Tailwind web app
 - Write comments that say *why*, not what. If something is knowingly
   incomplete, mark it `shortcut: <the limit>, <when to upgrade>` so it's easy
   to find later.
+- Format your code with `npm run format` (Prettier; CI checks it).
 - Run `npm test`, the browser tests and the typecheckers (`npx tsc` in
   `apps/server`, `npx tsc --noEmit` in `apps/web`) before opening a pull
   request. CI runs them all too.

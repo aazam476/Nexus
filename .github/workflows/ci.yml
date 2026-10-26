@@ -34,13 +34,16 @@ jobs:
         ports: ['3025:3025', '3110:3110', '3143:3143', '3465:3465', '3993:3993', '3995:3995']
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npx -w apps/server prisma generate
+
+      - name: Formatting
+        run: npm run format:check
 
       - name: Typecheck
         run: |
@@ -68,7 +71,7 @@ jobs:
 
       - name: Keep the browser test report when something fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: apps/web/test-results
@@ -79,5 +82,5 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t nexus:ci .
