@@ -3,8 +3,8 @@ dist
 .env
 
 # Test output
-coverage
-coverage-e2e
-test-results
-playwright-report
+apps/*/coverage
+apps/*/coverage-e2e
+apps/*/test-results
+apps/*/playwright-report
 apps/web/e2e/.auth
