@@ -1,5 +1,6 @@
 // PGP, done entirely in the browser with openpgp.js. The server only ever sees public keys,
 // the passphrase-locked private key, and encrypted text. Passphrases never leave this page.
+// "Armored" means a key or message written as text, between "-----BEGIN PGP …-----" lines.
 import * as openpgp from 'openpgp'
 import { api } from './api'
 
@@ -40,14 +41,12 @@ export async function decrypt(armored: string, key: openpgp.PrivateKey): Promise
   const message = await openpgp.readMessage({ armoredMessage: armored })
   const { data } = await openpgp.decrypt({ message, decryptionKeys: key })
   const text = String(data)
-  // PGP/MIME wraps a whole MIME part; show its body rather than its headers.
+  // PGP/MIME encrypts a whole MIME part, headers included ("Content-Type: …", a blank line, then
+  // the body). Show the body, without those headers.
   // shortcut: nested multipart content inside PGP/MIME is shown as raw text; parse it if people send rich encrypted mail.
-  return /^content-type:/i.test(text)
-    ? text
-        .split(/\r?\n\r?\n/)
-        .slice(1)
-        .join('\n\n')
-    : text
+  if (!/^content-type:/i.test(text)) return text
+  const [, ...bodyParts] = text.split(/\r?\n\r?\n/) // split at blank lines; the first part is the headers
+  return bodyParts.join('\n\n')
 }
 
 export async function encryptText(

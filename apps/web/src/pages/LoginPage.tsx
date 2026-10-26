@@ -58,10 +58,15 @@ export function LoginPage() {
     }
   }
 
+  const firstVisit = status.data?.needsSetup
+  let title = 'Sign in to Nexus'
+  if (firstVisit) title = 'Welcome to Nexus'
+  else if (signingUp) title = 'Create your account'
+
   return (
     <AuthLayout
-      title={status.data?.needsSetup ? 'Welcome to Nexus' : signingUp ? 'Create your account' : 'Sign in to Nexus'}
-      subtitle={status.data?.needsSetup ? 'Create the admin account for this server.' : 'Your mail, on your server.'}
+      title={title}
+      subtitle={firstVisit ? 'Create the admin account for this server.' : 'Your mail, on your server.'}
     >
       <form onSubmit={submit} className="grid gap-4">
         {signingUp && (

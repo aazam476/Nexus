@@ -27,15 +27,21 @@ export function RecipientField({
   }, [text])
   const contacts = useContacts(search).data ?? []
 
+  // Up to 5 suggestions: one per address (a contact can have several), matching what was typed,
+  // leaving out addresses already added.
+  const typed = search.toLowerCase()
+  const addresses = contacts.flatMap((c) =>
+    c.emails.map((email) => ({ name: c.name, email, hasKey: !!c.pgpPublicKey })),
+  )
   const suggestions = search
-    ? contacts
-        .flatMap((c) => c.emails.map((email) => ({ name: c.name, email, hasKey: !!c.pgpPublicKey })))
-        .filter((s) => !value.includes(s.email) && `${s.name} ${s.email}`.toLowerCase().includes(search.toLowerCase()))
+    ? addresses
+        .filter((s) => !value.includes(s.email))
+        .filter((s) => `${s.name} ${s.email}`.toLowerCase().includes(typed))
         .slice(0, 5)
     : []
 
   function add(email: string) {
-    const clean = email.trim().replace(/,$/, '')
+    const clean = email.trim().replace(/,$/, '') // drop a trailing comma, from typing "a@b.com,"
     if (clean && !value.includes(clean)) onChange([...value, clean])
     setText('')
     setActive(0)

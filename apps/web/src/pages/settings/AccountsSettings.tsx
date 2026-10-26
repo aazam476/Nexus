@@ -75,27 +75,7 @@ export function AccountsSettings() {
             {accounts
               .filter((a) => a.role !== 'viewer')
               .map((account) => (
-                <div key={account.id} className="grid gap-1.5">
-                  <span className="flex items-center gap-2 text-[12.5px] font-medium text-ink-2">
-                    <i className="h-2 w-2 rounded-full" style={{ background: account.color }} />
-                    {account.email}
-                  </span>
-                  {/* The user's own HTML, edited in place; the server and the mail sandbox treat it like any other mail content. */}
-                  <div
-                    contentEditable
-                    role="textbox"
-                    aria-multiline="true"
-                    aria-label={`Signature for ${account.email}`}
-                    spellCheck
-                    suppressContentEditableWarning
-                    onBlur={(e) => {
-                      if (e.currentTarget.innerHTML !== account.signature)
-                        patch(`/accounts/${account.id}`, { signature: e.currentTarget.innerHTML }).then(refresh)
-                    }}
-                    className="min-h-16 rounded-lg border border-line bg-raise px-3 py-2 text-[13.5px] focus:border-accent focus:outline-none"
-                    dangerouslySetInnerHTML={{ __html: sanitizeForEditor(account.signature) }}
-                  />
-                </div>
+                <SignatureEditor key={account.id} account={account} onSaved={refresh} />
               ))}
           </div>
         </Card>
@@ -104,11 +84,44 @@ export function AccountsSettings() {
   )
 }
 
+// A signature is HTML (bold, links, a logo), edited in place like a tiny rich-text editor.
+// It is saved when you click away ("blur").
+function SignatureEditor({ account, onSaved }: { account: Account; onSaved: () => void }) {
+  async function save(html: string) {
+    if (html === account.signature) return
+    await patch(`/accounts/${account.id}`, { signature: html })
+    onSaved()
+  }
+  return (
+    <div className="grid gap-1.5">
+      <span className="flex items-center gap-2 text-[12.5px] font-medium text-ink-2">
+        <i className="h-2 w-2 rounded-full" style={{ background: account.color }} />
+        {account.email}
+      </span>
+      <div
+        contentEditable
+        role="textbox"
+        aria-multiline="true"
+        aria-label={`Signature for ${account.email}`}
+        spellCheck
+        suppressContentEditableWarning
+        onBlur={(event) => save(event.currentTarget.innerHTML)}
+        className="min-h-16 rounded-lg border border-line bg-raise px-3 py-2 text-[13.5px] focus:border-accent focus:outline-none"
+        // Putting HTML straight into the page is only safe because it's sanitized first: on a
+        // shared account, someone else may have written this signature.
+        dangerouslySetInnerHTML={{ __html: sanitizeForEditor(account.signature) }}
+      />
+    </div>
+  )
+}
+
 function AccountRow({ account, onChange }: { account: Account; onChange: () => void }) {
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
 
+  // The server syncs in the background, so there's no "done" signal. Show the spinner for a few
+  // seconds, then reload the account to show its new "synced …" time (or its error).
   async function sync() {
     setSyncing(true)
     await api(`/accounts/${account.id}/sync`, { body: {} }).catch((e) => setError(e.message))

@@ -22,6 +22,7 @@ export function ContactsPage() {
   const importInput = useRef<HTMLInputElement>(null)
   const refresh = () => client.invalidateQueries({ queryKey: ['contacts'] })
 
+  // Searching happens here in the browser: the whole address book is already loaded.
   const visible = contacts
     .filter((c) => `${c.name} ${c.emails.join(' ')} ${c.company ?? ''}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name))

@@ -3,6 +3,26 @@
 // and the iframe sandbox (no allow-scripts) stops script execution entirely.
 import DOMPurify from 'dompurify'
 
+// Tags removed on top of what DOMPurify removes anyway (like <script>):
+//   style                    page-wide CSS that could restyle or hide parts of Nexus's own frame
+//   form, input, button…     fake login forms ("enter your password") inside an email
+//   iframe, object, embed    other pages or plugins embedded in the email
+//   link, meta, base         loading outside files, redirecting, or changing where links go
+const FORBID_TAGS = [
+  'style',
+  'form',
+  'input',
+  'button',
+  'textarea',
+  'select',
+  'iframe',
+  'object',
+  'embed',
+  'link',
+  'meta',
+  'base',
+]
+
 export interface SafeEmail {
   html: string
   blockedImages: number
@@ -11,6 +31,7 @@ export interface SafeEmail {
 export function buildSafeEmailDocument(dirtyHtml: string, allowRemoteImages: boolean): SafeEmail {
   let blockedImages = 0
 
+  // A hook runs on every element DOMPurify keeps, after it has cleaned the element's attributes.
   DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     // Links open in a new tab and never leak the Nexus URL.
     if (node.tagName === 'A') {
@@ -21,6 +42,7 @@ export function buildSafeEmailDocument(dirtyHtml: string, allowRemoteImages: boo
     if (!allowRemoteImages && node.tagName === 'IMG') {
       const src = node.getAttribute('src') ?? ''
       if (/^https?:/i.test(src)) {
+        // Keep the address aside (hidden by the CSS below), so nothing is fetched until "Load images".
         node.setAttribute('data-blocked-src', src)
         node.removeAttribute('src')
         blockedImages++
@@ -29,25 +51,14 @@ export function buildSafeEmailDocument(dirtyHtml: string, allowRemoteImages: boo
   })
 
   const clean = DOMPurify.sanitize(dirtyHtml, {
-    FORBID_TAGS: [
-      'style',
-      'form',
-      'input',
-      'button',
-      'textarea',
-      'select',
-      'iframe',
-      'object',
-      'embed',
-      'link',
-      'meta',
-      'base',
-    ],
-    FORBID_ATTR: ['srcset', 'background', 'action', 'formaction'],
+    FORBID_TAGS,
+    FORBID_ATTR: ['srcset', 'background', 'action', 'formaction'], // other ways to load images or submit forms
     ALLOW_DATA_ATTR: false,
   })
   DOMPurify.removeHook('afterSanitizeAttributes')
 
+  // The email's own Content-Security-Policy: no scripts, no loading anything except the images allowed
+  // (embedded ones always; remote ones only after "Load images").
   const imgSrc = allowRemoteImages ? 'data: cid: https:' : 'data: cid:'
   const csp = `default-src 'none'; img-src ${imgSrc}; style-src 'unsafe-inline'; font-src data:;`
 
@@ -70,20 +81,7 @@ export function buildSafeEmailDocument(dirtyHtml: string, allowRemoteImages: boo
 // A shared account's signature can be edited by other people, so it is never trusted as-is.
 export function sanitizeForEditor(dirtyHtml: string): string {
   return DOMPurify.sanitize(dirtyHtml, {
-    FORBID_TAGS: [
-      'style',
-      'form',
-      'input',
-      'button',
-      'textarea',
-      'select',
-      'iframe',
-      'object',
-      'embed',
-      'link',
-      'meta',
-      'base',
-    ],
+    FORBID_TAGS,
     ALLOW_DATA_ATTR: false,
     ADD_ATTR: ['data-signature'], // marks where the signature starts, see compose.ts
   })

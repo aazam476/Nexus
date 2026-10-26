@@ -51,15 +51,23 @@ export function BodyEditor({ mode, content, version, onChange, onModeChange }: P
   )
 }
 
+// How the formatting buttons work: the editor is a <div contenteditable> (an area the browser lets
+// you type into), and document.execCommand('bold') etc. asks the browser to format the text
+// currently selected in it.
 // shortcut: execCommand is deprecated but still supported everywhere; replace with a small editor lib if formatting needs grow.
 const run = (command: string, value?: string) => document.execCommand(command, false, value)
 
-// Opening a native <select> moves focus out of the editor, so remember the selection and put it back.
+// The font picker is a native <select>. Opening it moves the keyboard focus out of the editor, which
+// loses the text selection, so the font would have nothing to apply to. So: remember the selection
+// when the picker gets focus, and put it back just before applying the font.
+// (The browser describes a selection as a Range: where it starts and where it ends in the page.)
 let savedRange: Range | null = null
 
-const editorAround = (range: Range) => {
-  const node = range.commonAncestorContainer
-  return (node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>('[contenteditable]')
+// The editor element a range is inside, if any (a selection can also be elsewhere on the page).
+function editorAround(range: Range): HTMLElement | null | undefined {
+  const node = range.commonAncestorContainer // the innermost element holding the whole selection
+  const element = node instanceof Element ? node : node.parentElement // text nodes aren't elements
+  return element?.closest<HTMLElement>('[contenteditable]')
 }
 
 function saveSelection() {

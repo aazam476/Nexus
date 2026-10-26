@@ -4,16 +4,18 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Inbox } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useOutletContext, useParams } from 'react-router'
-import { MessageList, sections } from '../components/MessageList'
+import { MessageList } from '../components/MessageList'
+import { sections } from '../lib/sections'
 import { MessageView } from '../components/MessageView'
 import type { ShellContext } from '../components/AppShell'
 import { api, patch } from '../lib/api'
-import { replySubject } from '../lib/format'
+import { forwardDraft, replyDraft } from '../lib/compose'
 import { isTyping } from '../lib/keyboard'
 import { useAccounts, useMessages, useRefreshMail } from '../lib/queries'
 import { useStore } from '../lib/store'
 import type { FolderRole, Message } from '../types'
 
+// How many messages to load at a time. "Load older mail" asks for another page.
 const PAGE = 200
 
 const folderTitles: Record<FolderRole, string> = {
@@ -68,7 +70,9 @@ export function MailPage() {
   // The order rows appear on screen, so j/k walk the list the way the user sees it.
   const ordered = smart ? sections.flatMap((s) => visible.filter((m) => m.category === s.category)) : visible
 
-  // Change a message in every cached list right away; the server catches up in the background.
+  // "Optimistic" update: change the message on screen right away (in every list React Query has
+  // cached), instead of waiting for the server. The server request runs in the background, and the
+  // lists reload from the server afterwards (see run()), which fixes the screen if it failed.
   function updateLocally(id: string, change: Partial<Message>) {
     client.setQueriesData<Message[]>({ queryKey: ['messages'] }, (rows) =>
       rows?.map((m) => (m.id === id ? { ...m, ...change } : m)),
@@ -76,6 +80,7 @@ export function MailPage() {
     client.setQueryData<Message>(['message', id], (m) => (m ? { ...m, ...change } : m))
   }
 
+  // Runs a request to the server; shows its error at the bottom of the screen if it fails.
   async function run(action: () => Promise<unknown>) {
     setError('')
     try {
@@ -109,6 +114,7 @@ export function MailPage() {
     }
   }
   const close = () => navigate(`/mail/${folder}${search}`)
+  // The full message if it was loaded (it has the Message-ID and whole text a reply needs), else the list row.
   const full = (message: Message) => client.getQueryData<Message>(['message', message.id]) ?? message
 
   // After moving the open message away, show the next one, like most mail apps do.
@@ -146,60 +152,29 @@ export function MailPage() {
     },
   }
 
+  // Keyboard shortcuts (also listed in ShortcutsHelp.tsx). Keys that change mail only work on an open
+  // message you're allowed to change.
   useEffect(() => {
+    const index = selected ? ordered.indexOf(selected) : -1
+    const editable = selected && !selected.outgoing && canEdit(selected) ? selected : null
+    const shortcuts: Record<string, () => void> = {
+      j: () => ordered[index + 1] && open(ordered[index + 1]), // next message
+      k: () => index > 0 && open(ordered[index - 1]), // previous message
+      '/': () => searchRef.current?.focus(),
+      e: () => editable && actions.move('archive'),
+      '#': () => editable && actions.remove(),
+      '!': () => editable && actions.spam(editable.folder !== 'spam'),
+      s: () => editable && actions.star(editable),
+      u: () => editable && actions.markUnread(editable),
+      r: () => selected && openComposer(replyDraft(full(selected), { all: false })),
+      f: () => selected && openComposer(forwardDraft(full(selected))),
+      Escape: () => selected && close(),
+    }
     function onKey(event: KeyboardEvent) {
-      if (isTyping(event)) return
-      const index = selected ? ordered.indexOf(selected) : -1
-      const editable = selected && !selected.outgoing && canEdit(selected)
-      switch (event.key) {
-        case 'j':
-          if (ordered[index + 1]) open(ordered[index + 1])
-          break
-        case 'k':
-          if (index > 0) open(ordered[index - 1])
-          break
-        case '/':
-          event.preventDefault()
-          searchRef.current?.focus()
-          break
-        case 'e':
-          if (editable) actions.move('archive')
-          break
-        case '#':
-          if (editable) actions.remove()
-          break
-        case '!':
-          if (editable) actions.spam(selected.folder !== 'spam')
-          break
-        case 's':
-          if (editable) actions.star(selected)
-          break
-        case 'u':
-          if (editable) actions.markUnread(selected)
-          break
-        // The reader has the full message (Message-ID for threading, full text to quote); list rows don't.
-        case 'r':
-          if (selected)
-            openComposer({
-              accountId: selected.accountId,
-              to: selected.from.email,
-              subject: replySubject(selected.subject),
-              replyTo: full(selected),
-            })
-          break
-        case 'f':
-          if (selected)
-            openComposer({
-              accountId: selected.accountId,
-              subject: replySubject(selected.subject, 'Fwd'),
-              replyTo: full(selected),
-              forwardOf: selected.id,
-            })
-          break
-        case 'Escape':
-          if (selected) close()
-          break
-      }
+      const shortcut = shortcuts[event.key]
+      if (!shortcut || isTyping(event)) return
+      event.preventDefault() // e.g. so "/" doesn't type a slash into the search box it focuses
+      shortcut()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -246,16 +221,15 @@ export function MailPage() {
     />
   )
 
-  // Phone, or the "list" layout: one pane at a time.
-  // Wide screens (1024px and up) in three-pane: list and reader side by side.
+  // Narrow screens, or the "list" layout: one pane at a time (the list, or the open message).
+  // Wide screens (1024px and up, the "lg:" classes) in the three-pane layout: both side by side.
+  const sideBySide = layout === 'three-pane'
+  const listClasses = `${selected ? 'hidden' : 'w-full'} ${sideBySide ? 'lg:block lg:w-[340px] lg:shrink-0 xl:w-[400px]' : ''}`
+  const readerClasses = `${selected ? '' : 'hidden'} ${sideBySide ? 'lg:block' : ''}`
   return (
     <div className="relative flex h-full">
-      <div
-        className={`h-full border-r border-line ${selected ? 'hidden' : 'w-full'} ${layout === 'three-pane' ? 'lg:block lg:w-[340px] lg:shrink-0 xl:w-[400px]' : ''}`}
-      >
-        {listPane}
-      </div>
-      <div className={`h-full min-w-0 flex-1 ${selected ? '' : 'hidden'} ${layout === 'three-pane' ? 'lg:block' : ''}`}>
+      <div className={`h-full border-r border-line ${listClasses}`}>{listPane}</div>
+      <div className={`h-full min-w-0 flex-1 ${readerClasses}`}>
         {reader ?? <EmptyReader count={visible.filter((m) => m.unread).length} />}
       </div>
       {error && (

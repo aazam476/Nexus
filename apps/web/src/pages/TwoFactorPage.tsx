@@ -31,16 +31,19 @@ export function TwoFactorPage() {
 
   // Phones' one-time-code autofill (and fast typing) can put the whole code into one box, so spread it out.
   function setDigit(index: number, value: string) {
+    // Keep digits only ("\D" is any non-digit), and no more than fit from this box to the last.
     const typed = value.replace(/\D/g, '').slice(-(CODE_LENGTH - index))
     const next = [...digits]
-    if (typed.length <= 1) next[index] = typed
-    else
-      typed.split('').forEach((d, i) => {
-        next[index + i] = d
-      })
+    if (typed.length <= 1) {
+      next[index] = typed
+    } else {
+      // Several digits at once: fill this box and the ones after it.
+      typed.split('').forEach((digit, i) => (next[index + i] = digit))
+    }
     setDigits(next)
-    const last = Math.min(index + Math.max(typed.length, 1), CODE_LENGTH - 1)
-    if (typed) inputs.current[last]?.focus()
+    // Move the cursor to the box after the last digit entered (or stay on the last box).
+    const nextBox = Math.min(index + Math.max(typed.length, 1), CODE_LENGTH - 1)
+    if (typed) inputs.current[nextBox]?.focus()
     if (next.every(Boolean)) verify({ code: next.join('') })
   }
 
@@ -49,7 +52,7 @@ export function TwoFactorPage() {
   }
 
   function onPaste(event: ClipboardEvent) {
-    const pasted = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, CODE_LENGTH)
+    const pasted = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, CODE_LENGTH) // digits only
     if (pasted.length === CODE_LENGTH) {
       event.preventDefault()
       setDigits(pasted.split(''))

@@ -169,7 +169,7 @@ function TwoFactorCard() {
             <form className="grid content-start gap-3" onSubmit={enable}>
               <p>Scan this with your authenticator app, or enter the key by hand:</p>
               <code className="rounded-lg bg-raise px-3 py-2 font-mono text-[13px] tracking-wider break-all">
-                {setup.secret.replace(/(.{4})/g, '$1 ')}
+                {setup.secret.replace(/(.{4})/g, '$1 ') /* a space after every 4 characters, easier to type */}
               </code>
               <Field label="Code from the app">
                 <Input
@@ -321,7 +321,8 @@ function PrivateStorageCard() {
               </Field>
             </div>
             <Button type="submit" variant={turningOn ? 'primary' : 'danger'} disabled={busy}>
-              {busy ? (turningOn ? 'Encrypting mail…' : 'Decrypting mail…') : turningOn ? 'Turn on' : 'Turn off'}
+              {busy && (turningOn ? 'Encrypting mail…' : 'Decrypting mail…')}
+              {!busy && (turningOn ? 'Turn on' : 'Turn off')}
             </Button>
             <Button variant="ghost" onClick={() => setAsking(false)}>
               Cancel

@@ -54,6 +54,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [layout, setLayoutState] = useState<Layout>(() => readLocal('nexus.layout', 'three-pane'))
   const [draft, setDraft] = useState<Draft | null>(null)
 
+  // Apply the theme to the page (styles.css picks colours by the html element's data-theme).
+  // "system" follows the device's light/dark setting, and keeps following it if it changes.
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: light)')
     const apply = () => {
@@ -68,6 +70,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => media.removeEventListener('change', apply)
   }, [theme])
 
+  // Theme and layout are saved twice: in this browser (so the page looks right at once, before the
+  // server answers) and on the server (so they follow you to your other devices).
   const store: Store = {
     theme,
     setTheme: (value) => {

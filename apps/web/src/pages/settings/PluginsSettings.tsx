@@ -98,7 +98,7 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
             <Field key={s.key} label={s.label + (s.required ? '' : ' (optional)')}>
               <Input
                 name={s.key}
-                type={s.type === 'password' ? 'password' : s.type === 'url' ? 'url' : 'text'}
+                type={s.type} // 'text', 'password' or 'url', which are also HTML input types
                 defaultValue={s.value}
                 placeholder={s.placeholder}
                 autoComplete="off"

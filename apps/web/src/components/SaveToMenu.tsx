@@ -41,7 +41,9 @@ export function SaveToMenu({
     }
   }
 
-  const label = state.busy ? `Saving to ${state.busy}…` : state.savedTo ? `Saved to ${state.savedTo}` : 'Save to…'
+  let label = 'Save to…'
+  if (state.busy) label = `Saving to ${state.busy}…`
+  else if (state.savedTo) label = `Saved to ${state.savedTo}`
   return (
     <div ref={menu} className="relative">
       <button

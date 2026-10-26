@@ -1,11 +1,11 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* Theme switch: data-theme="dark" | "light" on <html>. "system" sets it from prefers-color-scheme. */
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 /* Colour tokens. Components use them through Tailwind classes like bg-panel, text-muted. */
 :root,
-[data-theme="dark"] {
+[data-theme='dark'] {
   --ground: #0e0f12;
   --side: #131418;
   --panel: #17181d;
@@ -31,7 +31,7 @@
   color-scheme: dark;
 }
 
-[data-theme="light"] {
+[data-theme='light'] {
   --ground: #f3f3f6;
   --side: #ececf1;
   --panel: #ffffff;
@@ -80,7 +80,7 @@
   --color-news: var(--news);
   --color-danger: var(--danger);
   --shadow-pop: var(--shadow);
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
 }
 
 html,

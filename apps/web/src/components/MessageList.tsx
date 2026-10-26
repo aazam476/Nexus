@@ -17,22 +17,15 @@ import { Link } from 'react-router'
 import { useAccounts } from '../lib/queries'
 import { formatListDate } from '../lib/format'
 import { useStore } from '../lib/store'
+import { sections } from '../lib/sections'
 import type { Category, Message } from '../types'
 import { Avatar, Kbd } from './ui'
-
-// The smart inbox groups mail by what it is. Machine mail collapses into bundles.
-export const sections: { category: Category; title: string; color: string; bundled: boolean }[] = [
-  { category: 'people', title: 'People', color: 'var(--people)', bundled: false },
-  { category: 'travel', title: 'Travel', color: 'var(--travel)', bundled: false },
-  { category: 'notifications', title: 'Notifications', color: 'var(--notif)', bundled: true },
-  { category: 'newsletters', title: 'Newsletters', color: 'var(--news)', bundled: true },
-]
 
 interface Props {
   title: string
   messages: Message[]
   loading: boolean
-  smart: boolean
+  smart: boolean // group into sections (the inbox) instead of one list by date
   selectedId?: string
   query: string
   onQuery: (query: string) => void
@@ -42,6 +35,7 @@ interface Props {
   onLoadMore?: () => void
 }
 
+// forwardRef lets the page reach the search box inside this component, so "/" can focus it.
 export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageList(
   { title, messages, loading, smart, selectedId, query, onQuery, onOpen, onOpenNav, onArchiveAll, onLoadMore },
   searchRef,
@@ -49,7 +43,6 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
   const { layout, setLayout, openComposer } = useStore()
   const accounts = useAccounts().data
   const accountColor = (id: string) => accounts?.find((a) => a.id === id)?.color
-  const [expanded, setExpanded] = useState<Category[]>([])
   const unread = messages.filter((m) => m.unread).length
 
   const row = (message: Message) => (
@@ -114,74 +107,24 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
       </header>
 
       <div className="flex-1 overflow-y-auto pb-6">
-        {messages.length === 0 && !loading && (
-          <div className="px-6 py-16 text-center">
-            {accounts?.length === 0 ? (
-              <>
-                <p className="font-semibold">Connect your first mail account</p>
-                <p className="mt-1 text-muted">Nexus works with any IMAP or POP3 provider, plus Gmail and Outlook.</p>
-                <Link
-                  to="/settings/accounts"
-                  className="mt-4 inline-block rounded-lg bg-accent px-3 py-1.5 font-semibold text-accent-ink"
-                >
-                  Add account
-                </Link>
-              </>
-            ) : (
-              <>
-                <p className="font-semibold">{query ? 'No messages match' : 'Nothing here'}</p>
-                <p className="mt-1 text-muted">
-                  {query ? `Nothing found for “${query}”.` : 'New mail will show up here.'}
-                </p>
-              </>
-            )}
-          </div>
-        )}
+        {messages.length === 0 && !loading && <EmptyList noAccounts={accounts?.length === 0} query={query} />}
         {loading && messages.length === 0 && (
           <p className="px-6 py-16 text-center text-muted" aria-busy="true">
             Loading mail…
           </p>
         )}
 
-        {!smart && messages.map(row)}
-
-        {smart &&
-          sections.map(({ category, title, color, bundled }) => {
-            const items = messages.filter((m) => m.category === category)
-            if (items.length === 0) return null
-            const isOpen = !bundled || expanded.includes(category)
-            const toggle = () =>
-              setExpanded((all) => (all.includes(category) ? all.filter((c) => c !== category) : [...all, category]))
-            return (
-              <div key={category}>
-                <h2 className="flex items-center gap-2 px-4 pt-3 pb-1.5 text-[12px] font-semibold" style={{ color }}>
-                  {title}
-                  <span className="font-medium text-muted">{items.length}</span>
-                  {bundled && (
-                    <button
-                      type="button"
-                      onClick={() => onArchiveAll(items)}
-                      className="ml-auto flex items-center gap-1 font-medium text-muted hover:text-ink"
-                      title={`Archive all ${title.toLowerCase()}`}
-                    >
-                      <Archive size={13} /> Archive all
-                    </button>
-                  )}
-                  {bundled && (
-                    <button
-                      type="button"
-                      onClick={toggle}
-                      className="flex items-center gap-1 font-medium text-muted hover:text-ink"
-                    >
-                      {isOpen ? 'Collapse' : 'Show all'}
-                      <ChevronDown size={14} className={isOpen ? 'rotate-180' : ''} />
-                    </button>
-                  )}
-                </h2>
-                {isOpen ? items.map(row) : <Bundle items={items} onOpen={toggle} />}
-              </div>
-            )
-          })}
+        {smart
+          ? sections.map((section) => (
+              <Section
+                key={section.category}
+                {...section}
+                items={messages.filter((m) => m.category === section.category)}
+                row={row}
+                onArchiveAll={onArchiveAll}
+              />
+            ))
+          : messages.map(row)}
         {onLoadMore && (
           <button
             type="button"
@@ -196,6 +139,75 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
   )
 })
 
+// One section of the smart inbox. Bundled sections start collapsed into a single summary row.
+function Section(props: {
+  category: Category
+  title: string
+  color: string
+  bundled: boolean
+  items: Message[]
+  row: (message: Message) => React.ReactNode
+  onArchiveAll: (messages: Message[]) => void
+}) {
+  const { title, color, bundled, items, row, onArchiveAll } = props
+  const [expanded, setExpanded] = useState(false)
+  if (items.length === 0) return null
+  const isOpen = !bundled || expanded
+
+  return (
+    <div>
+      <h2 className="flex items-center gap-2 px-4 pt-3 pb-1.5 text-[12px] font-semibold" style={{ color }}>
+        {title}
+        <span className="font-medium text-muted">{items.length}</span>
+        {bundled && (
+          <>
+            <button
+              type="button"
+              onClick={() => onArchiveAll(items)}
+              className="ml-auto flex items-center gap-1 font-medium text-muted hover:text-ink"
+              title={`Archive all ${title.toLowerCase()}`}
+            >
+              <Archive size={13} /> Archive all
+            </button>
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-1 font-medium text-muted hover:text-ink"
+            >
+              {isOpen ? 'Collapse' : 'Show all'}
+              <ChevronDown size={14} className={isOpen ? 'rotate-180' : ''} />
+            </button>
+          </>
+        )}
+      </h2>
+      {isOpen ? items.map(row) : <Bundle items={items} onOpen={() => setExpanded(true)} />}
+    </div>
+  )
+}
+
+function EmptyList({ noAccounts, query }: { noAccounts: boolean; query: string }) {
+  if (noAccounts) {
+    return (
+      <div className="px-6 py-16 text-center">
+        <p className="font-semibold">Connect your first mail account</p>
+        <p className="mt-1 text-muted">Nexus works with any IMAP or POP3 provider, plus Gmail and Outlook.</p>
+        <Link
+          to="/settings/accounts"
+          className="mt-4 inline-block rounded-lg bg-accent px-3 py-1.5 font-semibold text-accent-ink"
+        >
+          Add account
+        </Link>
+      </div>
+    )
+  }
+  return (
+    <div className="px-6 py-16 text-center">
+      <p className="font-semibold">{query ? 'No messages match' : 'Nothing here'}</p>
+      <p className="mt-1 text-muted">{query ? `Nothing found for “${query}”.` : 'New mail will show up here.'}</p>
+    </div>
+  )
+}
+
 function MessageRow({
   message,
   accountColor,
@@ -207,10 +219,9 @@ function MessageRow({
   selected: boolean
   onOpen: () => void
 }) {
-  const sender =
-    message.folder === 'sent' || message.folder === 'scheduled'
-      ? `To: ${message.to.map((p) => p.name).join(', ')}`
-      : message.from.name
+  // In Sent and Scheduled the interesting name is who it went to; everywhere else, who sent it.
+  const sentByYou = message.folder === 'sent' || message.folder === 'scheduled'
+  const sender = sentByYou ? `To: ${message.to.map((p) => p.name).join(', ')}` : message.from.name
   return (
     <button
       type="button"
@@ -249,6 +260,7 @@ function MessageRow({
   )
 }
 
+// A collapsed section: up to three senders' avatars, all senders and subjects, and how many are unread.
 function Bundle({ items, onOpen }: { items: Message[]; onOpen: () => void }) {
   const senders = [...new Set(items.map((m) => m.from.name))]
   const unread = items.filter((m) => m.unread).length

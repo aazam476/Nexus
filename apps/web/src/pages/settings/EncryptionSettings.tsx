@@ -117,7 +117,8 @@ function PgpCard() {
             )}
             <div className="flex gap-2">
               <Button type="submit" variant="primary" disabled={busy}>
-                {busy ? 'Working…' : mode === 'generate' ? 'Create key' : 'Import key'}
+                {busy && 'Working…'}
+                {!busy && (mode === 'generate' ? 'Create key' : 'Import key')}
               </Button>
               <Button onClick={() => setMode(null)}>Cancel</Button>
             </div>
