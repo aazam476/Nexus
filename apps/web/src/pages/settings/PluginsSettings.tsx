@@ -41,11 +41,12 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
     }
   }
 
+  const saveForm = (form: HTMLFormElement) => put(`/plugins/${plugin.id}`, { settings: Object.fromEntries(new FormData(form)) })
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const settings = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>
     try {
-      await put(`/plugins/${plugin.id}`, { settings })
+      await saveForm(event.currentTarget)
       setMessage({ ok: true, text: 'Saved' })
       refresh()
     } catch (e) {
@@ -53,9 +54,12 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
     }
   }
 
-  async function test() {
+  // Tests what is typed in the form, so it is saved first: the server tests the saved settings.
+  async function test(form: HTMLFormElement) {
     setMessage({ ok: true, text: 'Testing…' })
     try {
+      await saveForm(form)
+      refresh()
       await api(`/plugins/${plugin.id}/test`, { body: {} })
       setMessage({ ok: true, text: 'Connected' })
     } catch (e) {
@@ -82,7 +86,7 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
           ))}
           <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
             <Button type="submit" variant="primary">Save</Button>
-            <Button onClick={test}>Test connection</Button>
+            <Button onClick={(e) => test(e.currentTarget.form!)}>Test connection</Button>
             {message && <span role={message.ok ? 'status' : 'alert'} className={`text-[13px] ${message.ok ? 'text-news' : 'text-danger'}`}>{message.text}</span>}
           </div>
         </form>

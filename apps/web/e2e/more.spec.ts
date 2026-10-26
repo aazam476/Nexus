@@ -88,9 +88,9 @@ test('saves an attachment to Paperless through its plugin', async ({ page }) => 
     await card.getByRole('button', { name: 'Configure' }).click()
     await card.getByLabel('Server URL').fill(url)
     await card.getByLabel('API token').fill('secret-token')
-    await card.getByRole('button', { name: 'Save' }).click()
+    // Testing uses what is typed, without pressing Save first.
     await card.getByRole('button', { name: 'Test connection' }).click()
-    await expect(card.getByText(/works|Connected/i)).toBeVisible()
+    await expect(card.getByRole('status')).toHaveText('Connected')
     await card.getByRole('switch', { name: 'Turn Paperless-ngx on' }).click()
     await expect(card.getByRole('switch', { name: 'Turn Paperless-ngx on' })).toHaveAttribute('aria-checked', 'true')
 
