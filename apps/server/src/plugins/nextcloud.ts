@@ -9,14 +9,16 @@ const connection = [
   { key: 'appPassword', label: 'App password', type: 'password', required: true },
 ] as const
 
+// HTTP Basic sign-in: "username:password", base64-encoded, in the Authorization header.
 const auth = (s: PluginSettings) => ({
   authorization: `Basic ${Buffer.from(`${s.username}:${s.appPassword}`).toString('base64')}`,
 })
-const davPath = (...parts: string[]) =>
-  parts
-    .map((p) => p.split('/').filter(Boolean).map(encodeURIComponent).join('/'))
-    .filter(Boolean)
-    .join('/')
+// Joins folder and file names into one URL path, making each name safe for a URL:
+//   davPath('/Mail/2030 trips', 'ticket.pdf') → 'Mail/2030%20trips/ticket.pdf'
+function davPath(...parts: string[]): string {
+  const names = parts.flatMap((part) => part.split('/')).filter((name) => name !== '')
+  return names.map(encodeURIComponent).join('/')
+}
 
 export const nextcloudFiles: NexusPlugin = {
   id: 'nextcloud-files',

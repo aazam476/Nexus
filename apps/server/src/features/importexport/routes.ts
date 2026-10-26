@@ -8,7 +8,7 @@ import { requireUser, storageKey } from '../../lib/session.ts'
 import { openBody } from '../mail/private.ts'
 import { withImap } from '../accounts/connect.ts'
 import { parseRaw } from '../mail/parse.ts'
-import { classify } from '../mail/sorting.ts'
+import { categoryOf } from '../mail/sorting.ts'
 import { saveMessage } from '../mail/store.ts'
 import { discoverFolders, localFolders } from '../mail/sync.ts'
 import { queueSync } from '../../jobs/queue.ts'
@@ -49,13 +49,7 @@ export async function importExportRoutes(app: FastifyInstance) {
       const target = (await localFolders(account.id)).get(folder)!
       for (const raw of messages) {
         const parsed = await parseRaw(raw)
-        const category = classify({
-          fromEmail: parsed.from.email,
-          subject: parsed.subject,
-          isMailingList: parsed.isMailingList,
-          isAutomated: parsed.isAutomated,
-          hasEvent: !!parsed.event,
-        })
+        const category = categoryOf(parsed)
         await saveMessage({
           accountId: account.id,
           folderId: target.id,

@@ -10,6 +10,7 @@ import { notFound, parse } from '../../lib/http.ts'
 import { requireUser, storageKey } from '../../lib/session.ts'
 import { messageParts, openBody, openSummary } from './private.ts'
 import { toIcs } from '../../plugins/nextcloud.ts'
+import type { OutgoingPayload } from '../send/send.ts'
 import * as smime from '../send/smime.ts'
 import { deleteMessage, moveMessage, setFlags } from './actions.ts'
 import { parseRaw } from './parse.ts'
@@ -44,40 +45,32 @@ function toRow(
 
 // Drafts and scheduled mail live in OutgoingMessage until sent; show them like messages.
 function outgoingToRow(outgoing: OutgoingMessage, me: { name: string; email: string }) {
-  const p = outgoing.payload as {
-    accountId: string
-    to: string[]
-    cc: string[]
-    subject: string
-    text: string
-    html?: string
-    forwardOf?: string
-    attachments: { filename: string; contentType: string; content: string }[]
-  }
+  // The payload column holds what the composer sent (see outgoingSchema in send/send.ts).
+  const payload = outgoing.payload as OutgoingPayload
   return {
     id: outgoing.id,
     accountId: outgoing.accountId,
     folder: outgoing.status === 'draft' ? 'drafts' : 'scheduled',
     category: 'people',
     from: me,
-    to: p.to.map((email) => ({ name: email, email })),
-    cc: p.cc.map((email) => ({ name: email, email })),
-    subject: p.subject || '(no subject)',
-    preview: p.text.slice(0, 180),
-    html: p.html,
-    text: p.text,
+    to: payload.to.map((email) => ({ name: email, email })),
+    cc: payload.cc.map((email) => ({ name: email, email })),
+    subject: payload.subject || '(no subject)',
+    preview: payload.text.slice(0, 180),
+    html: payload.html,
+    text: payload.text,
     date: outgoing.updatedAt,
     unread: false,
     starred: false,
     labels: [],
-    attachments: p.attachments.map((a, i) => ({
+    attachments: payload.attachments.map((a, i) => ({
       id: String(i),
       filename: a.filename,
       contentType: a.contentType,
-      size: Math.floor((a.content.length * 3) / 4),
+      size: Math.floor((a.content.length * 3) / 4), // the content is base64: every 4 characters hold 3 bytes
     })),
     scheduledFor: outgoing.scheduledFor,
-    forwardOf: p.forwardOf,
+    forwardOf: payload.forwardOf,
     error: outgoing.error,
     outgoing: true,
   }
@@ -95,7 +88,9 @@ export async function mailRoutes(app: FastifyInstance) {
       _count: true,
     })
     const folders = await db.folder.findMany({ where: { accountId: { in: accountIds } } })
-    const roleOf = new Map(folders.map((f) => [f.id, f.role]))
+    const roleOf = new Map(folders.map((f) => [f.id, f.role])) // folder id → "inbox", "spam", …
+
+    // Add up the unread counts per folder role (all accounts' inboxes together), and per account's inbox.
 
     const byFolder: Record<string, number> = {}
     const byAccount: Record<string, number> = {}
@@ -110,6 +105,8 @@ export async function mailRoutes(app: FastifyInstance) {
     })
     byFolder.drafts = await db.outgoingMessage.count({ where: { userId: request.user.id, status: 'draft' } })
 
+    // Unread mail per label. Labels are a list on each message; unnest() turns that list into one
+    // row per label, so they can be counted. (Prisma can't express this, so it's plain SQL.)
     const labelRows = await db.$queryRaw<{ label: string; count: bigint }[]>`
       SELECT unnest(labels) AS label, count(*) AS count FROM "Message"
       WHERE "accountId" = ANY(${accountIds}) AND unread GROUP BY 1`

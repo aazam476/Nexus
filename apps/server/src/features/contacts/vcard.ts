@@ -7,11 +7,30 @@ export interface VcardContact {
   company?: string
 }
 
-const unescape = (value: string) => value.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1')
-const escape = (value: string) => value.replace(/([\\,;])/g, '\\$1').replace(/\n/g, '\\n')
+// In vCard text, commas, semicolons and backslashes are written with a backslash in front ("\,"),
+// and line breaks as "\n". These two undo and redo that.
+const unescape = (value: string) =>
+  value
+    .replace(/\\n/gi, '\n') // "\n" → a real line break
+    .replace(/\\([,;\\])/g, '$1') // "\," → ","   "\;" → ";"   "\\" → "\"
+const escape = (value: string) =>
+  value
+    .replace(/([\\,;])/g, '\\$1') // "," → "\,"  and so on
+    .replace(/\n/g, '\\n')
+
+// Long lines in a .vcf file are "folded": continued on the next line, which starts with a space
+// or tab. Joining them back gives one line per property.
+const unfold = (text: string) => text.replace(/\r?\n[ \t]/g, '')
+
+// The property name of a line like "item1.EMAIL;TYPE=work:ann@x.com" is "EMAIL": drop the
+// parameters after ";" and the "item1." group prefix some apps add.
+function propertyName(line: string, colon: number): string {
+  const beforeParameters = line.slice(0, colon).split(';')[0]
+  return beforeParameters.split('.').pop()!.toUpperCase()
+}
 
 export function parseVcards(text: string): VcardContact[] {
-  const lines = text.replace(/\r?\n[ \t]/g, '').split(/\r?\n/) // undo line folding
+  const lines = unfold(text).split(/\r?\n/)
   const contacts: VcardContact[] = []
   let current: VcardContact | null = null
 
@@ -25,7 +44,7 @@ export function parseVcards(text: string): VcardContact[] {
     } else if (current) {
       const colon = line.indexOf(':')
       if (colon === -1) continue
-      const key = line.slice(0, colon).split(';')[0].split('.').pop()!.toUpperCase() // "item1.EMAIL;TYPE=work" -> "EMAIL"
+      const key = propertyName(line, colon)
       const value = unescape(line.slice(colon + 1).trim())
       if (key === 'FN') current.name = value
       if (key === 'EMAIL' && value) current.emails.push(value.toLowerCase())

@@ -12,15 +12,18 @@ import { authorizeUrl, exchangeCode, forgetAccessToken, getProvider } from './oa
 
 const COLORS = ['#ff7f6e', '#4fd1a1', '#6ea8ff', '#f5b544', '#c79bff', '#5fc6e8']
 
-const serverFields = {
+const HEX_COLOR = /^#[0-9a-f]{6}$/i // like "#4fd1a1"
+
+// Where an account's mail servers are, and the login for them. Shared by "add" and "edit".
+const serverFields = z.object({
   inHost: z.string().trim().min(1),
   inPort: z.number().int().min(1).max(65535),
-  inTls: z.boolean(),
+  inTls: z.boolean(), // true = encrypted from the start; false = upgrade with STARTTLS
   smtpHost: z.string().trim().min(1),
   smtpPort: z.number().int().min(1).max(65535),
   smtpTls: z.boolean(),
   username: z.string().trim().min(1),
-}
+})
 
 export async function accountRoutes(app: FastifyInstance) {
   // The OAuth callback is a redirect from Google/Microsoft. Browsers don't send our strict
@@ -37,36 +40,9 @@ export async function accountRoutes(app: FastifyInstance) {
       if (!code || !pending || pending.expires < Date.now())
         throw new HttpError(400, 'This sign-in link expired. Start again from Settings.')
 
-      const provider = getProvider(request.params.provider)
       const tokens = await exchangeCode(request.params.provider, code)
-      // Signing in again is how people fix an expired sign-in: update that account, don't add a twin.
-      const existing = await db.account.findFirst({
-        where: { ownerId: pending.userId, email: tokens.email, auth: provider.auth },
-      })
-      if (existing) {
-        await db.account.update({
-          where: { id: existing.id },
-          data: { secret: encrypt(tokens.refreshToken), syncError: null },
-        })
-        forgetAccessToken(existing.id)
-        await queueSync(existing.id)
-        return reply.redirect('/settings/accounts?added=1')
-      }
-      const count = await db.account.count({ where: { ownerId: pending.userId } })
-      const account = await db.account.create({
-        data: {
-          ownerId: pending.userId,
-          email: tokens.email,
-          name: tokens.name,
-          color: COLORS[count % COLORS.length],
-          protocol: 'imap',
-          auth: provider.auth,
-          username: tokens.email,
-          secret: encrypt(tokens.refreshToken),
-          ...provider.servers,
-        },
-      })
-      await queueSync(account.id)
+      const accountId = await saveOAuthAccount(pending.userId, request.params.provider, tokens)
+      await queueSync(accountId)
       return reply.redirect('/settings/accounts?added=1')
     },
   )
@@ -111,12 +87,11 @@ export async function accountRoutes(app: FastifyInstance) {
 
     signedIn.post('/accounts', async (request) => {
       const body = parse(
-        z.object({
+        serverFields.extend({
           email: z.string().trim().toLowerCase().email(),
           name: z.string().trim().min(1),
           protocol: z.enum(['imap', 'pop3']),
           password: z.string().min(1),
-          ...serverFields,
         }),
         request.body,
       )
@@ -128,19 +103,20 @@ export async function accountRoutes(app: FastifyInstance) {
       if (await db.account.findFirst({ where: { ownerId: request.user.id, email: body.email } })) {
         throw badRequest('You already added this account. To change its password, use Edit on the account.')
       }
-      const settings = { ...body, id: 'new', auth: 'password', secret: encrypt(body.password) }
-      await testConnection(settings).catch((error) => {
+      // Try the login before saving anything. testConnection takes an account-shaped object,
+      // so give it one; the id isn't used for password logins.
+      const { password, ...fields } = body
+      const secret = encrypt(password)
+      await testConnection({ ...fields, id: 'not-saved-yet', auth: 'password', secret }).catch((error) => {
         throw badRequest(`Could not connect: ${errorMessage(error)}`)
       })
-      const count = await db.account.count({ where: { ownerId: request.user.id } })
-      const { password: _password, ...fields } = body
       const account = await db.account.create({
         data: {
           ...fields,
           ownerId: request.user.id,
           auth: 'password',
-          secret: settings.secret,
-          color: COLORS[count % COLORS.length],
+          secret,
+          color: await nextColor(request.user.id),
         },
       })
       await queueSync(account.id)
@@ -149,16 +125,13 @@ export async function accountRoutes(app: FastifyInstance) {
 
     signedIn.patch<{ Params: { id: string } }>('/accounts/:id', async (request) => {
       const role = await requireAccountRole(request.user.id, request.params.id, 'editor')
+      // Every field is optional: only what's sent changes.
       const body = parse(
-        z.object({
+        serverFields.partial().extend({
           name: z.string().trim().min(1).optional(),
-          color: z
-            .string()
-            .regex(/^#[0-9a-f]{6}$/i)
-            .optional(),
+          color: z.string().regex(HEX_COLOR).optional(),
           signature: z.string().max(20_000).optional(),
           password: z.string().min(1).optional(),
-          ...Object.fromEntries(Object.entries(serverFields).map(([k, v]) => [k, v.optional()])),
         }),
         request.body,
       )
@@ -172,7 +145,9 @@ export async function accountRoutes(app: FastifyInstance) {
         ...(password && { secret: encrypt(password) }),
       }
 
-      if (password || Object.keys(serverFields).some((k) => k in rest)) {
+      // A new password or server: check the login works before saving it.
+      const changesLogin = password || Object.keys(serverFields.shape).some((field) => field in rest)
+      if (changesLogin) {
         const current = await db.account.findUniqueOrThrow({ where: { id: request.params.id } })
         await testConnection({ ...current, ...data }).catch((error) => {
           throw badRequest(`Could not connect: ${errorMessage(error)}`)
@@ -227,5 +202,44 @@ export async function accountRoutes(app: FastifyInstance) {
   })
 }
 
-const usesPrivateStorage = async (userId: string) =>
-  (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { privateStorage: true } })).privateStorage
+async function usesPrivateStorage(userId: string): Promise<boolean> {
+  const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { privateStorage: true } })
+  return user.privateStorage
+}
+
+// Each new account gets the next colour in the list, so accounts are easy to tell apart.
+async function nextColor(userId: string): Promise<string> {
+  const count = await db.account.count({ where: { ownerId: userId } })
+  return COLORS[count % COLORS.length]
+}
+
+// After Google/Microsoft sign-in: adds the account, or updates it if it was added before.
+// (Signing in again is how people fix an expired sign-in, so it must not create a second copy.)
+async function saveOAuthAccount(
+  userId: string,
+  providerName: string,
+  tokens: { email: string; name: string; refreshToken: string },
+) {
+  const provider = getProvider(providerName)
+  const secret = encrypt(tokens.refreshToken)
+  const existing = await db.account.findFirst({ where: { ownerId: userId, email: tokens.email, auth: provider.auth } })
+  if (existing) {
+    await db.account.update({ where: { id: existing.id }, data: { secret, syncError: null } })
+    forgetAccessToken(existing.id) // don't keep using an access token from the old sign-in
+    return existing.id
+  }
+  const account = await db.account.create({
+    data: {
+      ownerId: userId,
+      email: tokens.email,
+      name: tokens.name,
+      color: await nextColor(userId),
+      protocol: 'imap',
+      auth: provider.auth,
+      username: tokens.email,
+      secret,
+      ...provider.servers,
+    },
+  })
+  return account.id
+}

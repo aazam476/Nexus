@@ -1,5 +1,6 @@
 // Sign up, sign in, two-factor authentication, password and session management.
-import type { FastifyInstance } from 'fastify'
+import type { User } from '@prisma/client'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { authenticator } from 'otplib'
 import QRCode from 'qrcode'
 import { randomBytes } from 'node:crypto'
@@ -8,7 +9,13 @@ import { config } from '../../config.ts'
 import { db } from '../../db.ts'
 import { decrypt, encrypt, hashPassword, randomToken, sha256, verifyPassword } from '../../lib/crypto.ts'
 import { HttpError, badRequest, forbidden, parse } from '../../lib/http.ts'
-import { lockWithPassword, newStorageKeys, unlockWithPassword, unlockWithToken } from '../../lib/sealed.ts'
+import {
+  lockWithPassword,
+  newStorageKeys,
+  unlockWithPassword,
+  unlockWithToken,
+  type StorageKeys,
+} from '../../lib/sealed.ts'
 import {
   endSession,
   findSession,
@@ -25,6 +32,10 @@ authenticator.options = { window: 1 }
 
 const email = z.string().trim().toLowerCase().email()
 const password = z.string().min(12, 'Use at least 12 characters').max(200)
+// The secret authenticator apps share with us: base32 (letters A–Z and digits 2–7), 16 or more characters.
+const BASE32_SECRET = /^[A-Z2-7]{16,}$/
+
+// Endpoints that check a password or code allow 10 tries a minute from one address, against guessing.
 const strict = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }
 
 // Compared against when the email is unknown, so a wrong email takes as long as a wrong password.
@@ -147,12 +158,14 @@ export async function authRoutes(app: FastifyInstance) {
 
     signedIn.post('/password', strict, async (request) => {
       const body = parse(z.object({ current: z.string(), next: password }), request.body)
-      const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
-      if (!(await verifyPassword(body.current, user.passwordHash))) throw badRequest('Your current password is wrong')
-      // The private-storage key is locked with the password, so lock it again with the new one.
-      const storagePrivateKey = user.storagePrivateKey
-        ? await lockWithPassword(await unlockWithPassword(user.storagePrivateKey, body.current), body.next)
-        : undefined
+      const user = await userWithPassword(request.user.id, body.current, 'Your current password is wrong')
+      // The private-storage key is locked with the password, so unlock it with the old one
+      // and lock it again with the new one.
+      let storagePrivateKey: string | undefined
+      if (user.storagePrivateKey) {
+        const key = await unlockWithPassword(user.storagePrivateKey, body.current)
+        storagePrivateKey = await lockWithPassword(key, body.next)
+      }
       await db.user.update({
         where: { id: user.id },
         data: { passwordHash: await hashPassword(body.next), storagePrivateKey },
@@ -167,12 +180,13 @@ export async function authRoutes(app: FastifyInstance) {
     signedIn.post('/2fa/setup', async (request) => {
       const secret = authenticator.generateSecret()
       const otpauthUrl = authenticator.keyuri(request.user.email, 'Nexus', secret)
-      return { secret, otpauthUrl, qrCode: await QRCode.toDataURL(otpauthUrl, { margin: 1, width: 240 }) }
+      const qrCode = await QRCode.toDataURL(otpauthUrl, { margin: 1, width: 240 }) // a PNG image as a data: URL
+      return { secret, otpauthUrl, qrCode }
     })
 
     signedIn.post('/2fa/enable', strict, async (request) => {
       const { code, secret } = parse(
-        z.object({ code: z.string(), secret: z.string().regex(/^[A-Z2-7]{16,}$/) }),
+        z.object({ code: z.string(), secret: z.string().regex(BASE32_SECRET) }),
         request.body,
       )
       if (!authenticator.verify({ token: code.replace(/\s/g, ''), secret })) {
@@ -184,8 +198,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     signedIn.post('/2fa/disable', strict, async (request) => {
       const { password: current } = parse(z.object({ password: z.string() }), request.body)
-      const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
-      if (!(await verifyPassword(current, user.passwordHash))) throw badRequest('Wrong password')
+      const user = await userWithPassword(request.user.id, current)
       await db.user.update({
         where: { id: user.id },
         data: { totpEnabled: false, totpSecret: null, recoveryCodes: [] },
@@ -195,8 +208,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     signedIn.post('/2fa/recovery-codes', strict, async (request) => {
       const { password: current } = parse(z.object({ password: z.string() }), request.body)
-      const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
-      if (!(await verifyPassword(current, user.passwordHash))) throw badRequest('Wrong password')
+      const user = await userWithPassword(request.user.id, current)
       if (!user.totpEnabled) throw badRequest('Turn on two-factor authentication first')
       return { recoveryCodes: await newRecoveryCodes(user.id) }
     })
@@ -204,50 +216,9 @@ export async function authRoutes(app: FastifyInstance) {
     // Private storage on or off. See lib/sealed.ts and the README for what it does and doesn't protect.
     signedIn.post('/private-storage', strict, async (request) => {
       const body = parse(z.object({ enabled: z.boolean(), password: z.string() }), request.body)
-      const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
-      if (!(await verifyPassword(body.password, user.passwordHash))) throw badRequest('Wrong password')
-      const owned = await db.account.findMany({
-        where: { ownerId: user.id },
-        include: { _count: { select: { members: true } } },
-      })
-      const accountIds = owned.map((a) => a.id)
-
-      if (body.enabled) {
-        const pop3 = owned.filter((a) => a.protocol === 'pop3').map((a) => a.email)
-        if (pop3.length)
-          throw badRequest(
-            `POP3 accounts can't use private storage, because Nexus holds the only copy of their mail: ${pop3.join(', ')}`,
-          )
-        const shared = owned.filter((a) => a._count.members > 0).map((a) => a.email)
-        if (shared.length)
-          throw badRequest(`Stop sharing ${shared.join(', ')} first. People you share with couldn't read private mail.`)
-
-        // Reuse the old key if private storage was on before, so mail sealed back then still opens.
-        const keys = user.storagePrivateKey
-          ? {
-              privateKey: await unlockWithPassword(user.storagePrivateKey, body.password),
-              publicKey: user.storagePublicKey!,
-            }
-          : newStorageKeys()
-        await db.user.update({
-          where: { id: user.id },
-          data: {
-            privateStorage: true,
-            storagePublicKey: keys.publicKey,
-            storagePrivateKey: await lockWithPassword(keys.privateKey, body.password),
-          },
-        })
-        await setSessionStorageKey(request, keys.privateKey)
-        // Other devices have no key and couldn't read anything; signing in again gives them one.
-        await db.session.deleteMany({ where: { userId: user.id, NOT: { id: request.sessionId } } })
-        // shortcut: seals the whole mailbox inside this request; move it to the job queue if mailboxes get huge.
-        await sealAccounts(accountIds, keys.publicKey)
-      } else {
-        if (!user.storagePrivateKey) return { ok: true }
-        // Keys are kept: mail a running sync seals right now must still open later.
-        await db.user.update({ where: { id: user.id }, data: { privateStorage: false } })
-        await unsealAccounts(accountIds, await unlockWithPassword(user.storagePrivateKey, body.password))
-      }
+      const user = await userWithPassword(request.user.id, body.password)
+      if (body.enabled) await turnOnPrivateStorage(request, user, body.password)
+      else await turnOffPrivateStorage(user, body.password)
       return { ok: true }
     })
 
@@ -272,13 +243,70 @@ export async function authRoutes(app: FastifyInstance) {
   })
 }
 
-// Ten single-use codes, shown once. Only their hashes are kept.
+// Loads the signed-in user, after checking the password they typed to confirm a sensitive change.
+async function userWithPassword(userId: string, typed: string, wrongMessage = 'Wrong password'): Promise<User> {
+  const user = await db.user.findUniqueOrThrow({ where: { id: userId } })
+  if (!(await verifyPassword(typed, user.passwordHash))) throw badRequest(wrongMessage)
+  return user
+}
+
+async function turnOnPrivateStorage(request: FastifyRequest, user: User, password: string) {
+  const owned = await db.account.findMany({
+    where: { ownerId: user.id },
+    include: { _count: { select: { members: true } } },
+  })
+  const pop3 = owned.filter((a) => a.protocol === 'pop3').map((a) => a.email)
+  if (pop3.length) {
+    throw badRequest(
+      `POP3 accounts can't use private storage, because Nexus holds the only copy of their mail: ${pop3.join(', ')}`,
+    )
+  }
+  const shared = owned.filter((a) => a._count.members > 0).map((a) => a.email)
+  if (shared.length) {
+    throw badRequest(`Stop sharing ${shared.join(', ')} first. People you share with couldn't read private mail.`)
+  }
+
+  // Reuse the old key if private storage was on before, so mail sealed back then still opens.
+  let keys: StorageKeys
+  if (user.storagePrivateKey) {
+    keys = { privateKey: await unlockWithPassword(user.storagePrivateKey, password), publicKey: user.storagePublicKey! }
+  } else {
+    keys = newStorageKeys()
+  }
+  const storagePrivateKey = await lockWithPassword(keys.privateKey, password)
+  await db.user.update({
+    where: { id: user.id },
+    data: { privateStorage: true, storagePublicKey: keys.publicKey, storagePrivateKey },
+  })
+  await setSessionStorageKey(request, keys.privateKey)
+
+  // Other devices have no key and couldn't read anything; signing in again gives them one.
+  await db.session.deleteMany({ where: { userId: user.id, NOT: { id: request.sessionId } } })
+  // shortcut: seals the whole mailbox inside this request; move it to the job queue if mailboxes get huge.
+  await sealAccounts(
+    owned.map((a) => a.id),
+    keys.publicKey,
+  )
+}
+
+async function turnOffPrivateStorage(user: User, password: string) {
+  if (!user.storagePrivateKey) return // was never on
+  // The keys are kept, not deleted: mail that a sync is sealing right now must still open later.
+  await db.user.update({ where: { id: user.id }, data: { privateStorage: false } })
+  const owned = await db.account.findMany({ where: { ownerId: user.id }, select: { id: true } })
+  const key = await unlockWithPassword(user.storagePrivateKey, password)
+  await unsealAccounts(
+    owned.map((a) => a.id),
+    key,
+  )
+}
+
+// Ten single-use codes like "3f9a1-0c7d2", shown once. Only their hashes are kept.
 async function newRecoveryCodes(userId: string, extra: { totpEnabled?: boolean; totpSecret?: string } = {}) {
-  const codes = Array.from({ length: 10 }, () =>
-    randomBytes(5)
-      .toString('hex')
-      .replace(/(.{5})/, '$1-'),
-  ) // e.g. "3f9a1-0c7d2"
+  const codes = Array.from({ length: 10 }, () => {
+    const hex = randomBytes(5).toString('hex') // 10 random characters
+    return `${hex.slice(0, 5)}-${hex.slice(5)}`
+  })
   await db.user.update({
     where: { id: userId },
     data: { ...extra, recoveryCodes: codes.map((c) => sha256(normalizeCode(c))) },

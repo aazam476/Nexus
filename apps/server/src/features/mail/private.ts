@@ -3,7 +3,7 @@
 import type { KeyObject } from 'node:crypto'
 import type { Message, Prisma } from '@prisma/client'
 import { simpleParser } from 'mailparser'
-import { db } from '../../db.ts'
+import { asJson, db } from '../../db.ts'
 import { loadBody } from '../../lib/access.ts'
 import { forbidden } from '../../lib/http.ts'
 import { sealJson, unsealJson } from '../../lib/sealed.ts'
@@ -45,7 +45,7 @@ export function sealedFields(
     html: null,
     text: null,
     preview: '',
-    attachments: [] as Prisma.InputJsonValue,
+    attachments: asJson([]),
     event: undefined,
   }
 }
@@ -54,12 +54,14 @@ type Stored = Pick<Message, 'preview' | 'attachments' | 'event' | 'sealedSummary
 
 // For list rows. Without the key, a sealed message shows no preview rather than failing the whole list.
 export function openSummary(message: Stored, key: KeyObject | null): Summary {
-  if (!message.sealedSummary)
+  if (!message.sealedSummary) {
+    // Not sealed: the columns hold it as is. (They are JSON columns, so tell TypeScript what's inside.)
     return {
       preview: message.preview,
       attachments: message.attachments as unknown as AttachmentInfo[],
       event: message.event as CalendarEvent | null,
     }
+  }
   if (!key) return { preview: '', attachments: [], event: null }
   return unsealJson<Summary>(message.sealedSummary, key)
 }
@@ -106,8 +108,8 @@ export async function unsealAccounts(accountIds: string[], key: KeyObject) {
           html: body.html,
           text: body.text,
           preview: summary.preview,
-          attachments: summary.attachments as unknown as Prisma.InputJsonValue,
-          event: (summary.event ?? undefined) as Prisma.InputJsonValue | undefined,
+          attachments: asJson(summary.attachments),
+          event: summary.event ? asJson(summary.event) : undefined,
           sealedSummary: null,
           sealedBody: null,
         },

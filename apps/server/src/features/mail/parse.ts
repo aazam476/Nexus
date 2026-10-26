@@ -34,20 +34,23 @@ export interface ParsedMessage {
   spamScore: number | null
 }
 
-const people = (field: AddressObject | AddressObject[] | undefined): Person[] =>
-  (Array.isArray(field) ? field : field ? [field] : [])
-    .flatMap((group) => group.value)
-    .filter((a) => a.address)
-    .map((a) => ({ name: a.name || a.address!, email: a.address!.toLowerCase() }))
+// mailparser gives addresses as one object or a list of them, each holding several addresses.
+// This flattens that into a simple list of people, skipping entries without an address.
+function people(field: AddressObject | AddressObject[] | undefined): Person[] {
+  if (!field) return []
+  const groups = Array.isArray(field) ? field : [field]
+  const addresses = groups.flatMap((group) => group.value).filter((a) => a.address)
+  return addresses.map((a) => ({ name: a.name || a.address!, email: a.address!.toLowerCase() }))
+}
 
-const header = (headers: Map<string, unknown>, name: string) => {
+// A header's value as text. mailparser stores some headers as plain strings and others as
+// objects like { value: 'text/html', params: {...} }.
+function header(headers: Map<string, unknown>, name: string): string {
   const value = headers.get(name)
   if (value == null) return ''
-  return typeof value === 'string'
-    ? value
-    : typeof value === 'object' && 'value' in value
-      ? String(value.value)
-      : String(value)
+  if (typeof value === 'string') return value
+  if (typeof value === 'object' && 'value' in value) return String(value.value)
+  return String(value)
 }
 
 export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
@@ -82,32 +85,53 @@ export async function parseRaw(raw: Buffer): Promise<ParsedMessage> {
     attachments,
     security: detectSecurity(headers, text),
     event: extractEvent({ html, icsTexts }),
-    // mailparser gathers List-Unsubscribe, List-Id, etc. under one "list" key.
-    isMailingList: headers.has('list') || /bulk|list/i.test(header(headers, 'precedence')),
-    isAutomated: !!header(headers, 'auto-submitted') && !/^no$/i.test(header(headers, 'auto-submitted')),
+    isMailingList: isMailingList(headers),
+    isAutomated: isAutomated(headers),
     ...spamHeaders(headers),
   }
 }
 
 // What counts as an attachment, everywhere (reader, forwarding): not images embedded in the HTML,
 // and not S/MIME signature parts (smime.p7s).
-export const isAttachment = (part: { related?: boolean; contentType: string }) =>
-  !part.related && !/pkcs7-(signature|mime)/.test(part.contentType)
+export function isAttachment(part: { related?: boolean; contentType: string }): boolean {
+  const isSignaturePart = /pkcs7-(signature|mime)/.test(part.contentType) // application/pkcs7-signature, …-mime
+  return !part.related && !isSignaturePart
+}
 
+// Newsletters and mailing lists send List-* headers (mailparser gathers them all under one "list"
+// key) or "Precedence: bulk" / "Precedence: list".
+function isMailingList(headers: Map<string, unknown>): boolean {
+  return headers.has('list') || /bulk|list/i.test(header(headers, 'precedence'))
+}
+
+// "Auto-Submitted: auto-generated" (or anything except "no") marks mail a machine sent on its own.
+function isAutomated(headers: Map<string, unknown>): boolean {
+  const value = header(headers, 'auto-submitted')
+  return value !== '' && value.toLowerCase() !== 'no'
+}
+
+// The short grey text under the subject in the list: the start of the message as plain text.
 export function makePreview(content: string): string {
-  return content
-    .replace(/<(head|style|script)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/-----BEGIN PGP[\s\S]*/g, 'Encrypted message')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 180)
+  return (
+    content
+      // Drop whole <head>, <style> and <script> blocks, contents included ("\1" repeats the tag name).
+      .replace(/<(head|style|script)[\s\S]*?<\/\1>/gi, ' ')
+      // Drop every other tag, keeping the text between them.
+      .replace(/<[^>]+>/g, ' ')
+      // Turn the common HTML entities back into characters. &amp; goes last, so "&amp;lt;" stays "&lt;".
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&')
+      // An encrypted message is unreadable gibberish; say what it is instead.
+      .replace(/-----BEGIN PGP[\s\S]*/g, 'Encrypted message')
+      // Squash runs of spaces and line breaks into single spaces.
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 180)
+  )
 }
 
 function detectSecurity(headers: Map<string, unknown>, text: string | null): ParsedMessage['security'] {
@@ -122,12 +146,16 @@ function detectSecurity(headers: Map<string, unknown>, text: string | null): Par
   return null
 }
 
-// SpamAssassin and Rspamd both add headers like these.
+// Spam filters on the mail server (SpamAssassin, Rspamd) add headers like these:
+//   X-Spam-Flag: YES
+//   X-Spam-Status: Yes, score=12.4 required=5.0 ...
+//   X-Spam-Score: 12.4
 function spamHeaders(headers: Map<string, unknown>) {
   const status = header(headers, 'x-spam-status')
   const flag = /^yes/i.test(header(headers, 'x-spam-flag')) || /^yes/i.test(status)
-  const scoreText =
-    header(headers, 'x-spam-score') || header(headers, 'x-rspamd-score') || status.match(/score=(-?[\d.]+)/)?.[1] || ''
+  // The score from its own header, or the number after "score=" in X-Spam-Status (it may be negative).
+  const scoreFromStatus = status.match(/score=(-?[\d.]+)/)?.[1]
+  const scoreText = header(headers, 'x-spam-score') || header(headers, 'x-rspamd-score') || scoreFromStatus || ''
   const score = Number.parseFloat(scoreText)
   return { spamFlag: flag, spamScore: Number.isFinite(score) ? score : null }
 }

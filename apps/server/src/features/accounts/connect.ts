@@ -7,6 +7,8 @@ import { decrypt } from '../../lib/crypto.ts'
 import { accessToken } from './oauth.ts'
 import { Pop3 } from './pop3.ts'
 
+// rejectUnauthorized: refuse servers whose certificate isn't valid and trusted (the safe default).
+// MAIL_ALLOW_INSECURE_TLS turns that off, for a home mail server with a self-signed certificate.
 const tls = { rejectUnauthorized: !config.MAIL_ALLOW_INSECURE_TLS }
 
 type ServerSettings = Pick<
@@ -14,6 +16,7 @@ type ServerSettings = Pick<
   'id' | 'auth' | 'secret' | 'username' | 'inHost' | 'inPort' | 'inTls' | 'smtpHost' | 'smtpPort' | 'smtpTls'
 >
 
+// What to log in with: the stored password, or (for Google/Microsoft accounts) a fresh OAuth access token.
 async function credentials(account: ServerSettings) {
   return account.auth === 'password'
     ? { user: account.username, pass: decrypt(account.secret) }

@@ -35,10 +35,14 @@ export interface Pop3Settings {
   tlsOptions?: ConnectionOptions
 }
 
+// How it works: POP3 is a conversation of text lines. We write a command ("RETR 2") and the server
+// answers with "+OK ..." or "-ERR ...", sometimes followed by many lines (a whole email).
+// Data arrives in chunks of any size, so everything received is collected in `received`, and
+// reply() looks there for a complete answer, waiting for the next chunk whenever it isn't complete yet.
 export class Pop3 {
   private socket!: Socket
-  private received: Buffer = Buffer.alloc(0)
-  private notify: (() => void) | null = null
+  private received: Buffer = Buffer.alloc(0) // data from the server not yet used up by a reply
+  private notify: (() => void) | null = null // wakes up reply() when more data (or an error) arrives
   private failure: Error | null = null
 
   static async open(settings: Pop3Settings): Promise<Pop3> {
@@ -53,6 +57,7 @@ export class Pop3 {
     pop3.attach(settings.tls ? connectTls(tlsOptions) : connectTcp(settings.port, settings.host))
     await pop3.reply() // greeting
     if (!settings.tls) {
+      // STLS: switch the plain connection to an encrypted one before sending the password.
       await pop3.command('STLS')
       pop3.attach(connectTls({ ...tlsOptions, socket: pop3.socket }))
     }
@@ -121,6 +126,7 @@ export class Pop3 {
           return done.body
         }
       }
+      // Not complete yet: sleep until the socket's 'data' or 'error' handler calls notify().
       await new Promise<void>((resolve) => (this.notify = resolve))
     }
   }

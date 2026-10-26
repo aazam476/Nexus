@@ -7,7 +7,7 @@ import { errorMessage } from '../../lib/http.ts'
 import { openPop3, withImap } from '../accounts/connect.ts'
 import { parseRaw } from './parse.ts'
 import { sealAccounts } from './private.ts'
-import { classify, nothingChanged } from './sorting.ts'
+import { categoryOf, nothingChanged } from './sorting.ts'
 import { loadSortingContext, saveMessage, sortIncoming, type SortingContext } from './store.ts'
 
 // shortcut: the first sync of a folder only fetches its newest messages; add a "load older mail" job for full history.
@@ -43,7 +43,11 @@ async function syncImap(account: Account, context: SortingContext) {
   })
 }
 
-const specialUse: Record<string, (typeof ROLES)[number]> = {
+// How a server folder is recognised. Most servers tag their special folders ("special-use" flags
+// like \Sent), whatever they're called in the user's language. Older ones don't, so the folder
+// name is the fallback.
+type Role = (typeof ROLES)[number]
+const roleBySpecialUse: Record<string, Role> = {
   '\\Inbox': 'inbox',
   '\\Sent': 'sent',
   '\\Drafts': 'drafts',
@@ -51,30 +55,35 @@ const specialUse: Record<string, (typeof ROLES)[number]> = {
   '\\Junk': 'spam',
   '\\Trash': 'trash',
 }
-const byName: [RegExp, (typeof ROLES)[number]][] = [
-  [/^inbox$/i, 'inbox'],
-  [/^sent/i, 'sent'],
-  [/^drafts?$/i, 'drafts'],
-  [/^archive/i, 'archive'],
-  [/junk|spam/i, 'spam'],
-  [/trash|deleted/i, 'trash'],
+const roleByName: [RegExp, Role][] = [
+  [/^inbox$/i, 'inbox'], // exactly "INBOX"
+  [/^sent/i, 'sent'], // "Sent", "Sent Items", "Sent Messages"
+  [/^drafts?$/i, 'drafts'], // "Draft" or "Drafts"
+  [/^archive/i, 'archive'], // "Archive", "Archives"
+  [/junk|spam/i, 'spam'], // anything mentioning junk or spam
+  [/trash|deleted/i, 'trash'], // "Trash", "Deleted Items"
+]
+// Folders Nexus needs on every account, and the name to create them with when the server has none.
+const REQUIRED_FOLDERS: [Role, string][] = [
+  ['sent', 'Sent'],
+  ['archive', 'Archive'],
+  ['spam', 'Junk'],
+  ['trash', 'Trash'],
 ]
 
-// Matches server mailboxes to Nexus folder roles, creating Archive/Spam/Trash/Sent if the server lacks them.
+function roleOf(mailbox: ListResponse): Role | undefined {
+  if (mailbox.specialUse && roleBySpecialUse[mailbox.specialUse]) return roleBySpecialUse[mailbox.specialUse]
+  return roleByName.find(([pattern]) => pattern.test(mailbox.name))?.[1]
+}
+
+// Matches the server's mailboxes to Nexus folder roles, creating Sent/Archive/Junk/Trash if missing.
 export async function discoverFolders(client: ImapFlow, accountId: string): Promise<Map<string, Folder>> {
-  const mailboxes: ListResponse[] = await client.list()
-  const pathFor = new Map<string, string>()
-  for (const box of mailboxes) {
-    const role =
-      (box.specialUse && specialUse[box.specialUse]) || byName.find(([pattern]) => pattern.test(box.name))?.[1]
-    if (role && !pathFor.has(role)) pathFor.set(role, box.path)
+  const pathFor = new Map<string, string>() // role → the mailbox's path on the server
+  for (const mailbox of await client.list()) {
+    const role = roleOf(mailbox)
+    if (role && !pathFor.has(role)) pathFor.set(role, mailbox.path) // the first match wins
   }
-  for (const [role, name] of [
-    ['sent', 'Sent'],
-    ['archive', 'Archive'],
-    ['spam', 'Junk'],
-    ['trash', 'Trash'],
-  ] as const) {
+  for (const [role, name] of REQUIRED_FOLDERS) {
     if (!pathFor.has(role)) {
       const created = await client.mailboxCreate(name)
       pathFor.set(role, created.path)
@@ -93,6 +102,12 @@ export async function discoverFolders(client: ImapFlow, accountId: string): Prom
   return folders
 }
 
+// Syncs one folder in three steps. Some IMAP words used below:
+//   UID          a number the server gives each message in a folder; new messages get higher ones,
+//                so "UIDs above the last one we saw" means "new mail"
+//   UIDVALIDITY  changes if the server ever renumbers the folder; then our saved UIDs are worthless
+//   flags        \Seen (read) and \Flagged (starred), set by any mail app
+//   exists       how many messages the folder holds right now
 async function syncFolder(
   client: ImapFlow,
   account: Account,
@@ -100,112 +115,135 @@ async function syncFolder(
   folders: Map<string, Folder>,
   context: SortingContext,
 ) {
+  // The lock stops other commands (from this connection) using the folder while we work in it.
   const lock = await client.getMailboxLock(folder.path)
   try {
     const mailbox = client.mailbox
     if (!mailbox) return
     let lastUid = folder.lastUid
-
-    // UIDVALIDITY changed: the server renumbered everything, so start this folder over.
     if (folder.uidValidity != null && folder.uidValidity !== mailbox.uidValidity) {
+      // The server renumbered everything: forget this folder and download it again.
       await db.message.deleteMany({ where: { folderId: folder.id } })
       lastUid = 0
     }
 
-    // 1. Find new messages. List UIDs first; fetch each body separately so big attachments
-    //    never pile up in memory, and because imapflow can't run other commands mid-fetch.
-    const newUids: number[] = []
-    if (mailbox.exists > 0) {
-      const range = lastUid > 0 ? `${lastUid + 1}:*` : `${Math.max(1, mailbox.exists - FIRST_SYNC_LIMIT + 1)}:*`
-      for await (const message of client.fetch(range, { uid: true }, { uid: lastUid > 0 })) {
-        if (message.uid > lastUid) newUids.push(message.uid) // "N:*" always returns the last message, even if old
-      }
-    }
+    const newUids = await findNewUids(client, lastUid, mailbox.exists)
+    for (const uid of newUids) await downloadMessage(client, uid, account, folder, folders, context)
 
-    for (const uid of newUids) {
-      const message = await client.fetchOne(String(uid), { source: true, flags: true }, { uid: true })
-      if (!message || !message.source) continue
-      const parsed = await parseRaw(message.source)
-      const flags = message.flags ?? new Set<string>()
-      let unread = !flags.has('\\Seen')
-      let category = classify({
-        fromEmail: parsed.from.email,
-        subject: parsed.subject,
-        isMailingList: parsed.isMailingList,
-        isAutomated: parsed.isAutomated,
-        hasEvent: !!parsed.event,
-      })
-      let labels: string[] = []
-
-      if (folder.role === 'inbox') {
-        const decision = sortIncoming(parsed, context)
-        const target = decision.moveTo && folders.get(decision.moveTo)
-        if (target && target.id !== folder.id) {
-          // Move it on the server; the target folder's sync picks it up later in this run.
-          await client.messageMove(String(uid), target.path, { uid: true })
-          continue
-        }
-        if (decision.markRead && unread) {
-          await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true })
-          unread = false
-        }
-        category = decision.category
-        labels = decision.labels
-      }
-
-      await saveMessage({
-        accountId: account.id,
-        folderId: folder.id,
-        raw: message.source,
-        parsed,
-        uid,
-        unread,
-        starred: flags.has('\\Flagged'),
-        category,
-        labels,
-        sealFor: context.sealFor,
-      })
-    }
-
-    // 2. Bring flags and deletions made in other mail apps into Nexus (skipped when nothing changed).
-    const modseq = mailbox.highestModseq ?? null
-    const unchanged = nothingChanged(folder, { highestModseq: modseq, exists: mailbox.exists }, newUids.length)
-    const local = unchanged
-      ? []
-      : await db.message.findMany({
-          where: { folderId: folder.id },
-          select: { id: true, uid: true, unread: true, starred: true },
-        })
-    if (local.length) {
-      const remote = new Map<number, Set<string>>()
-      if (mailbox.exists > 0) {
-        for await (const message of client.fetch('1:*', { uid: true, flags: true }))
-          remote.set(message.uid, message.flags ?? new Set())
-      }
-      const gone = local.filter((m) => m.uid == null || !remote.has(m.uid)).map((m) => m.id)
-      if (gone.length) await db.message.deleteMany({ where: { id: { in: gone } } })
-      for (const message of local) {
-        const flags = message.uid != null ? remote.get(message.uid) : undefined
-        if (!flags) continue
-        const unread = !flags.has('\\Seen')
-        const starred = flags.has('\\Flagged')
-        if (unread !== message.unread || starred !== message.starred) {
-          await db.message.update({ where: { id: message.id }, data: { unread, starred } })
-        }
-      }
-    }
+    const unchanged = nothingChanged(
+      folder,
+      { highestModseq: mailbox.highestModseq ?? null, exists: mailbox.exists },
+      newUids.length,
+    )
+    if (!unchanged) await copyChangesFromServer(client, folder, mailbox.exists)
 
     await db.folder.update({
       where: { id: folder.id },
       data: {
         uidValidity: mailbox.uidValidity,
-        lastUid: Math.max(lastUid, ...newUids, 0),
-        highestModseq: modseq,
+        lastUid: Math.max(lastUid, ...newUids),
+        highestModseq: mailbox.highestModseq ?? null,
         lastExists: mailbox.exists,
       },
     })
   } finally {
     lock.release()
+  }
+}
+
+// Step 1: which messages are new. Only UIDs are fetched here; bodies come one at a time in step 2,
+// so big attachments never pile up in memory (and imapflow can't run other commands mid-fetch).
+async function findNewUids(client: ImapFlow, lastUid: number, exists: number): Promise<number[]> {
+  if (exists === 0) return []
+  // "A:*" means "from A to the end". After a first sync, ask by UID for everything above the last
+  // one seen. On the first sync, ask by position for the newest FIRST_SYNC_LIMIT messages.
+  const firstSync = lastUid === 0
+  const range = firstSync ? `${Math.max(1, exists - FIRST_SYNC_LIMIT + 1)}:*` : `${lastUid + 1}:*`
+  const uids: number[] = []
+  for await (const message of client.fetch(range, { uid: true }, { uid: !firstSync })) {
+    // "N:*" always includes the very last message, even when it isn't new, so check.
+    if (message.uid > lastUid) uids.push(message.uid)
+  }
+  return uids
+}
+
+// Step 2: download one new message, sort it (inbox only), and save it.
+async function downloadMessage(
+  client: ImapFlow,
+  uid: number,
+  account: Account,
+  folder: Folder,
+  folders: Map<string, Folder>,
+  context: SortingContext,
+) {
+  const message = await client.fetchOne(String(uid), { source: true, flags: true }, { uid: true })
+  if (!message || !message.source) return
+  const parsed = await parseRaw(message.source)
+  const flags = message.flags ?? new Set<string>()
+  let unread = !flags.has('\\Seen')
+  let category = categoryOf(parsed)
+  let labels: string[] = []
+
+  // New mail in the inbox goes through the user's rules and the spam check.
+  if (folder.role === 'inbox') {
+    const decision = sortIncoming(parsed, context)
+    const target = decision.moveTo && folders.get(decision.moveTo)
+    if (target && target.id !== folder.id) {
+      // Move it on the server; syncing the target folder picks it up later in this same run.
+      await client.messageMove(String(uid), target.path, { uid: true })
+      return
+    }
+    if (decision.markRead && unread) {
+      await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true })
+      unread = false
+    }
+    category = decision.category
+    labels = decision.labels
+  }
+
+  await saveMessage({
+    accountId: account.id,
+    folderId: folder.id,
+    raw: message.source,
+    parsed,
+    uid,
+    unread,
+    starred: flags.has('\\Flagged'),
+    category,
+    labels,
+    sealFor: context.sealFor,
+  })
+}
+
+// Step 3: copy what other mail apps changed (read, starred, deleted) into Nexus.
+async function copyChangesFromServer(client: ImapFlow, folder: Folder, exists: number) {
+  const local = await db.message.findMany({
+    where: { folderId: folder.id },
+    select: { id: true, uid: true, unread: true, starred: true },
+  })
+  if (!local.length) return
+
+  // Every message's UID and flags, as the server has them now.
+  const remote = new Map<number, Set<string>>()
+  if (exists > 0) {
+    for await (const message of client.fetch('1:*', { uid: true, flags: true })) {
+      remote.set(message.uid, message.flags ?? new Set())
+    }
+  }
+
+  // Gone from the server: deleted (or moved) in another app.
+  const gone = local.filter((m) => m.uid == null || !remote.has(m.uid)).map((m) => m.id)
+  if (gone.length) await db.message.deleteMany({ where: { id: { in: gone } } })
+
+  // Still there: update read and starred if they changed.
+  for (const message of local) {
+    const flags = message.uid != null ? remote.get(message.uid) : undefined
+    if (!flags) continue
+    const unread = !flags.has('\\Seen')
+    const starred = flags.has('\\Flagged')
+    if (unread !== message.unread || starred !== message.starred) {
+      await db.message.update({ where: { id: message.id }, data: { unread, starred } })
+    }
   }
 }
 
@@ -227,14 +265,12 @@ export async function localFolders(accountId: string): Promise<Map<string, Folde
 
 async function syncPop3(account: Account, context: SortingContext) {
   const folders = await localFolders(account.id)
-  const known = new Set(
-    (
-      await db.message.findMany({
-        where: { accountId: account.id, remoteId: { not: null } },
-        select: { remoteId: true },
-      })
-    ).map((m) => m.remoteId),
-  )
+  // POP3 gives each message a unique id (UIDL). Those already downloaded are skipped.
+  const downloaded = await db.message.findMany({
+    where: { accountId: account.id, remoteId: { not: null } },
+    select: { remoteId: true },
+  })
+  const known = new Set(downloaded.map((m) => m.remoteId))
   const pop3 = await openPop3(account)
   try {
     for (const [number, uidl] of await pop3.uidl()) {

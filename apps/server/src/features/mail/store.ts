@@ -1,9 +1,9 @@
 // Saving parsed mail into the database, and the per-user settings that decide where it goes.
 import type { Prisma } from '@prisma/client'
-import { db } from '../../db.ts'
+import { asJson, db } from '../../db.ts'
 import type { ParsedMessage } from './parse.ts'
 import { sealedFields } from './private.ts'
-import { applyRules, classify, isSpam, type Category, type RuleInput } from './sorting.ts'
+import { applyRules, categoryOf, isSpam, type Category, type RuleInput } from './sorting.ts'
 
 export interface SortingContext {
   rules: RuleInput[]
@@ -55,15 +55,7 @@ export function sortIncoming(parsed: ParsedMessage, context: SortingContext): So
       context.spamThreshold,
     )
   return {
-    category:
-      outcome.category ??
-      classify({
-        fromEmail: parsed.from.email,
-        subject: parsed.subject,
-        isMailingList: parsed.isMailingList,
-        isAutomated: parsed.isAutomated,
-        hasEvent: !!parsed.event,
-      }),
+    category: outcome.category ?? categoryOf(parsed),
     labels: outcome.labels,
     markRead: outcome.markRead,
     moveTo: spam ? 'spam' : outcome.moveTo,
@@ -95,8 +87,8 @@ export async function saveMessage(input: SaveInput): Promise<boolean> {
     messageId: parsed.messageId,
     fromName: parsed.from.name,
     fromEmail: parsed.from.email,
-    to: parsed.to as unknown as Prisma.InputJsonValue,
-    cc: parsed.cc as unknown as Prisma.InputJsonValue,
+    to: asJson(parsed.to),
+    cc: asJson(parsed.cc),
     subject: parsed.subject,
     preview: parsed.preview,
     text: parsed.text,
@@ -106,9 +98,9 @@ export async function saveMessage(input: SaveInput): Promise<boolean> {
     starred: input.starred,
     category: input.category,
     labels: input.labels,
-    attachments: parsed.attachments as unknown as Prisma.InputJsonValue,
+    attachments: asJson(parsed.attachments),
     security: parsed.security,
-    event: (parsed.event ?? undefined) as Prisma.InputJsonValue | undefined,
+    event: parsed.event ? asJson(parsed.event) : undefined,
     raw: Uint8Array.from(input.raw),
     ...(input.sealFor &&
       sealedFields(

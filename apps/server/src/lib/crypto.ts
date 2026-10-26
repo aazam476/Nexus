@@ -2,20 +2,26 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 
+// ---------- Passwords ----------
+// scrypt turns a password into a key, and is deliberately slow and memory-hungry, so someone with a
+// stolen database can only try a few guesses per second. The salt (random per password) means two
+// people with the same password still get different hashes.
+const SCRYPT = { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }
 const scryptAsync = promisify(scrypt) as (
   password: string,
   salt: Buffer,
-  keylen: number,
+  length: number,
   options: object,
 ) => Promise<Buffer>
 
-// ---------- Passwords ----------
-// scrypt with a random salt. Stored as "scrypt$N$r$p$salt$hash" so parameters can change later.
-const SCRYPT = { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }
+// A 32-byte key from a password. Also used by sealed.ts to lock the private-storage key.
+export const keyFromPassword = (password: string, salt: Buffer) => scryptAsync(password, salt, 32, SCRYPT)
+
+// Stored as "scrypt$N$r$p$salt$hash", so the settings can be raised later without breaking old hashes.
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16)
-  const hash = await scryptAsync(password, salt, 32, SCRYPT)
+  const hash = await keyFromPassword(password, salt)
   return ['scrypt', SCRYPT.N, SCRYPT.r, SCRYPT.p, salt.toString('base64'), hash.toString('base64')].join('$')
 }
 
@@ -29,6 +35,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
     p: Number(p),
     maxmem: SCRYPT.maxmem,
   })
+  // Compares in constant time: a normal === stops at the first different byte, and that timing leaks hints.
   return timingSafeEqual(actual, expected)
 }
 

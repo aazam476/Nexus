@@ -187,9 +187,12 @@ test('shows a booking as an event card, and marks mail unread or replies to ever
 
   await page.getByRole('button', { name: 'Mark unread' }).click()
   await expect(page.getByRole('heading', { level: 1, name: trip })).toBeHidden()
-  const counts = (await (await page.request.get('/api/messages?folder=inbox')).json()) as {
-    subject: string
-    unread: boolean
-  }[]
-  expect(counts.find((m) => m.subject === trip)?.unread).toBe(true)
+  // The screen updates at once and the server a moment later, so keep asking until it agrees.
+  await expect.poll(() => isUnreadOnServer(page, trip)).toBe(true)
 })
+
+async function isUnreadOnServer(page: import('@playwright/test').Page, subject: string) {
+  const response = await page.request.get('/api/messages?folder=inbox')
+  const messages = (await response.json()) as { subject: string; unread: boolean }[]
+  return messages.find((m) => m.subject === subject)?.unread
+}

@@ -10,7 +10,10 @@ interface Files {
   [name: string]: string | Buffer
 }
 
-// Runs openssl with the given files available in a temp folder. Returns stdout, or a named output file.
+// Runs openssl with the given files written into a fresh temp folder, then deletes the folder.
+// `args` is a function because the arguments need that folder's path, which only exists once it's made:
+//   openssl((dir) => ['x509', '-in', join(dir, 'cert.pem')], { 'cert.pem': certPem })
+// Returns what openssl printed, or the contents of `options.output` if it writes to a file instead.
 async function openssl(
   args: (dir: string) => string[],
   files: Files,
@@ -52,14 +55,20 @@ export async function readP12(p12: Buffer, password: string) {
       { 'id.p12': p12 },
       { env: { P12_PASSWORD: password } },
     )
-  // Older certificate files use ciphers OpenSSL 3 only reads with -legacy.
-  const pem = (
-    await unpack(false)
-      .catch(() => unpack(true))
-      .catch(() => {
-        throw new HttpError(400, 'Could not open the certificate. Check the password.')
-      })
-  ).toString()
+  // Try the normal way first, then with -legacy: older .p12 files use ciphers OpenSSL 3 only reads that way.
+  let unpacked: Buffer
+  try {
+    unpacked = await unpack(false)
+  } catch {
+    try {
+      unpacked = await unpack(true)
+    } catch {
+      throw new HttpError(400, 'Could not open the certificate. Check the password.')
+    }
+  }
+  const pem = unpacked.toString()
+
+  // The output holds PEM blocks: text between "-----BEGIN …-----" and "-----END …-----" lines.
 
   const certPem = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/)?.[0]
   const keyPem = pem.match(
@@ -72,17 +81,20 @@ export async function readP12(p12: Buffer, password: string) {
       'cert.pem': certPem,
     })
   ).toString()
+  // openssl prints lines like "subject=CN = Ann, emailAddress = ann@x.com", "notAfter=Oct 26 12:00:00 2027 GMT",
+  // and (for -email) the certificate's address on a line of its own.
   const subject = info.match(/subject=\s*(.+)/)?.[1]?.trim() ?? ''
   const expiresAt = new Date(info.match(/notAfter=(.+)/)?.[1] ?? '')
-  const email =
-    info
-      .split('\n')
-      .find((line) => line.includes('@') && !line.includes('='))
-      ?.trim()
-      .toLowerCase() ??
-    subject.match(/emailAddress\s*=\s*([^,/]+)/)?.[1]?.toLowerCase() ??
-    ''
-  return { certPem, keyPem, subject, email, expiresAt }
+  return { certPem, keyPem, subject, email: certificateEmail(info, subject), expiresAt }
+}
+
+// The certificate's email address: the line -email printed (it has an "@" and no "="), or else
+// the emailAddress field inside the subject.
+function certificateEmail(info: string, subject: string): string {
+  const emailLine = info.split('\n').find((line) => line.includes('@') && !line.includes('='))
+  if (emailLine) return emailLine.trim().toLowerCase()
+  const fromSubject = subject.match(/emailAddress\s*=\s*([^,/]+)/)?.[1] // up to the next "," or "/"
+  return fromSubject?.toLowerCase() ?? ''
 }
 
 // Signs a MIME entity. Output is a multipart/signed entity (detached signature, readable everywhere).

@@ -18,6 +18,7 @@ export interface AuthUser {
   role: string
 }
 
+// Tells TypeScript that requireUser (below) adds these fields to every request it lets through.
 declare module 'fastify' {
   interface FastifyRequest {
     user: AuthUser

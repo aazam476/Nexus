@@ -20,48 +20,39 @@ export const immich: NexusPlugin = {
   async saveAttachment(file, settings) {
     if (!/^(image|video)\//.test(file.contentType)) throw new Error('Immich only accepts photos and videos')
     const base = trimUrl(settings.url)
-    const headers = { 'x-api-key': settings.apiKey }
-    const now = new Date().toISOString()
 
+    // One call to the Immich API, returning its JSON answer.
+    async function call<T>(path: string, method = 'GET', body?: FormData | object): Promise<T> {
+      const headers: Record<string, string> = { 'x-api-key': settings.apiKey }
+      let payload: FormData | string | undefined
+      if (body instanceof FormData) payload = body
+      else if (body) {
+        headers['content-type'] = 'application/json'
+        payload = JSON.stringify(body)
+      }
+      const response = await request(`${base}${path}`, { method, headers, body: payload }, 'Immich')
+      return (await response.json()) as T
+    }
+
+    // 1. Upload the file.
+    const now = new Date().toISOString()
     const form = new FormData()
     form.append('assetData', new Blob([new Uint8Array(file.content)], { type: file.contentType }), file.filename)
-    // Same file uploaded twice gets the same id, so Immich can recognise duplicates.
+    // The same file uploaded twice gets the same id, so Immich can spot duplicates.
     form.append('deviceAssetId', `nexus-${createHash('sha1').update(file.content).digest('hex')}`)
     form.append('deviceId', 'nexus')
     form.append('fileCreatedAt', now)
     form.append('fileModifiedAt', now)
-    const asset = (await (
-      await request(`${base}/api/assets`, { method: 'POST', headers, body: form }, 'Immich')
-    ).json()) as { id: string }
+    const asset = await call<{ id: string }>('/api/assets', 'POST', form)
 
+    // 2. If an album is set, add it there, creating the album the first time.
     if (settings.album) {
-      const albums = (await (await request(`${base}/api/albums`, { headers }, 'Immich')).json()) as {
-        id: string
-        albumName: string
-      }[]
-      let album = albums.find((a) => a.albumName === settings.album)
-      if (!album) {
-        album = (await (
-          await request(
-            `${base}/api/albums`,
-            {
-              method: 'POST',
-              headers: { ...headers, 'content-type': 'application/json' },
-              body: JSON.stringify({ albumName: settings.album }),
-            },
-            'Immich',
-          )
-        ).json()) as { id: string; albumName: string }
-      }
-      await request(
-        `${base}/api/albums/${album.id}/assets`,
-        {
-          method: 'PUT',
-          headers: { ...headers, 'content-type': 'application/json' },
-          body: JSON.stringify({ ids: [asset.id] }),
-        },
-        'Immich',
-      )
+      type Album = { id: string; albumName: string }
+      const albums = await call<Album[]>('/api/albums')
+      const album =
+        albums.find((a) => a.albumName === settings.album) ??
+        (await call<Album>('/api/albums', 'POST', { albumName: settings.album }))
+      await call(`/api/albums/${album.id}/assets`, 'PUT', { ids: [asset.id] })
     }
     return { url: `${base}/photos/${asset.id}` }
   },

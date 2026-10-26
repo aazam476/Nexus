@@ -35,6 +35,7 @@ export async function accessibleAccounts(userId: string) {
   })
   return accounts.map((account) => ({
     account,
+    // Not the owner, so the query matched through `members`: there is exactly one row, for this user.
     role: (account.ownerId === userId ? 'owner' : account.members[0].role) as AccountRole,
   }))
 }

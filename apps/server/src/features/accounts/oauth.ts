@@ -78,6 +78,8 @@ interface TokenResponse {
   id_token?: string
 }
 
+// One request to the provider's token endpoint: either trading the sign-in code for tokens,
+// or trading the refresh token for a new access token.
 async function tokenRequest(name: string, params: Record<string, string>): Promise<TokenResponse> {
   const provider = getProvider(name)
   const response = await fetch(provider.tokenUrl, {
@@ -96,8 +98,7 @@ export async function exchangeCode(name: string, code: string) {
       502,
       'The provider did not return a refresh token. Remove Nexus from your account’s connected apps and try again.',
     )
-  // The ID token came straight from the provider over TLS, so reading it without verifying the signature is safe here.
-  const claims = JSON.parse(Buffer.from(tokens.id_token?.split('.')[1] ?? '', 'base64url').toString() || '{}')
+  const claims = readIdToken(tokens.id_token)
   const email = String(claims.email ?? claims.preferred_username ?? '').toLowerCase()
   if (!email) throw new HttpError(502, 'The provider did not say which email address you signed in with')
   return {
@@ -107,6 +108,15 @@ export async function exchangeCode(name: string, code: string) {
     accessToken: tokens.access_token,
     expiresIn: tokens.expires_in,
   }
+}
+
+// An ID token is a JWT: three base64 parts joined by dots (header.claims.signature). The middle part
+// is JSON saying who signed in. It came straight from the provider over HTTPS, in answer to our own
+// request, so reading it without checking the signature is safe here.
+function readIdToken(idToken: string | undefined): { email?: string; preferred_username?: string; name?: string } {
+  const claimsPart = idToken?.split('.')[1]
+  if (!claimsPart) return {}
+  return JSON.parse(Buffer.from(claimsPart, 'base64url').toString())
 }
 
 // Access tokens live about an hour. Keep them in memory and refresh a minute early.

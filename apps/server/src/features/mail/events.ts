@@ -23,6 +23,7 @@ export function extractEvent({ html, icsTexts }: { html: string | null; icsTexts
 
 function jsonLdBlocks(html: string): unknown[] {
   const blocks: unknown[] = []
+  // Each <script type="application/ld+json">…</script>; the capture is the JSON between the tags.
   for (const match of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     try {
       const data = JSON.parse(match[1])
@@ -47,10 +48,11 @@ function fromSchemaOrg(item: Loose): CalendarEvent | null {
     const from = flight.departureAirport ?? {}
     const to = flight.arrivalAirport ?? {}
     if (!flight.departureTime) return null
-    const number = `${flight.airline?.iataCode ?? ''}${flight.flightNumber ?? ''}`.trim()
+    const number = `${flight.airline?.iataCode ?? ''}${flight.flightNumber ?? ''}`.trim() // e.g. "KL605"
+    const route = `${from.name ?? from.iataCode ?? '?'} → ${to.name ?? to.iataCode ?? '?'}` // e.g. "Oslo → LIS"
     const seat = item.airplaneSeat ? `Seat ${item.airplaneSeat}` : undefined
     return {
-      title: `${number ? number + ' ' : ''}${from.name ?? from.iataCode ?? '?'} → ${to.name ?? to.iataCode ?? '?'}`,
+      title: number ? `${number} ${route}` : route,
       start: flight.departureTime,
       end: flight.arrivalTime ?? flight.departureTime,
       location: from.name ?? from.iataCode,
@@ -83,7 +85,8 @@ function fromSchemaOrg(item: Loose): CalendarEvent | null {
 
 // Minimal iCalendar reader: the first VEVENT's summary, times and location.
 export function fromIcs(ics: string): CalendarEvent | null {
-  const lines = ics.replace(/\r?\n[ \t]/g, '').split(/\r?\n/) // undo line folding
+  // Lines starting with a space or tab continue the line before ("folding"); join them back first.
+  const lines = ics.replace(/\r?\n[ \t]/g, '').split(/\r?\n/)
   const start = lines.findIndex((l) => l === 'BEGIN:VEVENT')
   if (start === -1) return null
   const fields = new Map<string, string>()
@@ -106,6 +109,7 @@ export function fromIcs(ics: string): CalendarEvent | null {
 
 // 20261114T102500Z, 20261114T102500 (floating) or 20261114 (all day).
 function icsDate(value?: string): string | undefined {
+  // Year, month, day, then optionally "T" with hour, minute, second and an optional "Z" (UTC).
   const m = value?.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/)
   if (!m) return undefined
   const [, y, mo, d, h = '00', mi = '00', s = '00'] = m
