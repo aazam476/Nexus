@@ -4,13 +4,23 @@ import { Toggle } from '../ui'
 
 interface Props {
   method: 'S/MIME' | 'PGP'
+  available: boolean // false without a PGP key or an S/MIME certificate: then there's nothing to sign or encrypt with
   encrypt: boolean
   sign: boolean
   onEncrypt: (on: boolean) => void
   onSign: (on: boolean) => void
 }
 
-export function SecurityToggles({ method, encrypt, sign, onEncrypt, onSign }: Props) {
+export function SecurityToggles({ method, available, encrypt, sign, onEncrypt, onSign }: Props) {
+  if (!available)
+    return (
+      <span
+        title="Create a PGP key or upload an S/MIME certificate in Settings → PGP & S/MIME"
+        className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-[13px] text-muted"
+      >
+        <Lock size={14} /> No key to encrypt or sign
+      </span>
+    )
   return (
     <div className="flex items-center divide-x divide-line rounded-lg border border-line text-[13px] text-ink-2">
       <label className="flex items-center gap-2 px-3 py-1.5" title={`Encrypt with ${method}`}>

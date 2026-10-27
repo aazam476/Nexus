@@ -37,7 +37,7 @@ export function Button({ variant = 'secondary', className = '', ...props }: Butt
   return (
     <button
       type="button"
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] transition-colors disabled:opacity-50 ${buttonStyles[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg whitespace-nowrap px-3 py-1.5 text-[13px] transition-colors disabled:opacity-50 ${buttonStyles[variant]} ${className}`}
       {...props}
     />
   )
@@ -45,7 +45,8 @@ export function Button({ variant = 'secondary', className = '', ...props }: Butt
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <label className="grid gap-1.5">
+    // content-start: next to a taller field (one with a hint), keep the label and box at the top.
+    <label className="grid content-start gap-1.5">
       <span className="text-[12.5px] font-medium text-ink-2">{label}</span>
       {children}
       {hint && <span className="text-[12px] text-muted">{hint}</span>}
@@ -122,7 +123,7 @@ export function Card({
           <h2 className="text-[15px] font-semibold">{title}</h2>
           {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
         </div>
-        {actions}
+        {actions && <div className="shrink-0">{actions}</div>}
       </header>
       {children && <div className="px-5 py-4">{children}</div>}
     </section>

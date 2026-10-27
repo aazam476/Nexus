@@ -1,9 +1,10 @@
 // Signing in, and creating the first (admin) account on a new server.
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { Button, Field, Input, Logo } from '../components/ui'
 import { api } from '../lib/api'
+import { useServerStatus } from '../lib/queries'
 
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   return (
@@ -25,10 +26,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
 export function LoginPage() {
   const navigate = useNavigate()
   const client = useQueryClient()
-  const status = useQuery({
-    queryKey: ['auth-status'],
-    queryFn: () => api<{ needsSetup: boolean; allowSignup: boolean }>('/auth/status'),
-  })
+  const status = useServerStatus()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)

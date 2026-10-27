@@ -17,9 +17,8 @@ export function PluginsSettings() {
   return (
     <>
       <p className="text-muted">
-        Plugins connect Nexus to the rest of your server. Built-in ones ship with Nexus; anyone can write one and drop
-        it in the <code className="rounded bg-raise px-1 py-0.5 text-[12.5px]">plugins/</code> folder (see
-        docs/plugins.md).
+        Plugins give Nexus more features, like saving attachments to your photo library or documents, or adding flights
+        and invites to your calendar. Fill in a plugin’s settings and turn it on to use it.
       </p>
       {plugins.map((plugin) => (
         <PluginCard key={plugin.id} plugin={plugin} />

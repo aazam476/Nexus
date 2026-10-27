@@ -1,5 +1,8 @@
 # Local development: just the database, Redis, and a throwaway mail server to test against.
 # Run the app itself with `npm run dev`.
+# Its own project name, so it never replaces the containers of a Nexus started with docker-compose.yml.
+name: nexus-dev
+
 services:
   db:
     image: postgres:17-alpine
@@ -8,12 +11,12 @@ services:
       POSTGRES_PASSWORD: nexus
       POSTGRES_DB: nexus
     ports:
-      - "5432:5432"
+      - '5432:5432'
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - '6379:6379'
 
   # GreenMail: IMAP, POP3 and SMTP with any user/password. Mail is lost on restart.
   mail:
@@ -21,9 +24,9 @@ services:
     environment:
       GREENMAIL_OPTS: -Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled -Dgreenmail.verbose
     ports:
-      - "3025:3025" # SMTP
-      - "3110:3110" # POP3
-      - "3143:3143" # IMAP
-      - "3465:3465" # SMTPS
-      - "3993:3993" # IMAPS
-      - "3995:3995" # POP3S
+      - '3025:3025' # SMTP
+      - '3110:3110' # POP3
+      - '3143:3143' # IMAP
+      - '3465:3465' # SMTPS
+      - '3993:3993' # IMAPS
+      - '3995:3995' # POP3S

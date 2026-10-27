@@ -313,9 +313,7 @@ function PrivateStorageCard() {
           <ul className="grid list-disc gap-1 pl-5 text-[13px] text-ink-2">
             <li>Search finds sender and subject, not words inside messages.</li>
             <li>Plugins and attachment saving work only while you’re signed in.</li>
-            <li>
-              Forget your password and Nexus can’t read its copy: remove and re-add the account to download it again.
-            </li>
+            <li>If you forget your password, all your data will be lost.</li>
             <li>Not for POP3 accounts or accounts you share with others.</li>
             <li>Drafts and scheduled messages stay unencrypted until they’re sent.</li>
           </ul>

@@ -8,7 +8,7 @@ import { Button, Card, Chip, Field, Input } from '../../components/ui'
 import { api, del, patch } from '../../lib/api'
 import { timeAgo } from '../../lib/format'
 import { sanitizeForEditor } from '../../lib/sanitize'
-import { useAccounts } from '../../lib/queries'
+import { useAccounts, useServerStatus } from '../../lib/queries'
 import type { Account } from '../../types'
 
 const authLabels = { password: 'Password', 'oauth-google': 'Google sign-in', 'oauth-microsoft': 'Microsoft sign-in' }
@@ -229,6 +229,7 @@ function AddAccount({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
   const [protocol, setProtocol] = useState<'imap' | 'pop3'>('imap')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const oauthReady = useServerStatus().data?.oauth
 
   async function oauth() {
     setError('')
@@ -293,22 +294,27 @@ function AddAccount({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
         <div className="grid gap-2 sm:grid-cols-3">
           {(
             [
-              ['google', 'Google', 'OAuth2 sign-in'],
+              ['google', 'Google', 'Gmail, Google Workspace'],
               ['microsoft', 'Microsoft', 'Outlook, Office 365'],
               ['manual', 'Other provider', 'IMAP / POP3 + SMTP'],
             ] as const
-          ).map(([id, name, detail]) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={method === id}
-              onClick={() => setMethod(id)}
-              className={`rounded-xl border p-3 text-left ${method === id ? 'border-accent bg-sel' : 'border-line bg-raise hover:bg-hover'}`}
-            >
-              <p className="font-semibold">{name}</p>
-              <p className="text-[12.5px] text-muted">{detail}</p>
-            </button>
-          ))}
+          ).map(([id, name, detail]) => {
+            // Provider sign-in needs a client ID and secret in .env; without them the button can't work.
+            const ready = id === 'manual' || oauthReady?.[id]
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={method === id}
+                disabled={!ready}
+                onClick={() => setMethod(id)}
+                className={`rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${method === id ? 'border-accent bg-sel' : 'border-line bg-raise enabled:hover:bg-hover'}`}
+              >
+                <p className="font-semibold">{name}</p>
+                <p className="text-[12.5px] text-muted">{ready ? detail : 'Not set up on this server'}</p>
+              </button>
+            )
+          })}
         </div>
 
         {method !== 'manual' ? (

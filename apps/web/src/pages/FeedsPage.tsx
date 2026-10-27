@@ -1,22 +1,20 @@
-// Feeds: follow websites' RSS or Atom feeds and read their posts here, like a small feed reader.
-// On the left: following a feed, searching, filters, settings, and the posts. On the right: the open
-// post. Side by side on wide screens, one at a time on phones.
+// Feeds: read the posts of the websites you follow, like a small feed reader. Following and
+// unfollowing feeds is in Settings → Feeds.
+// On the left: searching, filters and the posts. On the right: the open post. Side by side on wide
+// screens, one at a time on phones.
 //
-// The parts live in components/feeds/: AddFeed, FeedFilters (all / starred / one feed),
-// FeedSettings (deleting old posts, OPML import and export) and FeedReader.
+// The parts live in components/feeds/: FeedFilters (all / starred / one feed) and FeedReader.
 import { useQueryClient } from '@tanstack/react-query'
-import { Menu, Rss, Search, Star } from 'lucide-react'
+import { Menu, Rss, Search, Settings, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate, useOutletContext, useParams } from 'react-router'
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router'
 import type { ShellContext } from '../components/AppShell'
-import { AddFeed } from '../components/feeds/AddFeed'
 import { FeedFilters } from '../components/feeds/FeedFilters'
 import { FeedReader } from '../components/feeds/FeedReader'
-import { FeedSettings } from '../components/feeds/FeedSettings'
-import { del, patch } from '../lib/api'
+import { patch } from '../lib/api'
 import { formatListDate } from '../lib/format'
 import { useFeedItems, useFeeds } from '../lib/queries'
-import type { Feed, FeedItem } from '../types'
+import type { FeedItem } from '../types'
 
 export function FeedsPage() {
   const { itemId } = useParams()
@@ -50,13 +48,6 @@ export function FeedsPage() {
     }
   }
 
-  async function unfollow(feed: Feed) {
-    if (!confirm(`Stop following ${feed.title}? Its posts are removed from Nexus.`)) return
-    await del(`/feeds/${feed.id}`)
-    if (show === feed.id) setShow('all')
-    refresh()
-  }
-
   return (
     <div className="flex h-full">
       <section
@@ -75,8 +66,15 @@ export function FeedsPage() {
             </button>
             <h1 className="text-[19px] font-bold tracking-tight">Feeds</h1>
             <span className="ml-auto text-[12px] text-muted">{unread > 0 ? `${unread} unread` : 'All read'}</span>
+            <Link
+              to="/settings/feeds"
+              aria-label="Manage feeds"
+              title="Manage feeds"
+              className="rounded-md p-1 text-muted hover:bg-raise"
+            >
+              <Settings size={16} />
+            </Link>
           </div>
-          <AddFeed onAdded={refresh} />
           {feeds.length > 0 && (
             <label className="flex items-center gap-2 rounded-[9px] border border-line bg-raise px-2.5 py-1.5 text-muted focus-within:border-accent">
               <Search size={15} />
@@ -92,12 +90,17 @@ export function FeedsPage() {
         </header>
 
         <div className="flex-1 overflow-y-auto pb-6">
-          {feeds.length > 0 && <FeedFilters feeds={feeds} show={show} onShow={setShow} onUnfollow={unfollow} />}
-          <FeedSettings onImported={refresh} />
+          {feeds.length > 0 && <FeedFilters feeds={feeds} show={show} onShow={setShow} />}
           {feeds.length === 0 && (
-            <p className="px-6 py-16 text-center text-muted">
-              Follow a website by pasting its address above. Most blogs and news sites have a feed.
-            </p>
+            <div className="px-6 py-16 text-center">
+              <p className="text-muted">You don’t follow any feeds yet.</p>
+              <Link
+                to="/settings/feeds"
+                className="mt-4 inline-block rounded-lg bg-accent px-3 py-1.5 font-semibold text-accent-ink"
+              >
+                Follow a feed
+              </Link>
+            </div>
           )}
           {feeds.length > 0 && items.length === 0 && (
             <p className="px-6 py-10 text-center text-muted">

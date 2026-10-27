@@ -97,3 +97,13 @@ export function useRefreshMail() {
     client.invalidateQueries({ queryKey: ['counts'] })
   }
 }
+
+// What this server allows: whether it still needs its first admin, sign-up, and which provider sign-ins are set up.
+export const useServerStatus = () =>
+  useQuery({
+    queryKey: ['auth-status'],
+    queryFn: () =>
+      api<{ needsSetup: boolean; allowSignup: boolean; oauth: { google: boolean; microsoft: boolean } }>(
+        '/auth/status',
+      ),
+  })

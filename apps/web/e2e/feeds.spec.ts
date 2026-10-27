@@ -28,6 +28,8 @@ test('follows a website, reads safely, stars, searches, sets auto-delete, and mo
   page,
 }) => {
   await page.goto('/feeds')
+  await page.getByRole('link', { name: 'Follow a feed' }).click() // following is in Settings → Feeds
+  await expect(page).toHaveURL(/\/settings\/feeds$/)
   await page.getByLabel('Feed or website address').fill('https://')
   await page.getByRole('button', { name: 'Follow', exact: true }).click()
   await expect(page.getByLabel('Feed or website address')).toBeFocused() // the browser refused the incomplete address
@@ -35,6 +37,15 @@ test('follows a website, reads safely, stars, searches, sets auto-delete, and mo
   // Pasting the website's address is enough: Nexus finds the feed it announces.
   await page.getByLabel('Feed or website address').fill(base)
   await page.getByRole('button', { name: 'Follow', exact: true }).click()
+  const followed = page.getByRole('list', { name: 'Followed feeds' })
+  await expect(followed.getByText(name)).toBeVisible()
+
+  // Following it again is refused, with the reason.
+  await page.getByLabel('Feed or website address').fill(`${base}/feed.xml`)
+  await page.getByRole('button', { name: 'Follow', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('already follow')
+
+  await page.goto('/feeds')
   const feeds = page.getByRole('list', { name: 'Your feeds' })
   await expect(feeds.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'Mailboxes' }).getByRole('link', { name: /^Feeds/ })).toContainText(
@@ -50,11 +61,6 @@ test('follows a website, reads safely, stars, searches, sets auto-delete, and mo
   await expect(page.getByRole('navigation', { name: 'Mailboxes' }).getByRole('link', { name: /^Feeds/ })).toContainText(
     '1',
   )
-
-  // Following it again is refused, with the reason.
-  await page.getByLabel('Feed or website address').fill(`${base}/feed.xml`)
-  await page.getByRole('button', { name: 'Follow', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('already follow')
 
   await feeds.getByRole('button', { name: new RegExp(`^${name}`) }).click()
   await expect(page.getByRole('button', { name: /Second thoughts/ })).toBeVisible()
@@ -74,11 +80,11 @@ test('follows a website, reads safely, stars, searches, sets auto-delete, and mo
   await expect(page.getByRole('button', { name: /Second thoughts/ })).toBeHidden()
   await page.getByLabel('Search posts').fill('')
 
-  // Deleting old posts is off until chosen, and says starred posts stay.
+  // Deleting old posts is off until chosen.
+  await page.getByRole('link', { name: 'Manage feeds' }).click()
   const deleteAfter = page.getByLabel('Delete posts after')
   await expect(deleteAfter).toHaveValue('')
   await deleteAfter.selectOption({ label: '1 month' })
-  await expect(page.getByText('Starred posts are always kept.')).toBeVisible()
   await page.reload()
   await expect(page.getByLabel('Delete posts after')).toHaveValue('30')
   await page.getByLabel('Delete posts after').selectOption({ label: 'Never' })
@@ -89,15 +95,16 @@ test('follows a website, reads safely, stars, searches, sets auto-delete, and mo
   expect(opml).toContain(`xmlUrl="${base}/feed.xml"`)
 
   await page.getByRole('button', { name: `Unfollow ${name}` }).click()
-  await expect(feeds.getByRole('button', { name: new RegExp(`^${name}`) })).toBeHidden()
+  await expect(followed.getByText(name)).toBeHidden()
 
   // …and come back from one.
   const picker = page.waitForEvent('filechooser')
   await page.getByRole('button', { name: 'Import OPML' }).click()
   await (await picker).setFiles({ name: 'feeds.opml', mimeType: 'text/x-opml', buffer: Buffer.from(opml) })
   await expect(page.getByRole('status')).toContainText('Following 1 new feed')
-  await expect(feeds.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible()
+  await expect(followed.getByText(name)).toBeVisible()
   await page.getByRole('button', { name: `Unfollow ${name}` }).click()
-  await expect(feeds.getByRole('button', { name: new RegExp(`^${name}`) })).toBeHidden()
+  await expect(followed.getByText(name)).toBeHidden()
+  await page.goto('/feeds')
   await expect(page.getByRole('button', { name: /Hello feeds/ })).toBeHidden()
 })

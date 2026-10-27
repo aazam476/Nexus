@@ -67,6 +67,11 @@ export async function authRoutes(app: FastifyInstance) {
   app.get('/status', async () => ({
     needsSetup: (await db.user.count()) === 0,
     allowSignup: config.ALLOW_SIGNUP,
+    // Which "sign in with…" buttons work for adding mail accounts: only those with a client ID and secret.
+    oauth: {
+      google: Boolean(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET),
+      microsoft: Boolean(config.MICROSOFT_CLIENT_ID && config.MICROSOFT_CLIENT_SECRET),
+    },
   }))
 
   // The first person to sign up becomes the admin. After that, only if ALLOW_SIGNUP=true.

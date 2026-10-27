@@ -202,6 +202,13 @@ describe('drafts', () => {
     expect((await browser.delete(`/api/outgoing/${other}`)).statusCode).toBe(404)
   })
 
+  it('saves a draft before any mail account is added', async () => {
+    const { browser } = await signedInUser(app)
+    const { id } = await browser.json('PUT', '/api/drafts', { to: ['later@example.com'], subject: 'Idea', text: 'x' })
+    const drafts = await browser.json<{ id: string }[]>('GET', '/api/messages?folder=drafts')
+    expect(drafts.map((d) => d.id)).toEqual([id])
+  })
+
   it('keeps drafts private to their author', async () => {
     const { browser, accountId } = await sender()
     const { id } = await browser.json('PUT', '/api/drafts', { accountId, subject: 'Mine', text: '' })

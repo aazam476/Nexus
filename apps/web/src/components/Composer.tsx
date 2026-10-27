@@ -43,6 +43,7 @@ export function Composer() {
   // Viewers of a shared account can read it but not send from it.
   const accounts = (useAccounts().data ?? []).filter((a) => a.role !== 'viewer')
   const smimeCerts = useQuery({ queryKey: ['smime'], queryFn: () => api<{ email: string }[]>('/smime') }).data ?? []
+  const pgpKeys = useQuery({ queryKey: ['pgp-keys'], queryFn: () => api<pgp.StoredKey[]>('/pgp/keys') }).data ?? []
 
   const [draftId, setDraftId] = useState(draft?.id) // set once it has been saved as a draft
   const [to, setTo] = useState(splitEmails(draft?.to ?? ''))
@@ -73,6 +74,8 @@ export function Composer() {
   const bccOnly = to.length === 0 && cc.length === 0 && bcc.length > 0
   // S/MIME when you have a certificate for this address; otherwise PGP.
   const method = account && smimeCerts.some((c) => c.email === account.email) ? 'S/MIME' : 'PGP'
+  // Signing needs a key of your own, and so does reading your own encrypted copy in Sent.
+  const hasKey = method === 'S/MIME' || pgpKeys.length > 0
   const needsPassphrase = method === 'PGP' && sign && !pgp.isUnlocked()
 
   function replaceContent(next: string) {
@@ -80,12 +83,13 @@ export function Composer() {
     setVersion((v) => v + 1)
   }
 
-  // Fill in the body once we know the account (and so its signature): a saved draft as it was,
-  // a reply with the original quoted, or an empty message. Only once, when the composer opens.
+  // Fill in the body, only once, when the composer opens: a saved draft as it was, or (once we know
+  // the account, and so its signature) a reply with the original quoted, or an empty message.
   useEffect(() => {
-    if (!account || version > 0) return
-    if (!fromId) setFromId(account.id)
+    if (version > 0) return
     if (draft?.html) return replaceContent(draft.html)
+    if (!account) return
+    if (!fromId) setFromId(account.id)
     const original = draft?.replyTo
     const start = original
       ? quoteReply(
@@ -155,11 +159,12 @@ export function Composer() {
   async function close() {
     const bodyText = htmlToText(withHtmlSignature(content, '')).trim() // the body without the signature
     const hasContent = recipients.length > 0 || subject.trim() !== '' || bodyText !== ''
-    if (account && hasContent && !sentMessage) {
+    // Saved even with no mail account yet; it gets one when you pick a From address and send.
+    if (hasContent && !sentMessage) {
       try {
         const saved = await put<{ id: string }>('/drafts', {
           id: draftId,
-          accountId: account.id,
+          accountId: account?.id,
           to,
           cc,
           bcc,
@@ -314,7 +319,14 @@ export function Composer() {
                 event.target.value = '' // so picking the same file again still counts as a change
               }}
             />
-            <SecurityToggles method={method} encrypt={encrypt} sign={sign} onEncrypt={setEncrypt} onSign={setSign} />
+            <SecurityToggles
+              method={method}
+              available={hasKey}
+              encrypt={encrypt}
+              sign={sign}
+              onEncrypt={setEncrypt}
+              onSign={setSign}
+            />
             <button
               type="button"
               aria-label="Discard draft"

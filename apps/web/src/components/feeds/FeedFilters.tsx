@@ -1,15 +1,14 @@
-// What to show: all posts, starred posts, or one feed's. Each feed can also be unfollowed here.
-import { Rss, Star, Trash2 } from 'lucide-react'
+// What to show: all posts, starred posts, or one feed's.
+import { Rss, Star } from 'lucide-react'
 import type { Feed } from '../../types'
 
 interface Props {
   feeds: Feed[]
   show: string // 'all', 'starred', or a feed id
   onShow: (show: string) => void
-  onUnfollow: (feed: Feed) => void
 }
 
-export function FeedFilters({ feeds, show, onShow, onUnfollow }: Props) {
+export function FeedFilters({ feeds, show, onShow }: Props) {
   const itemClass = (active: boolean) =>
     `flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left ${active ? 'bg-raise font-semibold' : 'text-ink-2 hover:bg-hover'}`
 
@@ -26,7 +25,7 @@ export function FeedFilters({ feeds, show, onShow, onUnfollow }: Props) {
         </button>
       </li>
       {feeds.map((feed) => (
-        <li key={feed.id} className="flex items-center gap-1">
+        <li key={feed.id} className="flex">
           <button type="button" onClick={() => onShow(feed.id)} className={itemClass(show === feed.id)}>
             <span className="truncate">{feed.title}</span>
             {/* The last check failed: say so, with the reason on hover. It clears once the site works again. */}
@@ -36,15 +35,6 @@ export function FeedFilters({ feeds, show, onShow, onUnfollow }: Props) {
               </span>
             )}
             {feed.unread > 0 && <span className="ml-auto text-[12px] text-muted">{feed.unread}</span>}
-          </button>
-          <button
-            type="button"
-            aria-label={`Unfollow ${feed.title}`}
-            title="Unfollow"
-            onClick={() => onUnfollow(feed)}
-            className="rounded-md p-1.5 text-muted hover:bg-raise hover:text-danger"
-          >
-            <Trash2 size={14} />
           </button>
         </li>
       ))}

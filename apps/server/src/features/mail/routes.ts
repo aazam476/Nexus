@@ -132,7 +132,12 @@ export async function mailRoutes(app: FastifyInstance) {
     const outgoing = (status: Prisma.OutgoingMessageWhereInput['status']) =>
       db.outgoingMessage
         .findMany({
-          where: { userId: request.user.id, accountId: { in: accountIds }, status },
+          where: {
+            userId: request.user.id,
+            status,
+            // Drafts written before any account was added belong to no account; show them unless filtering.
+            OR: [{ accountId: { in: accountIds } }, ...(query.account ? [] : [{ accountId: null }])],
+          },
           orderBy: { updatedAt: 'desc' },
         })
         .then((rows) => rows.map((o) => outgoingToRow(o, me)))

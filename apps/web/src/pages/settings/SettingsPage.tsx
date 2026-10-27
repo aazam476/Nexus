@@ -9,6 +9,7 @@ import {
   Menu,
   Palette,
   Puzzle,
+  Rss,
   Shield,
   Users,
   type LucideIcon,
@@ -20,6 +21,7 @@ import { AccountsSettings } from './AccountsSettings'
 import { AdminSettings } from './AdminSettings'
 import { AppearanceSettings } from './AppearanceSettings'
 import { EncryptionSettings } from './EncryptionSettings'
+import { FeedsSettings } from './FeedsSettings'
 import { ImportExportSettings } from './ImportExportSettings'
 import { PluginsSettings } from './PluginsSettings'
 import { RulesSettings } from './RulesSettings'
@@ -32,6 +34,7 @@ const allSections: { id: string; title: string; icon: LucideIcon; page: () => Re
     { id: 'sharing', title: 'Sharing', icon: Users, page: SharingSettings },
     { id: 'security', title: 'Password & 2FA', icon: Shield, page: SecuritySettings },
     { id: 'encryption', title: 'PGP & S/MIME', icon: KeyRound, page: EncryptionSettings },
+    { id: 'feeds', title: 'Feeds', icon: Rss, page: FeedsSettings },
     { id: 'rules', title: 'Rules & spam', icon: Filter, page: RulesSettings },
     { id: 'plugins', title: 'Plugins', icon: Puzzle, page: PluginsSettings },
     { id: 'import-export', title: 'Import & export', icon: ArrowRightLeft, page: ImportExportSettings },

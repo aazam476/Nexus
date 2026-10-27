@@ -44,6 +44,7 @@ export async function sendRoutes(app: FastifyInstance) {
     const body = parse(
       outgoingSchema.extend({
         id: z.string().optional(),
+        accountId: z.string().optional(), // a draft can be written before any mail account is added
         to: z.array(z.string()).default([]),
         cc: z.array(z.string()).default([]),
         bcc: z.array(z.string()).default([]),
@@ -51,16 +52,16 @@ export async function sendRoutes(app: FastifyInstance) {
       request.body,
     )
     const { id, ...payload } = body
-    await requireAccountRole(request.user.id, payload.accountId, 'editor')
+    if (payload.accountId) await requireAccountRole(request.user.id, payload.accountId, 'editor')
     if (id) {
       const updated = await db.outgoingMessage.updateMany({
         where: { id, userId: request.user.id, status: 'draft' },
-        data: { payload, accountId: payload.accountId },
+        data: { payload, accountId: payload.accountId ?? null },
       })
       if (updated.count) return { id }
     }
     const draft = await db.outgoingMessage.create({
-      data: { userId: request.user.id, accountId: payload.accountId, status: 'draft', payload },
+      data: { userId: request.user.id, accountId: payload.accountId ?? null, status: 'draft', payload },
     })
     return { id: draft.id }
   })
