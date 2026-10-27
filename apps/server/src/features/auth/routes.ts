@@ -110,10 +110,13 @@ export async function authRoutes(app: FastifyInstance) {
 
     // Private storage: the password is in hand only now, so unlock the key and hand it to the session.
     const key = user.storagePrivateKey ? await unlockWithPassword(user.storagePrivateKey, body.password) : undefined
-    await startSession(request, reply, user.id, user.totpEnabled, key)
+    // The second step: a code from an authenticator app, or a security key (see passkeys.ts).
+    const securityKeys = await db.passkey.count({ where: { userId: user.id, kind: 'security-key' } })
+    const twoFactorRequired = user.totpEnabled || securityKeys > 0
+    await startSession(request, reply, user.id, twoFactorRequired, key)
     // Private storage was turned off, but opening the mail again may have been cut short by a restart.
     if (key && !user.privateStorage) unsealInBackground(user.id, key)
-    return { twoFactorRequired: user.totpEnabled }
+    return { twoFactorRequired, methods: { code: user.totpEnabled, securityKey: securityKeys > 0 } }
   })
 
   // Second step of sign-in: a code from the authenticator app, or a one-time recovery code.
@@ -237,9 +240,16 @@ export async function authRoutes(app: FastifyInstance) {
     signedIn.post('/2fa/disable', strict, async (request) => {
       const { password: current } = parse(z.object({ password: z.string() }), request.body)
       const user = await userWithPassword(request.user.id, current)
+      // Recovery codes stay while a security key is still the second step.
+      const securityKeys = await db.passkey.count({ where: { userId: user.id, kind: 'security-key' } })
       await db.user.update({
         where: { id: user.id },
-        data: { totpEnabled: false, totpSecret: null, totpLastStep: null, recoveryCodes: [] },
+        data: {
+          totpEnabled: false,
+          totpSecret: null,
+          totpLastStep: null,
+          ...(securityKeys === 0 && { recoveryCodes: [] }),
+        },
       })
       return { ok: true }
     })
@@ -247,7 +257,8 @@ export async function authRoutes(app: FastifyInstance) {
     signedIn.post('/2fa/recovery-codes', strict, async (request) => {
       const { password: current } = parse(z.object({ password: z.string() }), request.body)
       const user = await userWithPassword(request.user.id, current)
-      if (!user.totpEnabled) throw badRequest('Turn on two-factor authentication first')
+      const securityKeys = await db.passkey.count({ where: { userId: user.id, kind: 'security-key' } })
+      if (!user.totpEnabled && !securityKeys) throw badRequest('Turn on two-factor authentication first')
       return { recoveryCodes: await newRecoveryCodes(user.id) }
     })
 
@@ -343,7 +354,7 @@ function unsealInBackground(userId: string, key: KeyObject) {
 }
 
 // Ten single-use codes like "3f9a1-0c7d2", shown once. Only their hashes are kept.
-async function newRecoveryCodes(
+export async function newRecoveryCodes(
   userId: string,
   extra: { totpEnabled?: boolean; totpSecret?: string; totpLastStep?: number } = {},
 ) {

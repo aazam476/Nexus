@@ -24,7 +24,7 @@ export const nextcloudFiles: NexusPlugin = {
   id: 'nextcloud-files',
   name: 'Nextcloud Files',
   description: 'Save any attachment to a folder in Nextcloud.',
-  author: 'Nexus',
+  author: 'Team @ Nexus',
   settings: [...connection, { key: 'folder', label: 'Folder', type: 'text', placeholder: '/Email attachments' }],
 
   async testConnection(s) {
@@ -60,7 +60,7 @@ export const nextcloudCalendar: NexusPlugin = {
   id: 'nextcloud-calendar',
   name: 'Nextcloud Calendar',
   description: 'Add flights, bookings and invites found in email to a Nextcloud calendar.',
-  author: 'Nexus',
+  author: 'Team @ Nexus',
   settings: [...connection, { key: 'calendar', label: 'Calendar', type: 'text', placeholder: 'personal' }],
 
   async testConnection(s) {

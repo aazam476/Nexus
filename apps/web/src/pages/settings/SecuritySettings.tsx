@@ -1,11 +1,12 @@
-// Settings → Password & 2FA: change password, two-factor sign-in, passkeys, private storage, signed-in devices.
+// Settings → Password & 2FA: change password, two-factor sign-in (app codes and security keys), passkeys,
+// private storage, signed-in devices.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, Laptop, Smartphone } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Button, Card, Chip, Field, Input } from '../../components/ui'
 import { api, del } from '../../lib/api'
 import { timeAgo } from '../../lib/format'
-import { addPasskey, letPasskeyUnlockStorage } from '../../lib/passkeys'
+import { addPasskey, addSecurityKey, letPasskeyUnlockStorage } from '../../lib/passkeys'
 import { useMe } from '../../lib/queries'
 
 interface Session {
@@ -47,7 +48,8 @@ export function SecuritySettings() {
     <>
       <PasswordCard />
       <TwoFactorCard />
-      <PasskeysCard />
+      <KeysCard kind="security-key" />
+      <KeysCard kind="passkey" />
       <PrivateStorageCard />
       <SessionsCard />
     </>
@@ -360,22 +362,49 @@ function PrivateStorageCard() {
 
 interface Passkey {
   id: string
+  kind: 'passkey' | 'security-key'
   name: string
   createdAt: string
   lastUsedAt: string | null
   unlocksPrivateStorage: boolean
 }
 
-function PasskeysCard() {
+// The words for each kind of key; the cards are otherwise the same.
+const KEY_TEXT = {
+  passkey: {
+    title: 'Passkeys',
+    description:
+      'Sign in with your fingerprint, face or phone, without typing your password. A passkey checks it’s really you, so no code is asked for.',
+    add: 'Add a passkey',
+    hint: 'Like “MacBook” or “iPhone”.',
+  },
+  'security-key': {
+    title: 'Security keys',
+    description:
+      'A security key, like a YubiKey, as the second step after your password. Use it instead of, or as well as, an authenticator-app code.',
+    add: 'Add a security key',
+    hint: 'Like “YubiKey” or “Backup key”.',
+  },
+}
+
+function KeysCard({ kind }: { kind: Passkey['kind'] }) {
   const me = useMe().data
   const client = useQueryClient()
-  const passkeys = useQuery({ queryKey: ['passkeys'], queryFn: () => api<Passkey[]>('/auth/passkeys') }).data ?? []
+  const all = useQuery({ queryKey: ['passkeys'], queryFn: () => api<Passkey[]>('/auth/passkeys') }).data ?? []
+  const keys = all.filter((k) => k.kind === kind)
+  const text = KEY_TEXT[kind]
   const [naming, setNaming] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [codes, setCodes] = useState<string[] | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
-  const refresh = () => client.invalidateQueries({ queryKey: ['passkeys'] })
+  const refresh = () => {
+    client.invalidateQueries({ queryKey: ['passkeys'] })
+    client.invalidateQueries({ queryKey: ['me'] })
+  }
+  // Only passkeys sign in without the password, so only they need to open private storage.
+  const needsStorage = (k: Passkey) => kind === 'passkey' && me?.privateStorage && !k.unlocksPrivateStorage
 
-  // Runs one passkey step, showing what went wrong in words if it fails.
+  // Runs one key step, showing what went wrong in words if it fails.
   async function attempt(work: () => Promise<void>, done: string) {
     setBusy(true)
     setMessage(null)
@@ -394,40 +423,59 @@ function PasskeysCard() {
     event.preventDefault()
     const name = String(new FormData(event.currentTarget).get('name') ?? '')
     setNaming(false)
-    attempt(() => addPasskey(name), `${name} added. You can now sign in with it, without your password.`)
+    if (kind === 'passkey')
+      attempt(() => addPasskey(name), `${name} added. You can now sign in with it, without your password.`)
+    else
+      attempt(
+        async () => setCodes(await addSecurityKey(name)),
+        `${name} added. Signing in now asks for it after your password.`,
+      )
   }
 
   return (
-    <Card
-      title="Passkeys and security keys"
-      description="Sign in with your fingerprint, face, phone or a security key like a YubiKey, without typing your password. One also works as the second step instead of an app code."
-    >
+    <Card title={text.title} description={text.description}>
       <div className="grid gap-4">
-        {passkeys.length > 0 && (
+        {codes && (
+          <div className="grid gap-3 rounded-xl border border-line bg-raise p-4">
+            <p className="font-semibold">Save these recovery codes somewhere safe</p>
+            <p className="text-[13px] text-muted">
+              Each one signs you in once if you lose your security key. They won’t be shown again.
+            </p>
+            <ul className="grid grid-cols-2 gap-1 font-mono text-[13px] sm:grid-cols-5">
+              {codes.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+            <Button className="justify-self-start" onClick={() => setCodes(null)}>
+              I saved them
+            </Button>
+          </div>
+        )}
+        {keys.length > 0 && (
           <ul className="divide-y divide-line">
-            {passkeys.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
+            {keys.map((k) => (
+              <li key={k.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
                 <span className="grid h-9 w-9 place-items-center rounded-lg bg-raise text-muted">
                   <KeyRound size={17} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{p.name}</p>
+                  <p className="font-medium">{k.name}</p>
                   <p className="text-[12.5px] text-muted">
-                    {p.lastUsedAt ? `Used ${timeAgo(p.lastUsedAt)}` : 'Not used yet'}
-                    {me?.privateStorage && !p.unlocksPrivateStorage && ' · can’t open private storage yet'}
+                    {k.lastUsedAt ? `Used ${timeAgo(k.lastUsedAt)}` : 'Not used yet'}
+                    {needsStorage(k) && ' · can’t open private storage yet'}
                   </p>
                 </div>
-                {me?.privateStorage && !p.unlocksPrivateStorage && (
+                {needsStorage(k) && (
                   <Button
                     disabled={busy}
                     onClick={() =>
-                      attempt(() => letPasskeyUnlockStorage(p.id), `${p.name} can now open your private storage.`)
+                      attempt(() => letPasskeyUnlockStorage(k.id), `${k.name} can now open your private storage.`)
                     }
                   >
                     Let it open private storage
                   </Button>
                 )}
-                <Button variant="ghost" onClick={() => del(`/auth/passkeys/${p.id}`).then(refresh)}>
+                <Button variant="ghost" onClick={() => del(`/auth/passkeys/${k.id}`).then(refresh)}>
                   Remove
                 </Button>
               </li>
@@ -437,7 +485,7 @@ function PasskeysCard() {
         {naming ? (
           <form className="flex max-w-md flex-wrap items-end gap-2" onSubmit={add}>
             <div className="min-w-0 flex-1">
-              <Field label="Name it, to tell it apart" hint="Like “MacBook” or “YubiKey”.">
+              <Field label="Name it, to tell it apart" hint={text.hint}>
                 <Input name="name" required maxLength={60} autoFocus />
               </Field>
             </div>
@@ -450,7 +498,7 @@ function PasskeysCard() {
           </form>
         ) : (
           <Button className="justify-self-start" disabled={busy} onClick={() => setNaming(true)}>
-            Add a passkey or security key
+            {text.add}
           </Button>
         )}
         {message && (

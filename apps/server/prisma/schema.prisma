@@ -45,17 +45,20 @@ model User {
   preference     Preference?
 }
 
-// A passkey or security key (like a YubiKey): signs in without a password, or as the second step after it.
+// Two uses of the same technology (WebAuthn):
+//   a passkey signs in on its own, without a password;
+//   a security key (like a YubiKey) is the second step after a password, instead of an app code.
 model Passkey {
   id         String    @id // the credential ID the authenticator gave it (base64url)
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       String    @default("passkey") // "passkey" | "security-key"
   name       String // so the user can tell them apart: "MacBook", "YubiKey"
   publicKey  Bytes
   counter    Int // how often the authenticator says it was used; helps spot a cloned key
   transports String[] // how the browser reaches it: "usb", "nfc", "internal"…
-  // Private storage: the user's private key locked with a secret only this passkey can produce (WebAuthn PRF).
-  // Empty if the passkey can't produce one, or was added before private storage was set up.
+  // Private storage (passkeys only): the user's private key locked with a secret only this passkey can
+  // produce (WebAuthn PRF). Empty if it can't produce one, or was added before private storage was set up.
   storageKey String?
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
@@ -268,6 +271,8 @@ model SmimeCert {
 model ServerPlugin {
   id      String  @id // the plugin's id
   enabled Boolean @default(true)
+  // A deleted built-in plugin: its code ships with Nexus so it can't be removed, only hidden (and restored).
+  removed Boolean @default(false)
 }
 
 model PluginSetting {

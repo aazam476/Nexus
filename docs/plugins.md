@@ -56,7 +56,8 @@ Either:
 Then open **Settings → Plugins**, fill in its settings, and turn it on.
 
 If a plugin fails to load, the log says why and Nexus starts without it. A deleted plugin's code stays in
-memory, unused, until Nexus restarts.
+memory, unused, until Nexus restarts. Built-in plugins ship with Nexus, so deleting one hides it instead
+(with everyone's settings for it deleted), and the Admin page can restore it.
 
 ## Security
 

@@ -328,9 +328,16 @@ describe('admins managing plugins', () => {
 
     await admin.browser.json('DELETE', `/api/admin/plugins/${id}`)
     expect(await ids()).not.toContain(id)
-    expect((await admin.browser.delete('/api/admin/plugins/immich')).json().error).toMatch(
-      /Only plugins that were added/,
-    )
+
+    // A built-in plugin is hidden, with everyone's settings for it gone, and can be restored.
+    await user.browser.json('PUT', '/api/plugins/paperless', { settings: { url: 'https://p.test', token: 't' } })
+    await admin.browser.json('DELETE', '/api/admin/plugins/paperless')
+    expect(await ids()).not.toContain('paperless')
+    const afterDelete = await admin.browser.json<{ id: string; removed: boolean }[]>('GET', '/api/admin/plugins')
+    expect(afterDelete.find((p) => p.id === 'paperless')?.removed).toBe(true)
+    expect(await db.pluginSetting.count({ where: { pluginId: 'paperless' } })).toBe(0)
+    await admin.browser.json('PUT', '/api/admin/plugins/paperless', { enabled: true })
+    expect(await ids()).toContain('paperless')
   })
 
   it('refuses code that is not a plugin, and is admin-only', async () => {

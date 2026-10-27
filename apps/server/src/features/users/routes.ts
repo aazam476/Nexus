@@ -17,13 +17,17 @@ export async function userRoutes(app: FastifyInstance) {
     admin.addHook('preHandler', requireAdmin)
 
     admin.get('/', async () => {
-      const users = await db.user.findMany({ orderBy: { createdAt: 'asc' } })
+      const users = await db.user.findMany({
+        orderBy: { createdAt: 'asc' },
+        include: { passkeys: { where: { kind: 'security-key' }, select: { id: true } } },
+      })
       return users.map((u) => ({
         id: u.id,
         name: u.name,
         email: u.email,
         role: u.role,
-        totpEnabled: u.totpEnabled,
+        // Two-factor sign-in is on with an authenticator app, a security key, or both.
+        twoFactor: u.totpEnabled || u.passkeys.length > 0,
         privateStorage: u.privateStorage,
         createdAt: u.createdAt,
       }))
@@ -110,12 +114,15 @@ export async function userRoutes(app: FastifyInstance) {
       return { ok: true, redownloading: accountIds.length }
     })
 
-    // For someone who lost both their phone and their recovery codes.
+    // For someone who lost their phone or security key, and their recovery codes.
     admin.delete<{ Params: { id: string } }>('/:id/2fa', async (request) => {
-      await db.user.update({
-        where: { id: request.params.id },
-        data: { totpEnabled: false, totpSecret: null, totpLastStep: null, recoveryCodes: [] },
-      })
+      await db.$transaction([
+        db.user.update({
+          where: { id: request.params.id },
+          data: { totpEnabled: false, totpSecret: null, totpLastStep: null, recoveryCodes: [] },
+        }),
+        db.passkey.deleteMany({ where: { userId: request.params.id, kind: 'security-key' } }),
+      ])
       return { ok: true }
     })
 

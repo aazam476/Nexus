@@ -1,13 +1,16 @@
-// Passkeys and security keys (WebAuthn): Touch ID, Windows Hello, a phone, or a YubiKey.
+// Passkeys and security keys (WebAuthn). The same technology, two different jobs:
+//   - a passkey (Touch ID, Windows Hello, a phone) signs in on its own, without a password. It must
+//     check who's holding it (fingerprint, face or PIN), so it counts as both sign-in steps at once.
+//   - a security key (like a YubiKey) is the second step after a password, instead of an
+//     authenticator-app code. A tap is enough, because the password was the first step.
 //
-// Every use is the same dance: the server makes a random "challenge", the browser asks the passkey to
-// sign it, and the server checks the signature with the passkey's public key. The @simplewebauthn
-// library does the checking; this file decides what each use is for:
-//   - signing in without a password,
-//   - the second step after a password, instead of an authenticator-app code,
-//   - unlocking private storage. The private-storage key is locked with the password, so a sign-in
-//     without one can't open it. Passkeys that support the PRF extension can produce a secret of their
-//     own; a copy of the key is locked with that secret, so the passkey alone opens the mail too.
+// Every use is the same dance: the server makes a random "challenge", the browser asks the key to
+// sign it, and the server checks the signature with the key's public key. The @simplewebauthn
+// library does the checking; this file decides what each use is for.
+//
+// Private storage: its key is locked with the password, so a sign-in without one can't open it.
+// Passkeys that support the PRF extension can produce a secret of their own; a copy of the key is
+// locked with that secret, so the passkey alone opens the mail too.
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server'
 import {
   generateAuthenticationOptions,
@@ -23,13 +26,25 @@ import { HttpError, badRequest, parse } from '../../lib/http.ts'
 import { lockWithToken, unlockWithToken } from '../../lib/sealed.ts'
 import { findSession, requireUser, sessionToken, startSession, storageKey } from '../../lib/session.ts'
 import { redis } from '../../jobs/queue.ts'
+import { newRecoveryCodes } from './routes.ts'
 
 const site = new URL(config.PUBLIC_URL)
 const rpID = site.hostname // passkeys belong to this domain
 const expectedOrigin = site.origin
 
+type Kind = 'passkey' | 'security-key'
+const kindSchema = z.enum(['passkey', 'security-key'])
+
 // What a challenge was made for, so one made for adding a passkey can't be used to sign in, and so on.
 type Purpose = 'register' | 'sign-in' | 'second-step' | 'storage'
+
+// Which kind of key may do each job.
+const KIND_FOR: Record<Exclude<Purpose, 'register'>, Kind> = {
+  'sign-in': 'passkey',
+  'second-step': 'security-key',
+  storage: 'passkey',
+}
+const KIND_NAME: Record<Kind, string> = { passkey: 'passkey', 'security-key': 'security key' }
 
 // Challenges live in Redis for 5 minutes and can be used once. In Redis, not in a cookie, so a
 // signed response can't be replayed.
@@ -51,17 +66,30 @@ const signed = z
   .object({ id: z.string(), response: z.object({ clientDataJSON: z.string() }).passthrough() })
   .passthrough()
 
-// Checks a passkey's signature on a challenge, and notes its use. `userId` limits it to one person's passkeys.
-async function verifyPasskey(response: AuthenticationResponseJSON, purpose: Purpose, userId?: string) {
+// Checks a key's signature on a challenge, and notes its use. `userId` limits it to one person's keys.
+async function verifyPasskey(
+  response: AuthenticationResponseJSON,
+  purpose: Exclude<Purpose, 'register'>,
+  userId?: string,
+) {
   const challenge = await takeChallenge(response.response.clientDataJSON, purpose, userId)
   const passkey = await db.passkey.findUnique({ where: { id: response.id }, include: { user: true } })
   if (!passkey || (userId && passkey.userId !== userId)) throw new HttpError(401, 'This passkey isn’t known here')
+  if (passkey.kind !== KIND_FOR[purpose]) {
+    throw new HttpError(
+      401,
+      passkey.kind === 'security-key'
+        ? 'That’s a security key: sign in with your password first, then use it.'
+        : 'That’s a passkey: use it to sign in without your password.',
+    )
+  }
   const { verified, authenticationInfo } = await verifyAuthenticationResponse({
     response,
     expectedChallenge: challenge,
     expectedOrigin,
     expectedRPID: rpID,
-    requireUserVerification: true, // a fingerprint, face or PIN, not just a tap
+    // A passkey must check a fingerprint, face or PIN; for a security key a tap is enough.
+    requireUserVerification: passkey.kind === 'passkey',
     credential: { id: passkey.id, publicKey: passkey.publicKey, counter: passkey.counter },
   }).catch(() => ({ verified: false, authenticationInfo: undefined }))
   if (!verified || !authenticationInfo) throw new HttpError(401, 'The passkey’s signature didn’t check out')
@@ -72,14 +100,15 @@ async function verifyPasskey(response: AuthenticationResponseJSON, purpose: Purp
   return passkey
 }
 
-async function authenticationOptions(purpose: Purpose, userId?: string, onlyId?: string) {
-  // For someone already known, list their passkeys (or just one); for a passwordless sign-in, the
-  // browser offers whichever it has for this site.
-  const passkeys = userId ? await db.passkey.findMany({ where: { userId, ...(onlyId && { id: onlyId }) } }) : []
-  if (userId && !passkeys.length) throw badRequest('You haven’t added a passkey yet')
+async function authenticationOptions(purpose: Exclude<Purpose, 'register'>, userId?: string, onlyId?: string) {
+  const kind = KIND_FOR[purpose]
+  // For someone already known, list their keys of the right kind (or just one); for a passwordless
+  // sign-in, the browser offers whichever passkey it has for this site.
+  const passkeys = userId ? await db.passkey.findMany({ where: { userId, kind, ...(onlyId && { id: onlyId }) } }) : []
+  if (userId && !passkeys.length) throw badRequest(`You haven’t added a ${KIND_NAME[kind]} yet`)
   const options = await generateAuthenticationOptions({
     rpID,
-    userVerification: 'required',
+    userVerification: kind === 'passkey' ? 'required' : 'discouraged',
     allowCredentials: passkeys.map((p) => ({ id: p.id, transports: p.transports as never })),
   })
   await saveChallenge(options.challenge, purpose, userId)
@@ -109,7 +138,7 @@ export async function passkeyRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
-  // The second step after a password, instead of a code from the authenticator app.
+  // The second step after a password with a security key, instead of a code from the authenticator app.
   app.post('/passkeys/second-step/options', strict, async (request) => {
     const session = await findSession(request)
     if (!session?.pending2fa) throw new HttpError(401, 'Sign in with your password first')
@@ -128,7 +157,7 @@ export async function passkeyRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
-  // Managing your passkeys, once signed in.
+  // Managing your passkeys and security keys, once signed in.
   app.register(async (signedIn) => {
     signedIn.addHook('preHandler', requireUser)
 
@@ -136,6 +165,7 @@ export async function passkeyRoutes(app: FastifyInstance) {
       const passkeys = await db.passkey.findMany({ where: { userId: request.user.id }, orderBy: { createdAt: 'asc' } })
       return passkeys.map((p) => ({
         id: p.id,
+        kind: p.kind,
         name: p.name,
         createdAt: p.createdAt,
         lastUsedAt: p.lastUsedAt,
@@ -144,6 +174,7 @@ export async function passkeyRoutes(app: FastifyInstance) {
     })
 
     signedIn.post('/passkeys/options', async (request) => {
+      const { kind } = parse(z.object({ kind: kindSchema }), request.body)
       const existing = await db.passkey.findMany({ where: { userId: request.user.id } })
       const options = await generateRegistrationOptions({
         rpName: 'Nexus',
@@ -153,15 +184,22 @@ export async function passkeyRoutes(app: FastifyInstance) {
         userID: new TextEncoder().encode(request.user.id),
         attestationType: 'none', // we don't need to know the maker of the passkey
         excludeCredentials: existing.map((p) => ({ id: p.id, transports: p.transports as never })),
-        // A "discoverable" passkey can sign in without typing an email first.
-        authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+        // A passkey is "discoverable": it can sign in without typing an email first, and checks who's
+        // holding it. A security key just needs to be there for the second step.
+        authenticatorSelection:
+          kind === 'passkey'
+            ? { residentKey: 'required', userVerification: 'required' }
+            : { residentKey: 'discouraged', userVerification: 'discouraged' },
       })
       await saveChallenge(options.challenge, 'register', request.user.id)
       return options
     })
 
     signedIn.post('/passkeys', async (request) => {
-      const body = parse(z.object({ name: z.string().trim().min(1).max(60), response: signed }), request.body)
+      const body = parse(
+        z.object({ name: z.string().trim().min(1).max(60), kind: kindSchema, response: signed }),
+        request.body,
+      )
       const response = body.response as unknown as RegistrationResponseJSON
       const challenge = await takeChallenge(response.response.clientDataJSON, 'register', request.user.id)
       const { verified, registrationInfo } = await verifyRegistrationResponse({
@@ -169,7 +207,7 @@ export async function passkeyRoutes(app: FastifyInstance) {
         expectedChallenge: challenge,
         expectedOrigin,
         expectedRPID: rpID,
-        requireUserVerification: true,
+        requireUserVerification: body.kind === 'passkey',
       }).catch((error) => {
         throw badRequest(`This passkey couldn’t be added: ${(error as Error).message}`)
       })
@@ -179,12 +217,18 @@ export async function passkeyRoutes(app: FastifyInstance) {
         data: {
           id: credential.id,
           userId: request.user.id,
+          kind: body.kind,
           name: body.name,
           publicKey: credential.publicKey,
           counter: credential.counter,
           transports: credential.transports ?? [],
         },
       })
+      if (body.kind === 'security-key') {
+        // The first second step someone sets up comes with recovery codes, for when the key is lost.
+        const user = await db.user.findUniqueOrThrow({ where: { id: request.user.id } })
+        return { id: credential.id, recoveryCodes: user.recoveryCodes.length ? null : await newRecoveryCodes(user.id) }
+      }
       // With private storage, the browser should now ask the passkey for its secret (see below).
       return { id: credential.id, unlockStorage: (await storageKey(request)) !== null }
     })

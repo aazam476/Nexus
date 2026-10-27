@@ -37,7 +37,9 @@ describe('passkeys', () => {
   it('keeps a challenge to what it was made for', async () => {
     const { browser } = await signedInUser(app)
     // A challenge made for adding a passkey can't sign anyone in.
-    const { challenge } = await browser.json<{ challenge: string }>('POST', '/api/auth/passkeys/options', {})
+    const { challenge } = await browser.json<{ challenge: string }>('POST', '/api/auth/passkeys/options', {
+      kind: 'passkey',
+    })
     const refused = await new Browser(app).post('/api/auth/passkeys/sign-in', { response: fakeResponse(challenge) })
     expect(refused.json().error).toMatch(/already used/)
   })

@@ -1,6 +1,7 @@
 // Data hooks: one place that knows which API path returns what.
 // Components call these instead of fetching directly, so caching and refreshing stay consistent.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import type { Account, Contact, Feed, FeedItem, FolderRole, Message, Plugin, Rule } from '../types'
 import { api } from './api'
 
@@ -96,6 +97,34 @@ export function useRefreshMail() {
     client.invalidateQueries({ queryKey: ['message'] })
     client.invalidateQueries({ queryKey: ['counts'] })
   }
+}
+
+// The refresh button: ask every mail server for new mail now, instead of waiting for the next
+// automatic sync. Syncing runs in the background with no "done" signal, so watch each account's
+// last-sync time until every one has changed (or 20 seconds pass, for a server that's down).
+export function useCheckForMail() {
+  const client = useQueryClient()
+  const refreshMail = useRefreshMail()
+  const [checking, setChecking] = useState(false)
+
+  async function check() {
+    setChecking(true)
+    try {
+      const before = await api<Account[]>('/accounts')
+      await Promise.all(before.map((account) => api(`/accounts/${account.id}/sync`, { body: {} })))
+      const synced = (now: Account[]) =>
+        now.every((account) => account.lastSyncAt !== before.find((b) => b.id === account.id)?.lastSyncAt)
+      for (let waited = 0; waited < 20_000; waited += 1_000) {
+        await new Promise((resolve) => setTimeout(resolve, 1_000))
+        if (synced(await api<Account[]>('/accounts'))) break
+      }
+    } finally {
+      client.invalidateQueries({ queryKey: ['accounts'] })
+      refreshMail()
+      setChecking(false)
+    }
+  }
+  return { check, checking }
 }
 
 // What this server allows: whether it still needs its first admin, sign-up, and which provider sign-ins are set up.

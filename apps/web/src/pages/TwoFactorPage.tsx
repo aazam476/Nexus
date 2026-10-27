@@ -1,20 +1,29 @@
-// The second sign-in step: a 6-digit code from an authenticator app, a passkey or security key
-// (like a YubiKey), or a recovery code.
+// The second sign-in step: a 6-digit code from an authenticator app, a security key (like a
+// YubiKey), or a recovery code. Only the ways the person set up are offered.
 import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { Button } from '../components/ui'
 import { api } from '../lib/api'
-import { secondStepWithPasskey } from '../lib/passkeys'
+import { secondStepWithSecurityKey } from '../lib/passkeys'
 import { AuthLayout } from './LoginPage'
 
 const CODE_LENGTH = 6
 
+// Which second steps someone set up, as the sign-in answer says.
+export interface SecondSteps {
+  code: boolean
+  securityKey: boolean
+}
+
 export function TwoFactorPage() {
   const navigate = useNavigate()
   const client = useQueryClient()
+  // Passed on by the sign-in page. After a page reload it's gone, so offer both.
+  const methods: SecondSteps = useLocation().state ?? { code: true, securityKey: true }
   const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(''))
   const [useRecovery, setUseRecovery] = useState(false)
+  const showCode = methods.code && !useRecovery
   const [error, setError] = useState('')
   const inputs = useRef<(HTMLInputElement | null)[]>([])
 
@@ -31,10 +40,10 @@ export function TwoFactorPage() {
     }
   }
 
-  async function verifyWithPasskey() {
+  async function verifyWithSecurityKey() {
     setError('')
     try {
-      await secondStepWithPasskey()
+      await secondStepWithSecurityKey()
       await client.invalidateQueries({ queryKey: ['me'] })
       navigate('/mail/inbox')
     } catch (e) {
@@ -82,9 +91,18 @@ export function TwoFactorPage() {
     <AuthLayout
       title="Two-factor authentication"
       subtitle={
-        useRecovery ? 'Enter one of your recovery codes.' : 'Enter the 6-digit code from your authenticator app.'
+        useRecovery
+          ? 'Enter one of your recovery codes.'
+          : showCode
+            ? 'Enter the 6-digit code from your authenticator app.'
+            : 'Use your security key.'
       }
     >
+      {!showCode && !useRecovery && (
+        <Button variant="primary" className="w-full py-2.5" onClick={verifyWithSecurityKey}>
+          Use security key
+        </Button>
+      )}
       {useRecovery ? (
         <form className="grid gap-4" onSubmit={submitRecovery}>
           <input
@@ -100,24 +118,26 @@ export function TwoFactorPage() {
           </Button>
         </form>
       ) : (
-        <div className="flex justify-between gap-2" onPaste={onPaste}>
-          {digits.map((digit, index) => (
-            <input
-              key={index}
-              ref={(el) => {
-                inputs.current[index] = el
-              }}
-              value={digit}
-              onChange={(e) => setDigit(index, e.target.value)}
-              onKeyDown={(e) => onKeyDown(index, e)}
-              inputMode="numeric"
-              autoComplete={index === 0 ? 'one-time-code' : 'off'}
-              aria-label={`Digit ${index + 1}`}
-              autoFocus={index === 0}
-              className="h-13 w-11 rounded-xl border border-line bg-raise text-center text-[22px] font-semibold focus:border-accent"
-            />
-          ))}
-        </div>
+        showCode && (
+          <div className="flex justify-between gap-2" onPaste={onPaste}>
+            {digits.map((digit, index) => (
+              <input
+                key={index}
+                ref={(el) => {
+                  inputs.current[index] = el
+                }}
+                value={digit}
+                onChange={(e) => setDigit(index, e.target.value)}
+                onKeyDown={(e) => onKeyDown(index, e)}
+                inputMode="numeric"
+                autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                aria-label={`Digit ${index + 1}`}
+                autoFocus={index === 0}
+                className="h-13 w-11 rounded-xl border border-line bg-raise text-center text-[22px] font-semibold focus:border-accent"
+              />
+            ))}
+          </div>
+        )
       )}
       {error && (
         <p role="alert" className="mt-4 text-[13px] text-danger">
@@ -133,11 +153,13 @@ export function TwoFactorPage() {
             setError('')
           }}
         >
-          {useRecovery ? 'Use authenticator code' : 'Use a recovery code'}
+          {useRecovery ? 'Go back' : 'Use a recovery code'}
         </button>
-        <button type="button" className="text-accent-text hover:underline" onClick={verifyWithPasskey}>
-          Use a passkey or security key
-        </button>
+        {showCode && methods.securityKey && (
+          <button type="button" className="text-accent-text hover:underline" onClick={verifyWithSecurityKey}>
+            Use a security key instead
+          </button>
+        )}
         <Link to="/login" className="text-muted hover:text-ink">
           Back
         </Link>

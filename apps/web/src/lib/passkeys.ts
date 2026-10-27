@@ -1,6 +1,7 @@
 // Passkeys and security keys in the browser. The server makes a challenge, the browser asks the
-// passkey to sign it (a fingerprint, face, PIN or a tap on a YubiKey), and the server checks it.
-// See server/features/auth/passkeys.ts for what each use is for.
+// key to sign it (a fingerprint, face, PIN or a tap on a YubiKey), and the server checks it.
+// A passkey signs in without a password; a security key is the second step after one.
+// See server/features/auth/passkeys.ts.
 import {
   bufferToBase64URLString,
   startAuthentication,
@@ -38,7 +39,7 @@ export async function signInWithPasskey() {
 }
 
 // The second step after a password, instead of an authenticator-app code.
-export async function secondStepWithPasskey() {
+export async function secondStepWithSecurityKey() {
   const { response } = await sign('/auth/passkeys/second-step/options', false)
   await api('/auth/passkeys/second-step', { body: { response } })
 }
@@ -51,12 +52,26 @@ export async function letPasskeyUnlockStorage(id: string) {
 }
 
 export async function addPasskey(name: string) {
-  const options = await api<PublicKeyCredentialCreationOptionsJSON>('/auth/passkeys/options', { body: {} })
-  // Ask for PRF now: security keys like YubiKeys can only produce the secret later if asked when created.
+  const options = await api<PublicKeyCredentialCreationOptionsJSON>('/auth/passkeys/options', {
+    body: { kind: 'passkey' },
+  })
+  // Ask for PRF now: some passkeys (and every YubiKey) can only produce the secret later if asked when created.
   const response = await startRegistration({ optionsJSON: { ...options, extensions: { prf: {} } as never } })
   const added = await api<{ id: string; unlockStorage: boolean }>('/auth/passkeys', {
-    body: { name, response: { ...response, clientExtensionResults: {} } },
+    body: { name, kind: 'passkey', response: { ...response, clientExtensionResults: {} } },
   })
-  // With private storage on, ask the passkey for its secret right away (one more touch or tap).
+  // With private storage on, ask the passkey for its secret right away (one more touch).
   if (added.unlockStorage) await letPasskeyUnlockStorage(added.id)
+}
+
+// Returns recovery codes when this is the first second step set up, for when the key is lost.
+export async function addSecurityKey(name: string): Promise<string[] | null> {
+  const options = await api<PublicKeyCredentialCreationOptionsJSON>('/auth/passkeys/options', {
+    body: { kind: 'security-key' },
+  })
+  const response = await startRegistration({ optionsJSON: options })
+  const added = await api<{ recoveryCodes: string[] | null }>('/auth/passkeys', {
+    body: { name, kind: 'security-key', response: { ...response, clientExtensionResults: {} } },
+  })
+  return added.recoveryCodes
 }

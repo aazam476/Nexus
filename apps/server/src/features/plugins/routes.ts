@@ -151,6 +151,7 @@ export async function pluginRoutes(app: FastifyInstance) {
     admin.get('/admin/plugins', async () => {
       const off = await switchedOff()
       const users = await db.pluginSetting.groupBy({ by: ['pluginId'], where: { enabled: true }, _count: true })
+      const removed = new Set((await db.serverPlugin.findMany({ where: { removed: true } })).map((row) => row.id))
       return allPlugins().map((plugin) => ({
         id: plugin.id,
         name: plugin.name,
@@ -158,6 +159,7 @@ export async function pluginRoutes(app: FastifyInstance) {
         author: plugin.author,
         builtIn: plugin.builtIn,
         enabled: !off.has(plugin.id),
+        removed: removed.has(plugin.id),
         users: users.find((u) => u.pluginId === plugin.id)?._count ?? 0,
       }))
     })
@@ -179,22 +181,28 @@ export async function pluginRoutes(app: FastifyInstance) {
     admin.put<{ Params: { id: string } }>('/admin/plugins/:id', async (request) => {
       const { enabled } = parse(z.object({ enabled: z.boolean() }), request.body)
       if (!getPlugin(request.params.id)) throw notFound('Plugin')
+      // Turning a deleted built-in plugin back on restores it.
       await db.serverPlugin.upsert({
         where: { id: request.params.id },
         create: { id: request.params.id, enabled },
-        update: { enabled },
+        update: { enabled, ...(enabled && { removed: false }) },
       })
       return { ok: true }
     })
 
-    // Deletes the plugin's code, and everyone's settings for it (they may hold passwords for other services).
+    // Deletes everyone's settings for the plugin (they may hold passwords for other services), and the
+    // plugin: an added one's code is deleted; a built-in one ships with Nexus, so it's hidden instead.
     admin.delete<{ Params: { id: string } }>('/admin/plugins/:id', async (request) => {
-      if (!getPlugin(request.params.id)) throw notFound('Plugin')
-      await removePlugin(request.params.id).catch((error) => {
-        throw badRequest(errorMessage(error))
-      })
-      await db.pluginSetting.deleteMany({ where: { pluginId: request.params.id } })
-      await db.serverPlugin.deleteMany({ where: { id: request.params.id } })
+      const plugin = getPlugin(request.params.id)
+      if (!plugin) throw notFound('Plugin')
+      await db.pluginSetting.deleteMany({ where: { pluginId: plugin.id } })
+      if (plugin.builtIn) {
+        const hidden = { enabled: false, removed: true }
+        await db.serverPlugin.upsert({ where: { id: plugin.id }, create: { id: plugin.id, ...hidden }, update: hidden })
+        return { ok: true }
+      }
+      await removePlugin(plugin.id)
+      await db.serverPlugin.deleteMany({ where: { id: plugin.id } })
       return { ok: true }
     })
   })

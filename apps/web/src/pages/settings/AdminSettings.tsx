@@ -12,7 +12,7 @@ interface User {
   name: string
   email: string
   role: 'admin' | 'user'
-  totpEnabled: boolean
+  twoFactor: boolean // an authenticator app, a security key, or both
   privateStorage: boolean
 }
 
@@ -162,7 +162,7 @@ function UsersCard({ myId }: { myId: string }) {
                 </p>
                 <p className="text-[12.5px] text-muted">{user.email}</p>
               </div>
-              {!user.totpEnabled && <Chip color="var(--notif)">2FA off</Chip>}
+              {!user.twoFactor && <Chip color="var(--notif)">2FA off</Chip>}
               <select
                 value={user.role}
                 disabled={user.id === myId}
@@ -180,7 +180,7 @@ function UsersCard({ myId }: { myId: string }) {
                   Reset password
                 </Button>
               )}
-              {user.totpEnabled && user.id !== myId && (
+              {user.twoFactor && user.id !== myId && (
                 <Button variant="ghost" onClick={() => turnOffTwoFactor(user)}>
                   Turn off 2FA
                 </Button>
@@ -273,6 +273,7 @@ interface ServerPlugin {
   author: string
   builtIn: boolean
   enabled: boolean // for everyone on the server
+  removed: boolean // a deleted built-in plugin, which can be restored
   users: number // how many people have it turned on
 }
 
@@ -321,7 +322,8 @@ function PluginsCard() {
   }
 
   async function remove(plugin: ServerPlugin) {
-    if (!confirm(`Delete ${plugin.name}? Everyone’s settings for it are deleted too.`)) return
+    const restorable = plugin.builtIn ? ' It ships with Nexus, so you can restore it later.' : ''
+    if (!confirm(`Delete ${plugin.name}? Everyone’s settings for it are deleted too.${restorable}`)) return
     await del(`/admin/plugins/${plugin.id}`).catch((e) => setError(e.message))
     refresh()
   }
@@ -353,30 +355,44 @@ function PluginsCard() {
         />
         {adding && <PluginReview {...adding} onInstall={install} onCancel={() => setAdding(null)} />}
         <ul className="divide-y divide-line">
-          {plugins?.map((plugin) => (
-            <li key={plugin.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">
-                  {plugin.name} {plugin.builtIn && <Chip color="var(--muted)">Built in</Chip>}
-                </p>
-                <p className="text-[12.5px] text-muted">
-                  {plugin.description} · by {plugin.author} · {plugin.users}{' '}
-                  {plugin.users === 1 ? 'person uses' : 'people use'} it
-                </p>
-              </div>
-              {!plugin.builtIn && (
+          {plugins
+            ?.filter((plugin) => !plugin.removed)
+            .map((plugin) => (
+              <li key={plugin.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">
+                    {plugin.name} {plugin.builtIn && <Chip color="var(--muted)">Built in</Chip>}
+                  </p>
+                  <p className="text-[12.5px] text-muted">{plugin.description}</p>
+                  <p className="text-[12.5px] text-muted">
+                    Created by {plugin.author} · Turned on by {plugin.users} {plugin.users === 1 ? 'user' : 'users'}
+                  </p>
+                </div>
                 <Button variant="ghost" onClick={() => remove(plugin)}>
                   Delete
                 </Button>
-              )}
-              <Toggle
-                checked={plugin.enabled}
-                onChange={(on) => setEnabled(plugin, on)}
-                label={`${plugin.name} for everyone`}
-              />
-            </li>
-          ))}
+                <Toggle
+                  checked={plugin.enabled}
+                  onChange={(on) => setEnabled(plugin, on)}
+                  label={`${plugin.name} for everyone`}
+                />
+              </li>
+            ))}
         </ul>
+        {/* Deleted built-in plugins: their code ships with Nexus, so they can come back. */}
+        {plugins?.some((plugin) => plugin.removed) && (
+          <div className="grid gap-2 border-t border-line pt-3">
+            <p className="text-[12.5px] font-semibold text-ink-2">Deleted built-in plugins</p>
+            {plugins
+              .filter((plugin) => plugin.removed)
+              .map((plugin) => (
+                <div key={plugin.id} className="flex items-center gap-3">
+                  <span className="flex-1 text-muted">{plugin.name}</span>
+                  <Button onClick={() => setEnabled(plugin, true)}>Restore</Button>
+                </div>
+              ))}
+          </div>
+        )}
         {error && (
           <p role="alert" className="text-[13px] text-danger">
             {error}

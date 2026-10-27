@@ -70,7 +70,7 @@ export async function installPlugin(dir: string, code: string): Promise<NexusPlu
 // stays in memory, unused, until Nexus restarts.
 export async function removePlugin(id: string) {
   const plugin = plugins.get(id)
-  if (!plugin || plugin.builtIn) throw new Error('Only plugins that were added to Nexus can be deleted')
+  if (!plugin || plugin.builtIn) throw new Error('Built-in plugins ship with Nexus; their code can’t be deleted')
   await rm(plugin.source!, { recursive: true, force: true })
   plugins.delete(id)
 }

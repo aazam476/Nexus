@@ -1,6 +1,6 @@
-// Passkeys, with Chrome's built-in pretend passkey (a "virtual authenticator") standing in for
-// Touch ID or a YubiKey: adding one, signing in without a password, opening private storage with
-// it, and using it as the second step after a password.
+// Passkeys and security keys, with Chrome's built-in pretend key (a "virtual authenticator") standing
+// in for Touch ID or a YubiKey: a passkey signs in without a password and can open private storage;
+// a security key is the second step after a password.
 import type { Page } from '@playwright/test'
 import { authenticator } from 'otplib'
 import { expect, test } from './fixtures.ts'
@@ -39,7 +39,7 @@ test('adds a passkey, signs in with it, and lets it open private storage', async
   await expect(pia).toHaveURL(/\/mail\/inbox$/)
 
   await pia.goto('/settings/security')
-  await pia.getByRole('button', { name: 'Add a passkey or security key' }).click()
+  await pia.getByRole('button', { name: 'Add a passkey' }).click()
   await pia.getByLabel('Name it, to tell it apart').fill('Laptop')
   await pia.getByRole('button', { name: 'Continue' }).click()
   await expect(pia.getByText('Laptop added.')).toBeVisible()
@@ -63,7 +63,7 @@ test('adds a passkey, signs in with it, and lets it open private storage', async
   await expect(pia).toHaveURL(/\/mail\/inbox$/) // refused if the passkey couldn't open private storage
 })
 
-test('a passkey works as the second step after a password', async ({ page, person }) => {
+test('a security key is the second step after a password, with recovery codes', async ({ page, person }) => {
   const email = uniqueAddress('quin')
   const password = 'quins long password'
   await page.request.post('/api/users', { data: { name: 'Quin', email, password } })
@@ -71,22 +71,21 @@ test('a passkey works as the second step after a password', async ({ page, perso
   await addVirtualPasskey(quin)
   await signInWithPassword(quin, email, password)
   await expect(quin).toHaveURL(/\/mail\/inbox$/)
-  await quin.goto('/settings/security')
 
-  const setup = quin.waitForResponse('**/api/auth/2fa/setup')
-  await quin.getByRole('button', { name: 'Set up two-factor authentication' }).click()
-  const { secret } = await (await setup).json()
-  await quin.getByLabel('Code from the app').fill(authenticator.generate(secret))
-  await quin.getByRole('button', { name: 'Verify and turn on' }).click()
-  await quin.getByRole('button', { name: 'I saved them' }).click()
-  await quin.getByRole('button', { name: 'Add a passkey or security key' }).click()
+  await quin.goto('/settings/security')
+  await quin.getByRole('button', { name: 'Add a security key' }).click()
   await quin.getByLabel('Name it, to tell it apart').fill('YubiKey')
   await quin.getByRole('button', { name: 'Continue' }).click()
   await expect(quin.getByText('YubiKey added.')).toBeVisible()
+  // The first second step comes with recovery codes, for when the key is lost.
+  await expect(quin.getByText('Save these recovery codes somewhere safe')).toBeVisible()
+  await quin.getByRole('button', { name: 'I saved them' }).click()
 
+  // Signing in now asks for it after the password, the only way offered besides recovery codes.
   await quin.getByRole('button', { name: 'Sign out' }).click()
   await signInWithPassword(quin, email, password)
   await expect(quin).toHaveURL(/\/login\/2fa$/)
-  await quin.getByRole('button', { name: 'Use a passkey or security key' }).click()
+  await expect(quin.getByLabel('Digit 1')).toBeHidden()
+  await quin.getByRole('button', { name: 'Use security key' }).click()
   await expect(quin).toHaveURL(/\/mail\/inbox$/)
 })

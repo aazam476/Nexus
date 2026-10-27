@@ -8,13 +8,14 @@ import {
   Menu,
   Paperclip,
   PenLine,
+  RefreshCw,
   Rows3,
   Search,
   Star,
 } from 'lucide-react'
 import { forwardRef, useState } from 'react'
 import { Link } from 'react-router'
-import { useAccounts } from '../lib/queries'
+import { useAccounts, useCheckForMail } from '../lib/queries'
 import { formatListDate } from '../lib/format'
 import { useStore } from '../lib/store'
 import { sections } from '../lib/sections'
@@ -42,6 +43,7 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
 ) {
   const { layout, setLayout, openComposer } = useStore()
   const accounts = useAccounts().data
+  const { check, checking } = useCheckForMail()
   const accountColor = (id: string) => accounts?.find((a) => a.id === id)?.color
   const unread = messages.filter((m) => m.unread).length
 
@@ -71,6 +73,18 @@ export const MessageList = forwardRef<HTMLInputElement, Props>(function MessageL
           <span className="ml-auto text-[12px] whitespace-nowrap text-muted">
             {unread > 0 ? `${unread} unread` : 'All read'}
           </span>
+          {accounts && accounts.length > 0 && (
+            <button
+              type="button"
+              title="Check for new mail"
+              aria-label="Check for new mail"
+              disabled={checking}
+              onClick={check}
+              className="rounded-md p-1 text-muted hover:bg-raise"
+            >
+              <RefreshCw size={16} className={checking ? 'animate-spin' : ''} />
+            </button>
+          )}
           <button
             type="button"
             title={layout === 'three-pane' ? 'Switch to list layout' : 'Switch to three-pane layout'}

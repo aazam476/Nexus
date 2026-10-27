@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router'
 import { Button, Field, Input, Logo } from '../components/ui'
 import { api } from '../lib/api'
 import { signInWithPasskey } from '../lib/passkeys'
+import type { SecondSteps } from './TwoFactorPage'
 import { useServerStatus } from '../lib/queries'
 
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
@@ -47,9 +48,11 @@ export function LoginPage() {
         await client.invalidateQueries({ queryKey: ['me'] })
         navigate('/mail/inbox')
       } else {
-        const result = await api<{ twoFactorRequired: boolean }>('/auth/login', { body: form })
+        const result = await api<{ twoFactorRequired: boolean; methods: SecondSteps }>('/auth/login', { body: form })
         await client.invalidateQueries({ queryKey: ['me'] })
-        navigate(result.twoFactorRequired ? '/login/2fa' : '/mail/inbox')
+        // The second-step page shows only the ways this person set up.
+        if (result.twoFactorRequired) navigate('/login/2fa', { state: result.methods })
+        else navigate('/mail/inbox')
       }
     } catch (e) {
       setError((e as Error).message)

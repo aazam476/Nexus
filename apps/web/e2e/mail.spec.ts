@@ -40,6 +40,15 @@ test('sorts new mail into sections and shows a message safely, with remote image
   await expect(page.getByText(/Remote images blocked/)).toBeHidden()
 })
 
+test('the refresh button checks the mail server for new mail', async ({ page }) => {
+  const { mailbox } = run()
+  const subject = `Expected any minute ${Date.now().toString(36)}`
+  await page.goto('/mail/inbox')
+  await deliver(mailbox, { from: 'courier@shop.test', subject, text: 'Your parcel is on its way.' })
+  await page.getByRole('button', { name: 'Check for new mail' }).click()
+  await expect(page.getByRole('button', { name: new RegExp(subject) })).toBeVisible({ timeout: 20_000 })
+})
+
 test('never runs scripts from an email', async ({ page }) => {
   const evil = subject('Totally safe')
   await deliver(run().mailbox, {

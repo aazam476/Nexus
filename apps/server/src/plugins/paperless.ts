@@ -5,7 +5,7 @@ export const paperless: NexusPlugin = {
   id: 'paperless',
   name: 'Paperless-ngx',
   description: 'Send PDFs and scans straight to Paperless for OCR and filing.',
-  author: 'Nexus',
+  author: 'Team @ Nexus',
   settings: [
     { key: 'url', label: 'Server URL', type: 'url', placeholder: 'https://paperless.example.com', required: true },
     { key: 'token', label: 'API token', type: 'password', required: true },

@@ -6,7 +6,7 @@ export const immich: NexusPlugin = {
   id: 'immich',
   name: 'Immich',
   description: 'Save photo and video attachments to your Immich library.',
-  author: 'Nexus',
+  author: 'Team @ Nexus',
   settings: [
     { key: 'url', label: 'Server URL', type: 'url', placeholder: 'https://photos.example.com', required: true },
     { key: 'apiKey', label: 'API key', type: 'password', required: true },

@@ -172,18 +172,20 @@ Good to know before turning it on:
 
 - **Two-factor sign-in** with an authenticator app, plus recovery codes:
   **Settings → Password & 2FA**.
-- **Passkeys and security keys** (Touch ID, Windows Hello, a phone, a
-  YubiKey): sign in without a password, or use one as the second step instead
-  of an app code: **Settings → Password & 2FA**. With private storage on, a
-  passkey that supports PRF (most do) can open your mail too. Passkeys belong
-  to the address in `PUBLIC_URL`, so set it to the address people really use.
+- **Passkeys** (Touch ID, Windows Hello, a phone) sign in without a
+  password. **Security keys** (like a YubiKey) are the second step after a
+  password, instead of or as well as an app code. Both are in
+  **Settings → Password & 2FA**. With private storage on, a passkey that
+  supports PRF (most do) can open your mail too. Both belong to the address in
+  `PUBLIC_URL`, so set it to the address people really use.
 - **Shared mailboxes:** mail accounts are private to whoever added them, until
   they share one in **Settings → Sharing**. Editors can read, send and sort;
   viewers can only read.
 - **Admin:** admins add and delete users, change their role, reset a
   forgotten password, turn off two-factor sign-in for someone who lost their
-  phone, add, delete and turn off plugins, and see which mail accounts fail to
-  sync: **Settings → Admin**.
+  phone or security key, add, delete and turn off plugins (a deleted built-in
+  plugin can be restored), and see which mail accounts fail to sync:
+  **Settings → Admin**.
   Admins never see anyone's mail. Resetting the password of someone with
   private storage turns it off and downloads their mail again from the mail
   server, since nobody can open the copy locked with the old password.
