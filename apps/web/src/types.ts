@@ -23,6 +23,7 @@ export interface Account {
   smtpPort?: number
   smtpTls?: boolean
   username?: string
+  smtpUsername?: string | null // a separate login for sending, when the server needs one
 }
 
 export interface Person {

@@ -25,6 +25,15 @@ const serverFields = z.object({
   username: z.string().trim().min(1),
 })
 
+// A separate login for sending, only where the server needs one. Omitted: use the receiving login.
+const smtpLogin = z.object({ username: z.string().trim().min(1), password: z.string().min(1) })
+
+// Turns the smtpLogin the browser sends into the two database columns (both empty = no separate login).
+function smtpLoginColumns(login: z.infer<typeof smtpLogin> | null) {
+  if (!login) return { smtpUsername: null, smtpSecret: null }
+  return { smtpUsername: login.username, smtpSecret: encrypt(login.password) }
+}
+
 export async function accountRoutes(app: FastifyInstance) {
   // The OAuth callback is a redirect from Google/Microsoft. Browsers don't send our strict
   // session cookie on that cross-site hop, so the pending sign-in is remembered here by `state`.
@@ -81,6 +90,7 @@ export async function accountRoutes(app: FastifyInstance) {
           smtpPort: account.smtpPort,
           smtpTls: account.smtpTls,
           username: account.username,
+          smtpUsername: account.smtpUsername, // the password is never sent back
         }),
       }))
     })
@@ -92,6 +102,7 @@ export async function accountRoutes(app: FastifyInstance) {
           name: z.string().trim().min(1),
           protocol: z.enum(['imap', 'pop3']),
           password: z.string().min(1),
+          smtpLogin: smtpLogin.optional(),
         }),
         request.body,
       )
@@ -105,14 +116,17 @@ export async function accountRoutes(app: FastifyInstance) {
       }
       // Try the login before saving anything. testConnection takes an account-shaped object,
       // so give it one; the id isn't used for password logins.
-      const { password, ...fields } = body
+      const { password, smtpLogin: separateLogin, ...fields } = body
       const secret = encrypt(password)
-      await testConnection({ ...fields, id: 'not-saved-yet', auth: 'password', secret }).catch((error) => {
+      const sendingLogin = smtpLoginColumns(separateLogin ?? null)
+      const settings = { ...fields, ...sendingLogin, id: 'not-saved-yet', auth: 'password', secret }
+      await testConnection(settings).catch((error) => {
         throw badRequest(`Could not connect: ${errorMessage(error)}`)
       })
       const account = await db.account.create({
         data: {
           ...fields,
+          ...sendingLogin,
           ownerId: request.user.id,
           auth: 'password',
           secret,
@@ -132,21 +146,24 @@ export async function accountRoutes(app: FastifyInstance) {
           color: z.string().regex(HEX_COLOR).optional(),
           signature: z.string().max(20_000).optional(),
           password: z.string().min(1).optional(),
+          smtpLogin: smtpLogin.nullable().optional(), // null: go back to the receiving login
         }),
         request.body,
       )
       // Editors may change the signature; everything else is the owner's call.
-      const { signature, password, ...rest } = body
-      if (role !== 'owner' && (password || Object.keys(rest).length))
-        throw new HttpError(403, 'Only the owner can change account settings')
+      const { signature, password, smtpLogin: separateLogin, ...rest } = body
+      const changesSettings = password || separateLogin !== undefined || Object.keys(rest).length > 0
+      if (role !== 'owner' && changesSettings) throw new HttpError(403, 'Only the owner can change account settings')
       const data = {
         ...rest,
         ...(signature !== undefined && { signature }),
         ...(password && { secret: encrypt(password) }),
+        ...(separateLogin !== undefined && smtpLoginColumns(separateLogin)),
       }
 
-      // A new password or server: check the login works before saving it.
-      const changesLogin = password || Object.keys(serverFields.shape).some((field) => field in rest)
+      // A new password, login or server: check it works before saving it.
+      const changesServer = Object.keys(serverFields.shape).some((field) => field in rest)
+      const changesLogin = password || separateLogin !== undefined || changesServer
       if (changesLogin) {
         const current = await db.account.findUniqueOrThrow({ where: { id: request.params.id } })
         await testConnection({ ...current, ...data }).catch((error) => {

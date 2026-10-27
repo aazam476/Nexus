@@ -13,7 +13,18 @@ const tls = { rejectUnauthorized: !config.MAIL_ALLOW_INSECURE_TLS }
 
 type ServerSettings = Pick<
   Account,
-  'id' | 'auth' | 'secret' | 'username' | 'inHost' | 'inPort' | 'inTls' | 'smtpHost' | 'smtpPort' | 'smtpTls'
+  | 'id'
+  | 'auth'
+  | 'secret'
+  | 'username'
+  | 'inHost'
+  | 'inPort'
+  | 'inTls'
+  | 'smtpHost'
+  | 'smtpPort'
+  | 'smtpTls'
+  | 'smtpUsername'
+  | 'smtpSecret'
 >
 
 // What to log in with: the stored password, or (for Google/Microsoft accounts) a fresh OAuth access token.
@@ -58,8 +69,15 @@ export function openPop3(account: ServerSettings) {
   })
 }
 
+// Sending usually uses the same login as receiving. Some hosts and mail relays have a separate one.
+export async function sendingCredentials(account: ServerSettings) {
+  if (account.smtpUsername && account.smtpSecret)
+    return { user: account.smtpUsername, pass: decrypt(account.smtpSecret) }
+  return credentials(account)
+}
+
 export async function smtpTransport(account: ServerSettings) {
-  const creds = await credentials(account)
+  const creds = await sendingCredentials(account)
   return nodemailer.createTransport({
     host: account.smtpHost,
     port: account.smtpPort,

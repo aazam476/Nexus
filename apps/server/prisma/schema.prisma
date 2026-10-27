@@ -21,6 +21,7 @@ model User {
   role              String   @default("user") // "admin" | "user"
   totpSecret        String? // encrypted
   totpEnabled       Boolean  @default(false)
+  totpLastStep      Int? // the 30-second step of the last code used, so the same code can't be used twice
   recoveryCodes     String[] // sha256 hashes, removed once used
   // Private storage (see src/lib/sealed.ts). Keys are kept after it is turned off, so nothing becomes unreadable.
   privateStorage    Boolean  @default(false)
@@ -75,6 +76,9 @@ model Account {
   smtpTls    Boolean
   username   String
   secret     String // encrypted password, or OAuth refresh token
+  // Only for servers where sending needs a different login than receiving (some hosts and mail relays).
+  smtpUsername String?
+  smtpSecret   String? // encrypted password for smtpUsername
   signature  String    @default("")
   lastSyncAt DateTime?
   syncError  String?
@@ -104,6 +108,8 @@ model Folder {
   role          String // "inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"
   uidValidity   BigInt?
   lastUid       Int     @default(0)
+  // Everything from this UID up has been downloaded; older mail is fetched a batch per sync until it's 1.
+  oldestUid     Int?
   // Change counter (IMAP CONDSTORE) and message count at the last sync; if neither moved, nothing changed.
   highestModseq BigInt?
   lastExists    Int?

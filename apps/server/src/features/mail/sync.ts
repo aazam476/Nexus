@@ -10,8 +10,10 @@ import { sealAccounts } from './private.ts'
 import { categoryOf, nothingChanged } from './sorting.ts'
 import { loadSortingContext, saveMessage, sortIncoming, type SortingContext } from './store.ts'
 
-// shortcut: the first sync of a folder only fetches its newest messages; add a "load older mail" job for full history.
-const FIRST_SYNC_LIMIT = 500
+// How much mail each sync downloads. A folder's first sync takes its newest messages, so they show
+// up quickly; every sync after that also takes the next batch of older ones, until the folder's
+// whole history is in. (Tests lower these, to try it with a handful of messages.)
+export const syncLimits = { firstSync: 500, historyBatch: 500 }
 const ROLES = ['inbox', 'sent', 'drafts', 'archive', 'spam', 'trash'] as const
 
 export async function syncAccount(accountId: string) {
@@ -19,9 +21,12 @@ export async function syncAccount(accountId: string) {
   if (!account) return
   try {
     const context = await loadSortingContext(account.ownerId)
+    // Private storage: seal any mail still readable before talking to the mail server, so it happens
+    // even when the server is down. (Turning private storage on relies on this; see auth/routes.ts.)
+    if (context.sealFor) await sealAccounts([account.id], context.sealFor)
     if (account.protocol === 'imap') await syncImap(account, context)
     else await syncPop3(account, context)
-    // Catch mail a sync stored just before private storage was turned on.
+    // And once more after: a sync that began just before private storage was turned on stored mail unsealed.
     if (context.sealFor) await sealAccounts([account.id], context.sealFor)
     await db.account.update({ where: { id: account.id }, data: { lastSyncAt: new Date(), syncError: null } })
   } catch (error) {
@@ -102,7 +107,8 @@ export async function discoverFolders(client: ImapFlow, accountId: string): Prom
   return folders
 }
 
-// Syncs one folder in three steps. Some IMAP words used below:
+// Syncs one folder: new mail, then a batch of older mail, then changes made in other apps.
+// Some IMAP words used below:
 //   UID          a number the server gives each message in a folder; new messages get higher ones,
 //                so "UIDs above the last one we saw" means "new mail"
 //   UIDVALIDITY  changes if the server ever renumbers the folder; then our saved UIDs are worthless
@@ -121,14 +127,22 @@ async function syncFolder(
     const mailbox = client.mailbox
     if (!mailbox) return
     let lastUid = folder.lastUid
+    let oldestUid = folder.oldestUid
     if (folder.uidValidity != null && folder.uidValidity !== mailbox.uidValidity) {
       // The server renumbered everything: forget this folder and download it again.
       await db.message.deleteMany({ where: { folderId: folder.id } })
       lastUid = 0
+      oldestUid = null
     }
 
     const newUids = await findNewUids(client, lastUid, mailbox.exists)
     for (const uid of newUids) await downloadMessage(client, uid, account, folder, folders, context)
+
+    // Where older mail still to fetch begins: below the oldest message the first sync took (or,
+    // for folders synced before Nexus fetched history, below the oldest one stored).
+    if (lastUid === 0 && newUids.length > 0) oldestUid = Math.min(...newUids)
+    oldestUid ??= await oldestStoredUid(folder.id, lastUid)
+    oldestUid = await downloadOlderMail(client, account, folder, folders, context, oldestUid)
 
     const unchanged = nothingChanged(
       folder,
@@ -142,6 +156,7 @@ async function syncFolder(
       data: {
         uidValidity: mailbox.uidValidity,
         lastUid: Math.max(lastUid, ...newUids),
+        oldestUid,
         highestModseq: mailbox.highestModseq ?? null,
         lastExists: mailbox.exists,
       },
@@ -156,15 +171,40 @@ async function syncFolder(
 async function findNewUids(client: ImapFlow, lastUid: number, exists: number): Promise<number[]> {
   if (exists === 0) return []
   // "A:*" means "from A to the end". After a first sync, ask by UID for everything above the last
-  // one seen. On the first sync, ask by position for the newest FIRST_SYNC_LIMIT messages.
+  // one seen. On the first sync, ask by position for the newest syncLimits.firstSync messages.
   const firstSync = lastUid === 0
-  const range = firstSync ? `${Math.max(1, exists - FIRST_SYNC_LIMIT + 1)}:*` : `${lastUid + 1}:*`
+  const range = firstSync ? `${Math.max(1, exists - syncLimits.firstSync + 1)}:*` : `${lastUid + 1}:*`
   const uids: number[] = []
   for await (const message of client.fetch(range, { uid: true }, { uid: !firstSync })) {
     // "N:*" always includes the very last message, even when it isn't new, so check.
     if (message.uid > lastUid) uids.push(message.uid)
   }
   return uids
+}
+
+// Step 1b: older mail. Fetches up to syncLimits.historyBatch messages from just below `oldestUid`,
+// newest of them first. Returns the new oldest UID; 1 means the whole history is in.
+async function downloadOlderMail(
+  client: ImapFlow,
+  account: Account,
+  folder: Folder,
+  folders: Map<string, Folder>,
+  context: SortingContext,
+  oldestUid: number,
+): Promise<number> {
+  if (oldestUid <= 1) return 1 // done already
+  const older = (await client.search({ uid: `1:${oldestUid - 1}` }, { uid: true })) || [] // every UID below it
+  if (older.length === 0) return 1
+  const batch = older.sort((a, b) => a - b).slice(-syncLimits.historyBatch) // the newest of the older ones
+  for (const uid of batch) await downloadMessage(client, uid, account, folder, folders, context, { applyRules: false })
+  const moreLeft = older.length > batch.length
+  return moreLeft ? batch[0] : 1
+}
+
+// The lowest UID stored for a folder, or (when none are) the next UID to come.
+async function oldestStoredUid(folderId: string, lastUid: number): Promise<number> {
+  const { _min } = await db.message.aggregate({ where: { folderId }, _min: { uid: true } })
+  return _min.uid ?? lastUid + 1
 }
 
 // Step 2: download one new message, sort it (inbox only), and save it.
@@ -175,6 +215,7 @@ async function downloadMessage(
   folder: Folder,
   folders: Map<string, Folder>,
   context: SortingContext,
+  options = { applyRules: true },
 ) {
   const message = await client.fetchOne(String(uid), { source: true, flags: true }, { uid: true })
   if (!message || !message.source) return
@@ -184,8 +225,9 @@ async function downloadMessage(
   let category = categoryOf(parsed)
   let labels: string[] = []
 
-  // New mail in the inbox goes through the user's rules and the spam check.
-  if (folder.role === 'inbox') {
+  // New mail in the inbox goes through the user's rules and the spam check. (Older mail fetched
+  // later doesn't: it was already filed, and the rules weren't there when it arrived.)
+  if (folder.role === 'inbox' && options.applyRules) {
     const decision = sortIncoming(parsed, context)
     const target = decision.moveTo && folders.get(decision.moveTo)
     if (target && target.id !== folder.id) {

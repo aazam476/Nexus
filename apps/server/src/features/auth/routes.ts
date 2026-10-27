@@ -1,4 +1,5 @@
 // Sign up, sign in, two-factor authentication, password and session management.
+import type { KeyObject } from 'node:crypto'
 import type { User } from '@prisma/client'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { authenticator } from 'otplib'
@@ -8,7 +9,7 @@ import { z } from 'zod'
 import { config } from '../../config.ts'
 import { db } from '../../db.ts'
 import { decrypt, encrypt, hashPassword, randomToken, sha256, verifyPassword } from '../../lib/crypto.ts'
-import { HttpError, badRequest, forbidden, parse } from '../../lib/http.ts'
+import { HttpError, badRequest, errorMessage, forbidden, parse } from '../../lib/http.ts'
 import {
   lockWithPassword,
   newStorageKeys,
@@ -24,11 +25,32 @@ import {
   setSessionStorageKey,
   startSession,
 } from '../../lib/session.ts'
-import { sealAccounts, unsealAccounts } from '../mail/private.ts'
+import { unsealUserMail } from '../mail/private.ts'
+import { queueSync } from '../../jobs/queue.ts'
 
 // Accept the code before and after the current one: phone clocks drift and people type slowly.
-// shortcut: a code can be reused within its 30s window; store the last used step per user if that matters.
 authenticator.options = { window: 1 }
+
+// Authenticator codes change every 30 seconds; each 30-second slot since 1970 is a "step".
+// Returns the step a code belongs to, or null when the code is wrong.
+function codeStep(code: string, secret: string): number | null {
+  const delta = authenticator.checkDelta(code.replace(/\s/g, ''), secret) // -1, 0 or 1 steps from now
+  if (delta === null) return null
+  return Math.floor(Date.now() / 30_000) + delta
+}
+
+// Accepts a code only if it is newer than the last one used, so a code someone saw can't be used again.
+// One database update does the check and the save together, so two requests with the same code
+// at the same moment can't both get in.
+async function useCode(userId: string, code: string, secret: string): Promise<boolean> {
+  const step = codeStep(code, secret)
+  if (step === null) return false
+  const used = await db.user.updateMany({
+    where: { id: userId, OR: [{ totpLastStep: null }, { totpLastStep: { lt: step } }] },
+    data: { totpLastStep: step },
+  })
+  return used.count === 1
+}
 
 const email = z.string().trim().toLowerCase().email()
 const password = z.string().min(12, 'Use at least 12 characters').max(200)
@@ -84,6 +106,8 @@ export async function authRoutes(app: FastifyInstance) {
     // Private storage: the password is in hand only now, so unlock the key and hand it to the session.
     const key = user.storagePrivateKey ? await unlockWithPassword(user.storagePrivateKey, body.password) : undefined
     await startSession(request, reply, user.id, user.totpEnabled, key)
+    // Private storage was turned off, but opening the mail again may have been cut short by a restart.
+    if (key && !user.privateStorage) unsealInBackground(user.id, key)
     return { twoFactorRequired: user.totpEnabled }
   })
 
@@ -96,7 +120,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     let ok = false
     if (body.code && user.totpSecret) {
-      ok = authenticator.verify({ token: body.code.replace(/\s/g, ''), secret: decrypt(user.totpSecret) })
+      ok = await useCode(user.id, body.code, decrypt(user.totpSecret))
     } else if (body.recoveryCode) {
       const hash = sha256(normalizeCode(body.recoveryCode))
       if (user.recoveryCodes.includes(hash)) {
@@ -195,10 +219,13 @@ export async function authRoutes(app: FastifyInstance) {
         z.object({ code: z.string(), secret: z.string().regex(BASE32_SECRET) }),
         request.body,
       )
-      if (!authenticator.verify({ token: code.replace(/\s/g, ''), secret })) {
-        throw badRequest('That code is not valid. Check the time on your phone and try again.')
-      }
-      const recoveryCodes = await newRecoveryCodes(request.user.id, { totpEnabled: true, totpSecret: encrypt(secret) })
+      const step = codeStep(code, secret)
+      if (step === null) throw badRequest('That code is not valid. Check the time on your phone and try again.')
+      const recoveryCodes = await newRecoveryCodes(request.user.id, {
+        totpEnabled: true,
+        totpSecret: encrypt(secret),
+        totpLastStep: step, // this code is now used up
+      })
       return { recoveryCodes }
     })
 
@@ -207,7 +234,7 @@ export async function authRoutes(app: FastifyInstance) {
       const user = await userWithPassword(request.user.id, current)
       await db.user.update({
         where: { id: user.id },
-        data: { totpEnabled: false, totpSecret: null, recoveryCodes: [] },
+        data: { totpEnabled: false, totpSecret: null, totpLastStep: null, recoveryCodes: [] },
       })
       return { ok: true }
     })
@@ -288,27 +315,33 @@ async function turnOnPrivateStorage(request: FastifyRequest, user: User, passwor
 
   // Other devices have no key and couldn't read anything; signing in again gives them one.
   await db.session.deleteMany({ where: { userId: user.id, NOT: { id: request.sessionId } } })
-  // shortcut: seals the whole mailbox inside this request; move it to the job queue if mailboxes get huge.
-  await sealAccounts(
-    owned.map((a) => a.id),
-    keys.publicKey,
-  )
+  // The mail itself is sealed in the background, by each account's next sync (sealing only needs
+  // the public key), so a big mailbox doesn't hold up this request. New mail is sealed as it arrives.
+  for (const account of owned) await queueSync(account.id)
 }
 
 async function turnOffPrivateStorage(user: User, password: string) {
   if (!user.storagePrivateKey) return // was never on
   // The keys are kept, not deleted: mail that a sync is sealing right now must still open later.
   await db.user.update({ where: { id: user.id }, data: { privateStorage: false } })
-  const owned = await db.account.findMany({ where: { ownerId: user.id }, select: { id: true } })
   const key = await unlockWithPassword(user.storagePrivateKey, password)
-  await unsealAccounts(
-    owned.map((a) => a.id),
-    key,
+  unsealInBackground(user.id, key)
+}
+
+// Opening mail needs the private key, which must never be written to the job queue (Redis), so it
+// runs right here in the server, after the answer is sent. If Nexus restarts before it's done, the
+// next sign-in carries on (see /login), since signing in unlocks the key again.
+function unsealInBackground(userId: string, key: KeyObject) {
+  unsealUserMail(userId, key).catch((error) =>
+    console.warn(`Could not open private mail again: ${errorMessage(error)}`),
   )
 }
 
 // Ten single-use codes like "3f9a1-0c7d2", shown once. Only their hashes are kept.
-async function newRecoveryCodes(userId: string, extra: { totpEnabled?: boolean; totpSecret?: string } = {}) {
+async function newRecoveryCodes(
+  userId: string,
+  extra: { totpEnabled?: boolean; totpSecret?: string; totpLastStep?: number } = {},
+) {
   const codes = Array.from({ length: 10 }, () => {
     const hex = randomBytes(5).toString('hex') // 10 random characters
     return `${hex.slice(0, 5)}-${hex.slice(5)}`

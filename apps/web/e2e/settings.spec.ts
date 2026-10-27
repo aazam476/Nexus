@@ -47,7 +47,8 @@ test('an admin adds a user, who signs in, turns on two-factor sign-in, and signs
   await bob.getByLabel(/^Password/).fill(password)
   await bob.getByRole('button', { name: 'Sign in' }).click()
   await expect(bob).toHaveURL(/\/login\/2fa$/)
-  await bob.getByLabel('Digit 1').fill(authenticator.generate(secret))
+  // Each code works once, and turning 2FA on used the current one, so sign in with the next one.
+  await bob.getByLabel('Digit 1').fill(authenticator.clone({ epoch: Date.now() + 30_000 }).generate(secret))
   await expect(bob).toHaveURL(/\/mail\/inbox$/)
 
   // Lost phone: a recovery code works once instead.

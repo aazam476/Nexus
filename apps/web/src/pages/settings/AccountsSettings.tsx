@@ -139,6 +139,7 @@ function AccountRow({ account, onChange }: { account: Account; onChange: () => v
         name: form.name,
         color: form.color,
         ...(form.password && { password: form.password }),
+        ...sendingLoginChange(account, form),
       })
       setEditing(false)
       setError('')
@@ -197,10 +198,11 @@ function AccountRow({ account, onChange }: { account: Account; onChange: () => v
             />
           </Field>
           {account.auth === 'password' && (
-            <div className="sm:col-span-2">
+            <div className="grid gap-3 sm:col-span-2">
               <Field label="New password" hint="Leave empty to keep the current one.">
                 <Input name="password" type="password" autoComplete="new-password" />
               </Field>
+              <SendingLogin current={account.smtpUsername} />
             </div>
           )}
           <div className="flex flex-wrap gap-2 sm:col-span-2">
@@ -257,6 +259,8 @@ function AddAccount({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
           smtpHost: f.smtpHost,
           smtpPort: Number(f.smtpPort),
           smtpTls: f.smtpSecurity === 'tls',
+          // Only when "sending uses a different login" is ticked (the fields exist only then).
+          ...(f.smtpUsername && { smtpLogin: { username: f.smtpUsername, password: f.smtpPassword } }),
         },
       })
       onDone()
@@ -387,8 +391,7 @@ function AddAccount({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
                 </Field>
                 {security('smtpSecurity', 'tls')}
               </div>
-              {/* shortcut: SMTP reuses the incoming login, as almost every provider does; add separate fields if someone needs them. */}
-              <p className="text-[12.5px] text-muted">Uses the same username and password as incoming mail.</p>
+              <SendingLogin />
             </fieldset>
             {error && (
               <p role="alert" className="text-[13px] text-danger">
@@ -408,4 +411,39 @@ function AddAccount({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
       </div>
     </Card>
   )
+}
+
+// "Sending uses a different login": most providers use one login for both, but some hosts and
+// mail relays have a separate username and password for sending. The fields only exist when ticked,
+// so the forms can tell from the submitted fields whether it's on.
+function SendingLogin({ current }: { current?: string | null }) {
+  const [separate, setSeparate] = useState(!!current)
+  return (
+    <div className="grid gap-3">
+      <label className="flex items-center gap-2 text-[13px] text-ink-2">
+        <input type="checkbox" name="separateSmtp" checked={separate} onChange={(e) => setSeparate(e.target.checked)} />
+        Sending uses a different login
+      </label>
+      {!separate && <p className="text-[12.5px] text-muted">Uses the same username and password as incoming mail.</p>}
+      {separate && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Sending username">
+            <Input name="smtpUsername" defaultValue={current ?? ''} autoComplete="off" required />
+          </Field>
+          <Field label="Sending password" hint={current ? 'Leave empty to keep the current one.' : undefined}>
+            <Input name="smtpPassword" type="password" autoComplete="new-password" required={!current} />
+          </Field>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// What the edit form changes about the sending login: removes it when unticked, sets it when a
+// password is given, and otherwise leaves it as it is.
+function sendingLoginChange(account: Account, form: Record<string, string>) {
+  const ticked = form.separateSmtp === 'on' // how browsers submit a ticked checkbox
+  if (!ticked && account.smtpUsername) return { smtpLogin: null }
+  if (ticked && form.smtpPassword) return { smtpLogin: { username: form.smtpUsername, password: form.smtpPassword } }
+  return {}
 }

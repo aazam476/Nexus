@@ -5,6 +5,11 @@ import { config } from '../../config.ts'
 import { db } from '../../db.ts'
 import { Browser, PASSWORD, signedInUser, startApp, uniqueAddress } from '../../test/helpers.ts'
 
+// The authenticator code for the 30-second step `steps` away from now (0 = the current code).
+// Each code can only be used once, so tests that sign in again use the next one.
+const codeFor = (secret: string, steps = 0) =>
+  authenticator.clone({ epoch: Date.now() + steps * 30_000 }).generate(secret)
+
 let app: Awaited<ReturnType<typeof startApp>>
 
 beforeAll(async () => {
@@ -123,8 +128,15 @@ describe('two-factor sign-in', () => {
     expect((await phone.get('/api/auth/me')).statusCode).toBe(401)
     expect((await phone.post('/api/auth/2fa', { code: '000000' })).statusCode).toBe(401)
 
-    await phone.json('POST', '/api/auth/2fa', { code: authenticator.generate(setup.secret) })
+    await phone.json('POST', '/api/auth/2fa', { code: codeFor(setup.secret, 1) })
     expect((await phone.json('GET', '/api/auth/me')).totpEnabled).toBe(true)
+
+    // Someone who saw that code can't use it again.
+    const thief = new Browser(app)
+    await thief.json('POST', '/api/auth/login', { email: user.email, password: PASSWORD })
+    expect((await thief.post('/api/auth/2fa', { code: codeFor(setup.secret, 1) })).statusCode).toBe(401)
+    // Nor an older one.
+    expect((await thief.post('/api/auth/2fa', { code: codeFor(setup.secret, 0) })).statusCode).toBe(401)
   })
 
   it('accepts each recovery code once, typed with or without the dash', async () => {

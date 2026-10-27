@@ -274,6 +274,7 @@ function PrivateStorageCard() {
   const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const turningOn = !me?.privateStorage
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -285,6 +286,12 @@ function PrivateStorageCard() {
         body: { enabled: turningOn, password: new FormData(event.currentTarget).get('password') },
       })
       setAsking(false)
+      // The server encrypts (or decrypts) the stored mail in the background after answering.
+      setNotice(
+        turningOn
+          ? 'On. Your stored mail is being encrypted in the background; a big mailbox takes a few minutes.'
+          : 'Off. Your stored mail is being decrypted in the background.',
+      )
       client.invalidateQueries()
     } catch (e) {
       setError((e as Error).message)
@@ -321,8 +328,7 @@ function PrivateStorageCard() {
               </Field>
             </div>
             <Button type="submit" variant={turningOn ? 'primary' : 'danger'} disabled={busy}>
-              {busy && (turningOn ? 'Encrypting mail…' : 'Decrypting mail…')}
-              {!busy && (turningOn ? 'Turn on' : 'Turn off')}
+              {turningOn ? 'Turn on' : 'Turn off'}
             </Button>
             <Button variant="ghost" onClick={() => setAsking(false)}>
               Cancel
@@ -336,6 +342,11 @@ function PrivateStorageCard() {
           >
             {turningOn ? 'Turn on private storage' : 'Turn off private storage'}
           </Button>
+        )}
+        {notice && (
+          <p role="status" className="text-[13px] text-ink-2">
+            {notice}
+          </p>
         )}
         {error && (
           <p role="alert" className="text-[13px] text-danger">

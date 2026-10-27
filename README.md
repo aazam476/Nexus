@@ -92,6 +92,8 @@ to the rest of your self-hosted stack.
 | The sidebar says "Can't sync …" | Hover over it to see why. Usually the password is wrong (Gmail and Outlook need an app password unless you use their sign-in), or the server name or port is. Fix it in **Settings → Mail accounts**. |
 | A certificate error with your own mail server | Your server uses a self-signed certificate. Set `MAIL_ALLOW_INSECURE_TLS=true` in `.env` and restart. This turns off certificate checks for every mail server, so use it only for a server on your own network. |
 | "Too Many Requests" when signing in | Sign-in allows 10 tries a minute. Wait a minute and try again. |
+| Receiving works, but sending is refused | Some hosts and mail relays use a different login for sending. In **Settings → Mail accounts**, *Edit* the account and tick *Sending uses a different login*. |
+| A two-factor code is refused although it's right | Each code works once. Wait for the next one (they change every 30 seconds), and check your phone's clock is set automatically. |
 | Lost your two-factor device | Use one of the recovery codes you saved when you turned it on: *Use a recovery code* on the sign-in page. |
 | A scheduled message says "Nexus stopped while sending this" | Nexus restarted in the middle of sending it, so it may or may not have gone out. Check **Sent**, then choose *Send now* or *Cancel*. |
 | "This message is in private storage" | Only its owner can read it, while signed in. See [Private storage](#private-storage). |
@@ -158,6 +160,8 @@ Good to know before turning it on:
   re-add the account to download the mail again from your provider.
 - POP3 accounts and accounts shared with other users can't use it (POP3 mail
   exists only in Nexus, so a lost password would lose it).
+- Turning it on or off takes effect at once; the stored mail is encrypted (or
+  decrypted) in the background, which takes a few minutes for a big mailbox.
 - Drafts and scheduled messages stay unencrypted until they're sent, because
   scheduled mail must go out while you're signed out.
 - Someone who controls the running server can still capture your password the

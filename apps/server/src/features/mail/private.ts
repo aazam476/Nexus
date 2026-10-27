@@ -91,10 +91,15 @@ export async function sealAccounts(accountIds: string[], publicKey: string) {
   }
 }
 
-export async function unsealAccounts(accountIds: string[], key: KeyObject) {
+// Opens every sealed message in a user's accounts again, after private storage was turned off.
+// It can be stopped at any point and run again later: each run only touches messages still sealed.
+// It stops by itself if the user turns private storage back on meanwhile, so the two never fight.
+export async function unsealUserMail(userId: string, key: KeyObject) {
   for (;;) {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { privateStorage: true } })
+    if (!user || user.privateStorage) return
     const batch = await db.message.findMany({
-      where: { accountId: { in: accountIds }, sealedBody: { not: null } },
+      where: { account: { ownerId: userId }, sealedBody: { not: null } },
       take: BATCH,
     })
     if (!batch.length) return

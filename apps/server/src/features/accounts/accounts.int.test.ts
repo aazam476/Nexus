@@ -51,6 +51,33 @@ describe('adding an account', () => {
   })
 })
 
+describe('a separate login for sending', () => {
+  it('saves it encrypted, shows only the username, and can be removed again', async () => {
+    const { browser } = await signedInUser(app)
+    const { id } = await browser.json('POST', '/api/accounts', {
+      ...greenMail(uniqueAddress()),
+      smtpLogin: { username: 'relay-user', password: 'relay key' },
+    })
+    const [listed] = await browser.json('GET', '/api/accounts')
+    expect(listed.smtpUsername).toBe('relay-user')
+    expect(JSON.stringify(listed)).not.toContain('relay key')
+    const stored = await db.account.findUniqueOrThrow({ where: { id } })
+    expect(decrypt(stored.smtpSecret!)).toBe('relay key')
+
+    await browser.json('PATCH', `/api/accounts/${id}`, { smtpLogin: null })
+    expect((await browser.json('GET', '/api/accounts'))[0].smtpUsername).toBeNull()
+  })
+
+  it('can only be changed by the owner', async () => {
+    const owner = await signedInUser(app)
+    const editor = await signedInUser(app)
+    const { id } = await addAccount(owner.browser)
+    await owner.browser.json('PUT', `/api/accounts/${id}/members`, { userId: editor.user.id, role: 'editor' })
+    const response = await editor.browser.patch(`/api/accounts/${id}`, { smtpLogin: { username: 'x', password: 'y' } })
+    expect(response.statusCode).toBe(403)
+  })
+})
+
 describe('editing and removing an account', () => {
   it('renames, recolours and sets a signature; a new password is tested first', async () => {
     const { browser } = await signedInUser(app)

@@ -14,8 +14,9 @@ import {
   startApp,
   subjectsOnServer,
   uniqueAddress,
+  waitFor,
 } from '../../test/helpers.ts'
-import { syncAccount } from './sync.ts'
+import { syncAccount, syncLimits } from './sync.ts'
 
 // The smallest valid PNG: one transparent pixel.
 const PNG = Buffer.from(
@@ -133,6 +134,37 @@ describe('IMAP sync', () => {
     const account = await db.account.findUniqueOrThrow({ where: { id: accountId } })
     expect(account.syncError).toBeNull()
     expect(account.lastSyncAt).not.toBeNull()
+  })
+})
+
+describe('older mail', () => {
+  it('downloads the newest mail first, then the rest a batch per sync, without re-sorting it', async () => {
+    const saved = { ...syncLimits }
+    Object.assign(syncLimits, { firstSync: 3, historyBatch: 2 }) // small numbers, to see each step
+    try {
+      const { browser } = await signedInUser(app)
+      const { id: accountId, email } = await addAccount(browser)
+      // An old message from a sender blocked later: history isn't put through today's spam rules.
+      await deliver(email, { from: 'Pest <pest@annoying.test>', subject: 'Old 1', text: 'x' })
+      for (const n of [2, 3, 4, 5, 6, 7]) await deliver(email, { subject: `Old ${n}`, text: 'x' })
+      await browser.json('POST', '/api/blocked', { pattern: 'annoying.test' })
+      const stored = async () =>
+        (await db.message.findMany({ where: { accountId }, orderBy: { subject: 'asc' } })).map((m) => m.subject)
+
+      await syncAccount(accountId) // newest 3, then 2 older
+      expect(await stored()).toEqual(['Old 3', 'Old 4', 'Old 5', 'Old 6', 'Old 7'])
+      await syncAccount(accountId) // the last 2
+      expect(await stored()).toEqual(['Old 1', 'Old 2', 'Old 3', 'Old 4', 'Old 5', 'Old 6', 'Old 7'])
+      await syncAccount(accountId) // nothing left, nothing twice
+      expect(await db.message.count({ where: { accountId } })).toBe(7)
+
+      const inbox = await browser.json<Row[]>('GET', '/api/messages?folder=inbox')
+      expect(inbox.map((r) => r.subject)).toContain('Old 1') // still in the inbox, not moved to spam
+      const folder = await db.folder.findFirstOrThrow({ where: { accountId, role: 'inbox' } })
+      expect(folder.oldestUid).toBe(1) // history complete
+    } finally {
+      Object.assign(syncLimits, saved)
+    }
   })
 })
 
@@ -347,6 +379,9 @@ describe('private storage', () => {
 
     const phone = await signIn(PASSWORD)
     await browser.json('POST', '/api/auth/private-storage', { enabled: true, password: PASSWORD })
+    // Turning it on answers at once; the account's next sync (queued by it) seals the stored mail.
+    expect((await db.message.findUniqueOrThrow({ where: { id: messageId } })).sealedBody).toBeNull()
+    await syncAccount(accountId)
     const stored = await db.message.findUniqueOrThrow({ where: { id: messageId } })
     expect(stored.sealedBody).not.toBeNull()
     expect([stored.text, stored.html, stored.preview, stored.raw.length]).toEqual([null, null, '', 0])
@@ -369,8 +404,37 @@ describe('private storage', () => {
     expect((await read(again)).json().text).toBe('Dear diary')
 
     await again.json('POST', '/api/auth/private-storage', { enabled: false, password: 'second password 2' })
-    const unsealed = await db.message.findUniqueOrThrow({ where: { id: messageId } })
-    expect([unsealed.sealedBody, unsealed.text]).toEqual([null, 'Dear diary'])
+    // Opening the mail again happens in the background, right after the answer.
+    const unsealed = await waitFor(async () => {
+      const message = await db.message.findUniqueOrThrow({ where: { id: messageId } })
+      return message.sealedBody === null && message
+    }, 'the mail to be unsealed')
+    expect(unsealed.text).toBe('Dear diary')
+  })
+
+  it('seals even when the mail server is down', async () => {
+    const { browser, accountId, find } = await mailboxWith([{ subject: 'Offline', text: 'x' }])
+    const { id } = await find('Offline')
+    await browser.json('POST', '/api/auth/private-storage', { enabled: true, password: PASSWORD })
+    await db.account.update({ where: { id: accountId }, data: { inPort: 1 } })
+    await expect(syncAccount(accountId)).rejects.toThrow() // the sync fails…
+    expect((await db.message.findUniqueOrThrow({ where: { id } })).sealedBody).not.toBeNull() // …but sealing happened
+  })
+
+  it('finishes opening mail at the next sign-in if a restart cut it short', async () => {
+    const { browser, user, accountId, find } = await mailboxWith([{ subject: 'Half', text: 'x' }])
+    const { id } = await find('Half')
+    await browser.json('POST', '/api/auth/private-storage', { enabled: true, password: PASSWORD })
+    await syncAccount(accountId)
+    // Turned off, but pretend Nexus restarted before the mail was opened: still sealed, setting off.
+    await db.user.update({ where: { id: user.id }, data: { privateStorage: false } })
+    expect((await db.message.findUniqueOrThrow({ where: { id } })).sealedBody).not.toBeNull()
+
+    await new Browser(app).json('POST', '/api/auth/login', { email: user.email, password: PASSWORD })
+    await waitFor(
+      async () => (await db.message.findUniqueOrThrow({ where: { id } })).sealedBody === null,
+      'the mail to be unsealed',
+    )
   })
 
   it('is refused for POP3 accounts and shared accounts', async () => {
