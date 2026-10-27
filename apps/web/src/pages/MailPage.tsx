@@ -80,6 +80,12 @@ export function MailPage() {
     client.setQueryData<Message>(['message', id], (m) => (m ? { ...m, ...change } : m))
   }
 
+  // The same, for a message that leaves the folder (archived, deleted, marked spam): take it off the
+  // list at once. Moving mail on a busy mail server can take seconds; nobody should wait for that.
+  function removeLocally(id: string) {
+    client.setQueriesData<Message[]>({ queryKey: ['messages'] }, (rows) => rows?.filter((m) => m.id !== id))
+  }
+
   // Runs a request to the server; shows its error at the bottom of the screen if it fails.
   async function run(action: () => Promise<unknown>) {
     setError('')
@@ -129,16 +135,19 @@ export function MailPage() {
     move: (to: FolderRole) => {
       if (!selected) return
       openNext()
+      removeLocally(selected.id)
       run(() => api(`/messages/${selected.id}/move`, { body: { to } }))
     },
     remove: () => {
       if (!selected) return
       openNext()
+      removeLocally(selected.id)
       run(() => api(`/messages/${selected.id}`, { method: 'DELETE' }))
     },
     spam: (spam: boolean) => {
       if (!selected) return
       openNext()
+      removeLocally(selected.id)
       run(() => api(`/messages/${selected.id}/spam`, { body: { spam } }))
     },
     star: (message: Message) => {
@@ -202,7 +211,7 @@ export function MailPage() {
       onArchiveAll={(items) => {
         // Shared accounts you can only view are left alone.
         const archivable = items.filter((m) => canEdit(m))
-        archivable.forEach((m) => updateLocally(m.id, { folder: 'archive' }))
+        archivable.forEach((m) => removeLocally(m.id))
         // One at a time: each move opens an IMAP connection, and providers cap how many you may hold.
         run(async () => {
           for (const m of archivable) await api(`/messages/${m.id}/move`, { body: { to: 'archive' } })
