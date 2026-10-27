@@ -437,6 +437,26 @@ describe('private storage', () => {
     )
   })
 
+  it('survives an admin password reset by downloading the mail again', async () => {
+    const { browser, user, accountId } = await mailboxWith([{ subject: 'Forgotten', text: 'Still here' }])
+    const stored = () => db.message.findFirstOrThrow({ where: { accountId, subject: 'Forgotten' } })
+    await browser.json('POST', '/api/auth/private-storage', { enabled: true, password: PASSWORD })
+    await syncAccount(accountId)
+    expect((await stored()).sealedBody).not.toBeNull()
+
+    const admin = await signedInUser(app, { role: 'admin' })
+    const reset = await admin.browser.json('POST', `/api/users/${user.id}/password`, { password: 'a fresh password' })
+    expect(reset.redownloading).toBe(1)
+    expect((await browser.get('/api/auth/me')).statusCode).toBe(401) // signed out everywhere
+    expect(await db.message.count({ where: { accountId } })).toBe(0) // the locked copy is gone…
+
+    await syncAccount(accountId)
+    const fresh = await stored() // …and comes back, readable, from the mail server
+    expect([fresh.sealedBody, fresh.text?.trim()]).toEqual([null, 'Still here'])
+    const me = await new Browser(app).post('/api/auth/login', { email: user.email, password: 'a fresh password' })
+    expect(me.statusCode).toBe(200)
+  })
+
   it('is refused for POP3 accounts and shared accounts', async () => {
     const pop = await signedInUser(app)
     await addAccount(pop.browser, uniqueAddress('pop'), 'pop3')

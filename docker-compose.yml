@@ -11,7 +11,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "nexus"]
+      test: ['CMD', 'pg_isready', '-U', 'nexus']
       interval: 5s
       retries: 10
 
@@ -25,11 +25,13 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "${PORT:-8080}:8080"
+      - '${PORT:-8080}:8080'
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:${POSTGRES_PASSWORD:-nexus}@db:5432/nexus
       REDIS_URL: redis://redis:6379
+      # Off unless set to true in .env: the first visitor creates the admin, who then adds everyone else.
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-false}
     volumes:
       - ./plugins:/app/plugins:ro
     depends_on:

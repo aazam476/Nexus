@@ -1,4 +1,4 @@
-// Settings and the address book in the browser: users, two-factor sign-in, signing out, rules,
+// Settings and the address book in the browser: the admin page, users, two-factor sign-in, signing out, rules,
 // appearance, contacts, and PGP encryption done entirely in the browser.
 import { authenticator } from 'otplib'
 import { expect, test } from './fixtures.ts'
@@ -7,7 +7,8 @@ import { run, syncUntil, uniqueAddress } from './helpers.ts'
 test('an admin adds a user, who signs in, turns on two-factor sign-in, and signs out', async ({ page, person }) => {
   const email = uniqueAddress('bob')
   const password = 'bobs starting password'
-  await page.goto('/settings/sharing')
+  await page.goto('/settings/admin')
+  await expect(page.getByText('Mail accounts', { exact: true })).toBeVisible() // the server overview
   await page
     .getByRole('button', { name: /Add user/ })
     .first()
@@ -60,6 +61,36 @@ test('an admin adds a user, who signs in, turns on two-factor sign-in, and signs
   await bob.getByLabel('Recovery code').fill(recoveryCode)
   await bob.getByRole('button', { name: 'Verify recovery code' }).click()
   await expect(bob).toHaveURL(/\/mail\/inbox$/)
+
+  // Bob forgets his password and loses his phone: the admin resets the password and turns 2FA off.
+  const row = page.getByRole('listitem').filter({ hasText: 'Bob Builder' })
+  await page.reload()
+  await row.getByRole('button', { name: 'Turn off 2FA' }).click()
+  await expect(row.getByText('2FA off')).toBeVisible()
+  await row.getByRole('button', { name: 'Reset password' }).click()
+  await row.getByLabel(/^New password for Bob Builder/).fill('bobs second password')
+  await row.getByRole('button', { name: 'Reset password' }).last().click()
+  await expect(row.getByText(/Password reset/)).toBeVisible()
+  await bob.goto('/mail/inbox')
+  await expect(bob).toHaveURL(/\/login$/) // signed out everywhere
+  await bob.getByLabel('Email', { exact: true }).fill(email)
+  await bob.getByLabel(/^Password/).fill('bobs second password')
+  await bob.getByRole('button', { name: 'Sign in' }).click()
+  await expect(bob).toHaveURL(/\/mail\/inbox$/) // no code asked for
+})
+
+test('the admin page is hidden from people who are not admins', async ({ page, person }) => {
+  const email = uniqueAddress('dan')
+  await page.request.post('/api/users', { data: { name: 'Dan', email, password: 'dans first password' } })
+  const dan = await person()
+  await dan.goto('/login')
+  await dan.getByLabel('Email', { exact: true }).fill(email)
+  await dan.getByLabel(/^Password/).fill('dans first password')
+  await dan.getByRole('button', { name: 'Sign in' }).click()
+  await expect(dan).toHaveURL(/\/mail\/inbox$/)
+  await dan.goto('/settings/sharing')
+  await expect(dan.getByRole('link', { name: 'Sharing' })).toBeVisible()
+  await expect(dan.getByRole('link', { name: 'Admin' })).toBeHidden()
 })
 
 test('changes the password, and turns private storage on and off', async ({ page, person }) => {

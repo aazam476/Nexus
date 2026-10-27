@@ -4,6 +4,7 @@ import {
   ArrowRightLeft,
   AtSign,
   Filter,
+  Gauge,
   KeyRound,
   Menu,
   Palette,
@@ -14,7 +15,9 @@ import {
 } from 'lucide-react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import type { ShellContext } from '../../components/AppShell'
+import { useMe } from '../../lib/queries'
 import { AccountsSettings } from './AccountsSettings'
+import { AdminSettings } from './AdminSettings'
 import { AppearanceSettings } from './AppearanceSettings'
 import { EncryptionSettings } from './EncryptionSettings'
 import { ImportExportSettings } from './ImportExportSettings'
@@ -23,20 +26,24 @@ import { RulesSettings } from './RulesSettings'
 import { SecuritySettings } from './SecuritySettings'
 import { SharingSettings } from './SharingSettings'
 
-const sections: { id: string; title: string; icon: LucideIcon; page: () => React.ReactNode }[] = [
-  { id: 'accounts', title: 'Mail accounts', icon: AtSign, page: AccountsSettings },
-  { id: 'sharing', title: 'Users & sharing', icon: Users, page: SharingSettings },
-  { id: 'security', title: 'Password & 2FA', icon: Shield, page: SecuritySettings },
-  { id: 'encryption', title: 'PGP & S/MIME', icon: KeyRound, page: EncryptionSettings },
-  { id: 'rules', title: 'Rules & spam', icon: Filter, page: RulesSettings },
-  { id: 'plugins', title: 'Plugins', icon: Puzzle, page: PluginsSettings },
-  { id: 'import-export', title: 'Import & export', icon: ArrowRightLeft, page: ImportExportSettings },
-  { id: 'appearance', title: 'Appearance', icon: Palette, page: AppearanceSettings },
-]
+const allSections: { id: string; title: string; icon: LucideIcon; page: () => React.ReactNode; adminOnly?: boolean }[] =
+  [
+    { id: 'accounts', title: 'Mail accounts', icon: AtSign, page: AccountsSettings },
+    { id: 'sharing', title: 'Sharing', icon: Users, page: SharingSettings },
+    { id: 'security', title: 'Password & 2FA', icon: Shield, page: SecuritySettings },
+    { id: 'encryption', title: 'PGP & S/MIME', icon: KeyRound, page: EncryptionSettings },
+    { id: 'rules', title: 'Rules & spam', icon: Filter, page: RulesSettings },
+    { id: 'plugins', title: 'Plugins', icon: Puzzle, page: PluginsSettings },
+    { id: 'import-export', title: 'Import & export', icon: ArrowRightLeft, page: ImportExportSettings },
+    { id: 'appearance', title: 'Appearance', icon: Palette, page: AppearanceSettings },
+    { id: 'admin', title: 'Admin', icon: Gauge, page: AdminSettings, adminOnly: true },
+  ]
 
 export function SettingsPage() {
   const { section } = useParams()
   const { openNav } = useOutletContext<ShellContext>()
+  const isAdmin = useMe().data?.role === 'admin'
+  const sections = allSections.filter((s) => isAdmin || !s.adminOnly)
   const current = sections.find((s) => s.id === section)
   // Desktop opens on the first section; phone shows the section list first.
   const shown = current ?? sections[0]
