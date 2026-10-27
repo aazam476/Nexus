@@ -253,11 +253,13 @@ model PluginSetting {
 
 // One row of user preferences that don't deserve their own table.
 model Preference {
-  userId        String @id
-  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  theme         String @default("system")
-  layout        String @default("three-pane")
-  spamThreshold Float  @default(5)
+  userId            String @id
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme             String @default("system")
+  layout            String @default("three-pane")
+  spamThreshold     Float  @default(5)
+  // Delete feed posts older than this many days (starred ones are kept). Empty: keep everything.
+  feedRetentionDays Int?
 }
 
 // ---------- Feeds (RSS and Atom) ----------
@@ -291,6 +293,7 @@ model FeedItem {
   summary     String // the start as plain text, for the list
   publishedAt DateTime
   unread      Boolean  @default(true)
+  starred     Boolean  @default(false) // starred posts are kept even when old posts are deleted
 
   @@unique([feedId, guid])
   @@index([feedId, publishedAt])

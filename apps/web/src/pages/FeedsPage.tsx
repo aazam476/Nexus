@@ -1,16 +1,21 @@
 // Feeds: follow websites' RSS or Atom feeds and read their posts here, like a small feed reader.
-// On the left: adding a feed, your feeds (to filter by one), and the posts. On the right: the open
-// post, shown safely in the same sandbox as email. Side by side on wide screens, one at a time on phones.
+// On the left: following a feed, searching, filters, settings, and the posts. On the right: the open
+// post. Side by side on wide screens, one at a time on phones.
+//
+// The parts live in components/feeds/: AddFeed, FeedFilters (all / starred / one feed),
+// FeedSettings (deleting old posts, OPML import and export) and FeedReader.
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ExternalLink, Menu, Rss, Trash2 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { Menu, Rss, Search, Star } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useOutletContext, useParams } from 'react-router'
 import type { ShellContext } from '../components/AppShell'
-import { SafeHtml } from '../components/SafeHtml'
-import { Button, Input } from '../components/ui'
-import { api, del, patch } from '../lib/api'
-import { formatFullDate, formatListDate } from '../lib/format'
-import { useFeedItem, useFeedItems, useFeeds } from '../lib/queries'
+import { AddFeed } from '../components/feeds/AddFeed'
+import { FeedFilters } from '../components/feeds/FeedFilters'
+import { FeedReader } from '../components/feeds/FeedReader'
+import { FeedSettings } from '../components/feeds/FeedSettings'
+import { del, patch } from '../lib/api'
+import { formatListDate } from '../lib/format'
+import { useFeedItems, useFeeds } from '../lib/queries'
 import type { Feed, FeedItem } from '../types'
 
 export function FeedsPage() {
@@ -18,11 +23,19 @@ export function FeedsPage() {
   const navigate = useNavigate()
   const client = useQueryClient()
   const { openNav } = useOutletContext<ShellContext>()
-  const [feedFilter, setFeedFilter] = useState<string | null>(null) // null = all feeds
+  const [show, setShow] = useState('all') // 'all', 'starred', or a feed id
+  const [searchText, setSearchText] = useState('')
+  const [search, setSearch] = useState('')
   const feeds = useFeeds().data ?? []
-  const items = useFeedItems(feedFilter).data ?? []
+  const items = useFeedItems({ show, q: search }).data ?? []
   const selected = items.find((item) => item.id === itemId)
   const unread = feeds.reduce((total, feed) => total + feed.unread, 0)
+
+  // Wait until typing pauses before asking the server to search.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchText.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchText])
 
   const refresh = () => {
     client.invalidateQueries({ queryKey: ['feeds'] })
@@ -40,7 +53,7 @@ export function FeedsPage() {
   async function unfollow(feed: Feed) {
     if (!confirm(`Stop following ${feed.title}? Its posts are removed from Nexus.`)) return
     await del(`/feeds/${feed.id}`)
-    if (feedFilter === feed.id) setFeedFilter(null)
+    if (show === feed.id) setShow('all')
     refresh()
   }
 
@@ -64,15 +77,31 @@ export function FeedsPage() {
             <span className="ml-auto text-[12px] text-muted">{unread > 0 ? `${unread} unread` : 'All read'}</span>
           </div>
           <AddFeed onAdded={refresh} />
+          {feeds.length > 0 && (
+            <label className="flex items-center gap-2 rounded-[9px] border border-line bg-raise px-2.5 py-1.5 text-muted focus-within:border-accent">
+              <Search size={15} />
+              <input
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Search posts"
+                aria-label="Search posts"
+                className="min-w-0 flex-1 bg-transparent text-ink placeholder:text-muted focus:outline-none"
+              />
+            </label>
+          )}
         </header>
 
         <div className="flex-1 overflow-y-auto pb-6">
-          {feeds.length > 0 && (
-            <FeedFilters feeds={feeds} current={feedFilter} onPick={setFeedFilter} onUnfollow={unfollow} />
-          )}
+          {feeds.length > 0 && <FeedFilters feeds={feeds} show={show} onShow={setShow} onUnfollow={unfollow} />}
+          <FeedSettings onImported={refresh} />
           {feeds.length === 0 && (
             <p className="px-6 py-16 text-center text-muted">
               Follow a website by pasting its address above. Most blogs and news sites have a feed.
+            </p>
+          )}
+          {feeds.length > 0 && items.length === 0 && (
+            <p className="px-6 py-10 text-center text-muted">
+              {search ? `Nothing found for “${search}”.` : 'No posts here.'}
             </p>
           )}
           {items.map((item) => (
@@ -82,97 +111,9 @@ export function FeedsPage() {
       </section>
 
       <section className={`h-full min-w-0 flex-1 overflow-y-auto bg-read ${selected ? '' : 'hidden lg:block'}`}>
-        {selected ? <ItemReader itemId={selected.id} onBack={() => navigate('/feeds')} /> : <EmptyReader />}
+        {selected ? <FeedReader itemId={selected.id} onBack={() => navigate('/feeds')} /> : <EmptyReader />}
       </section>
     </div>
-  )
-}
-
-function AddFeed({ onAdded }: { onAdded: () => void }) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  async function add(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = event.currentTarget
-    const url = String(new FormData(form).get('url') ?? '')
-    setBusy(true)
-    setError('')
-    try {
-      await api('/feeds', { body: { url } })
-      form.reset()
-      onAdded()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <form onSubmit={add} className="grid gap-1.5">
-      <div className="flex gap-2">
-        <Input
-          name="url"
-          type="url"
-          required
-          placeholder="https://example.com or its feed"
-          aria-label="Feed or website address"
-        />
-        <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? 'Adding…' : 'Follow'}
-        </Button>
-      </div>
-      {error && (
-        <p role="alert" className="text-[13px] text-danger">
-          {error}
-        </p>
-      )}
-    </form>
-  )
-}
-
-// "All feeds" and one button per feed, to show only that feed's posts. Each feed can be unfollowed here.
-function FeedFilters(props: {
-  feeds: Feed[]
-  current: string | null
-  onPick: (feedId: string | null) => void
-  onUnfollow: (feed: Feed) => void
-}) {
-  const { feeds, current, onPick, onUnfollow } = props
-  const itemClass = (active: boolean) =>
-    `flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left ${active ? 'bg-raise font-semibold' : 'text-ink-2 hover:bg-hover'}`
-
-  return (
-    <ul className="grid gap-0.5 border-b border-line px-2 pb-2" aria-label="Your feeds">
-      <li>
-        <button type="button" onClick={() => onPick(null)} className={itemClass(current === null)}>
-          <Rss size={15} className="text-muted" /> All feeds
-        </button>
-      </li>
-      {feeds.map((feed) => (
-        <li key={feed.id} className="flex items-center gap-1">
-          <button type="button" onClick={() => onPick(feed.id)} className={itemClass(current === feed.id)}>
-            <span className="truncate">{feed.title}</span>
-            {feed.error && (
-              <span className="shrink-0 text-[12px] text-danger" title={feed.error}>
-                Can’t update
-              </span>
-            )}
-            {feed.unread > 0 && <span className="ml-auto text-[12px] text-muted">{feed.unread}</span>}
-          </button>
-          <button
-            type="button"
-            aria-label={`Unfollow ${feed.title}`}
-            title="Unfollow"
-            onClick={() => onUnfollow(feed)}
-            className="rounded-md p-1.5 text-muted hover:bg-raise hover:text-danger"
-          >
-            <Trash2 size={14} />
-          </button>
-        </li>
-      ))}
-    </ul>
   )
 }
 
@@ -186,41 +127,12 @@ function ItemRow({ item, selected, onOpen }: { item: FeedItem; selected: boolean
     >
       <span className="flex items-center gap-2 text-[12px] text-muted">
         <span className="truncate">{item.feedTitle}</span>
+        {item.starred && <Star size={12} className="shrink-0 fill-notif text-notif" aria-label="Starred" />}
         <span className="ml-auto shrink-0">{formatListDate(item.publishedAt)}</span>
       </span>
       <span className={`truncate ${item.unread ? 'font-bold text-ink' : 'text-ink-2'}`}>{item.title}</span>
       <span className="truncate text-[12.5px] text-muted">{item.summary}</span>
     </button>
-  )
-}
-
-function ItemReader({ itemId, onBack }: { itemId: string; onBack: () => void }) {
-  const item = useFeedItem(itemId).data
-  if (!item) return <p className="p-6 text-muted">Loading…</p>
-  const byline = [item.feedTitle, item.author, formatFullDate(item.publishedAt)].filter(Boolean).join(' · ')
-
-  return (
-    <article className="mx-auto grid max-w-[820px] gap-5 px-4 py-6 @container @xl:px-10" aria-label={item.title}>
-      <button type="button" onClick={onBack} className="flex items-center gap-1.5 text-muted lg:hidden">
-        <ArrowLeft size={16} /> Back
-      </button>
-      <h1 className="text-[23px] leading-tight font-bold tracking-tight text-balance">{item.title}</h1>
-      <div className="flex flex-wrap items-center gap-3 text-[13px] text-muted">
-        <span>{byline}</span>
-        {item.link && (
-          <a
-            href={item.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-auto flex items-center gap-1.5 text-accent-text hover:underline"
-          >
-            Open original <ExternalLink size={13} />
-          </a>
-        )}
-      </div>
-      {/* Feed posts are HTML from other websites, so they get the same sanitizing and sandbox as email. */}
-      {item.content ? <SafeHtml html={item.content} /> : <p className="text-muted">{item.summary}</p>}
-    </article>
   )
 }
 

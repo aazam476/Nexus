@@ -12,7 +12,12 @@ export interface Me {
   totpEnabled: boolean
   privateStorage: boolean
   recoveryCodesLeft: number
-  preferences: { theme: 'system' | 'dark' | 'light'; layout: 'three-pane' | 'list'; spamThreshold: number }
+  preferences: {
+    theme: 'system' | 'dark' | 'light'
+    layout: 'three-pane' | 'list'
+    spamThreshold: number
+    feedRetentionDays: number | null // delete feed posts older than this; null keeps them all
+  }
 }
 
 export interface Counts {
@@ -61,12 +66,24 @@ export const usePlugins = () => useQuery({ queryKey: ['plugins'], queryFn: () =>
 export const useRules = () => useQuery({ queryKey: ['rules'], queryFn: () => api<Rule[]>('/rules') })
 // Feeds refresh on the server every half hour; re-checking the lists every minute picks that up.
 export const useFeeds = () => useQuery({ queryKey: ['feeds'], queryFn: () => api<Feed[]>('/feeds'), ...live })
-export const useFeedItems = (feedId: string | null) =>
-  useQuery({
-    queryKey: ['feed-items', feedId],
-    queryFn: () => api<FeedItem[]>(`/feed-items${query({ feed: feedId })}`),
+// Which posts to list: everything, only starred, or one feed's; optionally matching search words.
+export interface FeedItemQuery {
+  show: 'all' | 'starred' | string // a feed id, for one feed
+  q?: string
+}
+export const useFeedItems = ({ show, q }: FeedItemQuery) => {
+  const params = {
+    starred: show === 'starred' ? 'true' : undefined,
+    feed: show !== 'all' && show !== 'starred' ? show : undefined,
+    q: q || undefined,
+  }
+  return useQuery({
+    queryKey: ['feed-items', params],
+    queryFn: () => api<FeedItem[]>(`/feed-items${query(params)}`),
     ...live,
+    placeholderData: (previous) => previous, // keep the old list on screen while a search loads
   })
+}
 export const useFeedItem = (id: string | undefined) =>
   useQuery({ queryKey: ['feed-item', id], queryFn: () => api<FeedItem>(`/feed-items/${id}`), enabled: !!id })
 export const useBlocked = () => useQuery({ queryKey: ['blocked'], queryFn: () => api<string[]>('/blocked') })

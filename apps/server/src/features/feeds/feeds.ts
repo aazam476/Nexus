@@ -36,19 +36,46 @@ export async function fetchFeed(url: string): Promise<{ url: string; feed: Parse
   return { url: announced, feed: announcedFeed }
 }
 
+// ---------- Deleting old posts ----------
+// Off by default. When someone sets "delete posts after N days" (Preference.feedRetentionDays),
+// posts published before that are deleted, except starred ones.
+
+const DAY = 86_400_000
+
+// The oldest a post may be for this user, or null when they keep everything.
+async function retentionCutoff(userId: string): Promise<Date | null> {
+  const preference = await db.preference.findUnique({ where: { userId }, select: { feedRetentionDays: true } })
+  const days = preference?.feedRetentionDays
+  return days ? new Date(Date.now() - days * DAY) : null
+}
+
+// Called by the background job: applies everyone's setting.
+export async function deleteOldPosts() {
+  const preferences = await db.preference.findMany({ where: { feedRetentionDays: { not: null } } })
+  for (const { userId, feedRetentionDays } of preferences) {
+    const cutoff = new Date(Date.now() - feedRetentionDays! * DAY)
+    await db.feedItem.deleteMany({ where: { feed: { userId }, starred: false, publishedAt: { lt: cutoff } } })
+  }
+}
+
+// ---------- Saving and refreshing ----------
+
 // Saves posts not seen before (the guid tells), newest first, at most MAX_ITEMS.
-export async function saveItems(feedId: string, feed: ParsedFeed) {
-  const newest = [...feed.items].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime()).slice(0, MAX_ITEMS)
+export async function saveItems(feed: { id: string; userId: string }, parsed: ParsedFeed) {
+  // Posts older than the user's cut-off are left out. A deleted post is usually still listed in
+  // the feed; without this, the next check would bring it back as unread.
+  const cutoff = await retentionCutoff(feed.userId)
+  const recent = parsed.items.filter((item) => !cutoff || item.publishedAt >= cutoff)
+  const newest = recent.sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime()).slice(0, MAX_ITEMS)
   // skipDuplicates: posts already stored (same feed and guid) are left as they are, read or not.
-  // shortcut: old posts are kept forever; delete ones older than a few months if the table grows too big.
-  await db.feedItem.createMany({ data: newest.map((item) => ({ ...item, feedId })), skipDuplicates: true })
+  await db.feedItem.createMany({ data: newest.map((item) => ({ ...item, feedId: feed.id })), skipDuplicates: true })
 }
 
 // Checks one feed for new posts. A failure is saved on the feed (and shown in the app), not thrown.
 export async function refreshFeed(feed: Feed) {
   try {
     const { feed: parsed } = await fetchFeed(feed.url)
-    await saveItems(feed.id, parsed)
+    await saveItems(feed, parsed)
     await db.feed.update({ where: { id: feed.id }, data: { lastFetchedAt: new Date(), error: null } })
   } catch (error) {
     await db.feed.update({ where: { id: feed.id }, data: { lastFetchedAt: new Date(), error: errorMessage(error) } })

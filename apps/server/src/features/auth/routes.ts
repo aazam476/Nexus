@@ -136,7 +136,12 @@ export async function authRoutes(app: FastifyInstance) {
         totpEnabled: user.totpEnabled,
         privateStorage: user.privateStorage,
         recoveryCodesLeft: user.recoveryCodes.length,
-        preferences: user.preference ?? { theme: 'system', layout: 'three-pane', spamThreshold: 5 },
+        preferences: user.preference ?? {
+          theme: 'system',
+          layout: 'three-pane',
+          spamThreshold: 5,
+          feedRetentionDays: null,
+        },
       }
     })
 
@@ -146,6 +151,7 @@ export async function authRoutes(app: FastifyInstance) {
           theme: z.enum(['system', 'dark', 'light']).optional(),
           layout: z.enum(['three-pane', 'list']).optional(),
           spamThreshold: z.number().min(1).max(20).optional(),
+          feedRetentionDays: z.number().int().min(1).max(3650).nullable().optional(), // null = keep feed posts forever
         }),
         request.body,
       )

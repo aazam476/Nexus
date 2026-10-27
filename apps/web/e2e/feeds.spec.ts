@@ -24,7 +24,9 @@ test.beforeAll(async () => {
 })
 test.afterAll(() => site.close())
 
-test('follows a website, reads a post safely, filters and unfollows', async ({ page }) => {
+test('follows a website, reads safely, stars, searches, sets auto-delete, and moves feeds by OPML', async ({
+  page,
+}) => {
   await page.goto('/feeds')
   await page.getByLabel('Feed or website address').fill('https://')
   await page.getByRole('button', { name: 'Follow', exact: true }).click()
@@ -56,6 +58,45 @@ test('follows a website, reads a post safely, filters and unfollows', async ({ p
 
   await feeds.getByRole('button', { name: new RegExp(`^${name}`) }).click()
   await expect(page.getByRole('button', { name: /Second thoughts/ })).toBeVisible()
+
+  // Star a post, and find it under Starred.
+  await page.getByRole('button', { name: /Second thoughts/ }).click()
+  await page.getByRole('button', { name: 'Star', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Starred', exact: true, pressed: true })).toBeVisible()
+  await feeds.getByRole('button', { name: 'Starred', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Second thoughts/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Hello feeds/ })).toBeHidden()
+
+  // Search looks through titles and text.
+  await feeds.getByRole('button', { name: 'All feeds' }).click()
+  await page.getByLabel('Search posts').fill('first post')
+  await expect(page.getByRole('button', { name: /Hello feeds/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Second thoughts/ })).toBeHidden()
+  await page.getByLabel('Search posts').fill('')
+
+  // Deleting old posts is off until chosen, and says starred posts stay.
+  const deleteAfter = page.getByLabel('Delete posts after')
+  await expect(deleteAfter).toHaveValue('')
+  await deleteAfter.selectOption({ label: '1 month' })
+  await expect(page.getByText('Starred posts are always kept.')).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel('Delete posts after')).toHaveValue('30')
+  await page.getByLabel('Delete posts after').selectOption({ label: 'Never' })
+
+  // The feed list can leave as an OPML file…
+  await expect(page.getByRole('link', { name: 'Export OPML' })).toHaveAttribute('href', '/api/feeds/export.opml')
+  const opml = await (await page.request.get('/api/feeds/export.opml')).text()
+  expect(opml).toContain(`xmlUrl="${base}/feed.xml"`)
+
+  await page.getByRole('button', { name: `Unfollow ${name}` }).click()
+  await expect(feeds.getByRole('button', { name: new RegExp(`^${name}`) })).toBeHidden()
+
+  // …and come back from one.
+  const picker = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: 'Import OPML' }).click()
+  await (await picker).setFiles({ name: 'feeds.opml', mimeType: 'text/x-opml', buffer: Buffer.from(opml) })
+  await expect(page.getByRole('status')).toContainText('Following 1 new feed')
+  await expect(feeds.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible()
   await page.getByRole('button', { name: `Unfollow ${name}` }).click()
   await expect(feeds.getByRole('button', { name: new RegExp(`^${name}`) })).toBeHidden()
   await expect(page.getByRole('button', { name: /Hello feeds/ })).toBeHidden()

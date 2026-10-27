@@ -6,7 +6,7 @@ import { Redis } from 'ioredis'
 import { config } from '../config.ts'
 import { db } from '../db.ts'
 import { errorMessage } from '../lib/http.ts'
-import { refreshDueFeeds } from '../features/feeds/feeds.ts'
+import { deleteOldPosts, refreshDueFeeds } from '../features/feeds/feeds.ts'
 import { syncAccount } from '../features/mail/sync.ts'
 import { failInterruptedSends, sendScheduled } from '../features/send/send.ts'
 
@@ -49,12 +49,13 @@ export async function cancelSend(outgoingId: string) {
 }
 
 // A job on the sync queue: either "all" (every 2 minutes: queue a sync for every account, check feeds
-// that are due, and tidy up expired sessions) or "account" (sync one account now).
+// that are due, delete old feed posts for those who asked, and tidy up expired sessions) or "account" (sync one account now).
 async function runSyncJob(job: Job) {
   if (job.name === 'all') {
     const accounts = await db.account.findMany({ select: { id: true } })
     for (const { id } of accounts) await queueSync(id)
     await refreshDueFeeds()
+    await deleteOldPosts()
     // Sessions are only checked when used; sweep the expired ones here so the table doesn't grow forever.
     await db.session.deleteMany({ where: { expiresAt: { lt: new Date() } } })
   } else {

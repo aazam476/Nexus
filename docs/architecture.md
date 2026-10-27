@@ -87,7 +87,10 @@ first**, then in the database, so every mail app shows the same thing.
 
 `features/feeds/`. Someone follows a website: `feeds.ts` downloads the address (or the feed the
 page announces), `parse.ts` turns RSS or Atom into posts, and they're saved as `FeedItem` rows.
-The background job checks each feed every 30 minutes. In the web app, `pages/FeedsPage.tsx` shows
+The background job checks each feed every 30 minutes, and deletes old posts for anyone who
+chose "Delete posts after" (starred posts stay; and posts older than the cut-off aren't saved again,
+since the site's feed usually still lists them). `opml.ts` reads and writes OPML, the file feed
+readers use to move a list of feeds. In the web app, `pages/FeedsPage.tsx` shows
 them, and posts open in the same `SafeHtml` sandbox as email, since they're HTML from other sites.
 
 ## Plugins

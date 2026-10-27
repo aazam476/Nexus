@@ -136,4 +136,5 @@ export interface FeedItem {
   content?: string // only when one post is loaded
   publishedAt: string
   unread: boolean
+  starred: boolean
 }

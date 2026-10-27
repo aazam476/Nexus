@@ -173,7 +173,10 @@ Good to know before turning it on:
 - **Feeds:** follow websites' RSS or Atom feeds and read their posts in Nexus,
   in the same safe reader as email: **Feeds** in the sidebar. Paste a feed's
   address, or just the website's; Nexus finds the feed. Feeds are checked every
-  30 minutes.
+  30 minutes. Star posts to keep them, search them, and bring your feeds from
+  another reader (or take them away) as an OPML file. Old posts are kept unless
+  you choose **Delete posts after** a week, month, 3 months or a year; starred
+  posts are always kept.
 - **Plugins:** save attachments to Immich, Nextcloud Files or Paperless, and
   add flights and invites to Nextcloud Calendar: **Settings → Plugins**. To
   write your own, see [docs/plugins.md](docs/plugins.md).
