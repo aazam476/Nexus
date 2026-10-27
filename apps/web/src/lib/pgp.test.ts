@@ -25,7 +25,11 @@ describe('PGP', () => {
     )
     expect(armored).toContain('-----BEGIN PGP MESSAGE-----')
     expect(armored).not.toContain('Hello Bob')
-    expect(await decrypt(armored, await unlock(bob.encryptedPrivateKey, 'bob pass'))).toBe('Hello Bob')
+    expect(await decrypt(armored, await unlock(bob.encryptedPrivateKey, 'bob pass'))).toEqual({
+      text: 'Hello Bob',
+      html: null,
+      attachments: [],
+    })
   })
 
   it('signs in clear text', async () => {
@@ -44,5 +48,42 @@ describe('PGP', () => {
     const imported = await importPrivateKey(privateKey, 'new passphrase')
     expect((await openpgp.readPrivateKey({ armoredKey: imported.encryptedPrivateKey })).isDecrypted()).toBe(false)
     await expect(importPrivateKey(imported.encryptedPrivateKey, 'wrong')).rejects.toThrow('does not unlock')
+  })
+})
+
+describe('PGP/MIME', () => {
+  it('reads a whole encrypted email part: its HTML, text and attachments', async () => {
+    const bob = await generateKey('Bob', 'bob@example.com', 'bob pass')
+    // What Thunderbird encrypts: a full MIME part, here with text, HTML and a file.
+    const mimePart = [
+      'Content-Type: multipart/mixed; boundary="outer"',
+      '',
+      '--outer',
+      'Content-Type: multipart/alternative; boundary="inner"',
+      '',
+      '--inner',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      'Meet at noon',
+      '--inner',
+      'Content-Type: text/html; charset=utf-8',
+      '',
+      '<p>Meet at <b>noon</b></p>',
+      '--inner--',
+      '--outer',
+      'Content-Type: text/plain; name="plan.txt"',
+      'Content-Disposition: attachment; filename="plan.txt"',
+      '',
+      'Step one',
+      '--outer--',
+      '',
+    ].join('\r\n')
+    const armored = await encryptText(mimePart, [bob.publicKey])
+    const mail = await decrypt(armored, await unlock(bob.encryptedPrivateKey, 'bob pass'))
+    expect(mail.text?.trim()).toBe('Meet at noon')
+    expect(mail.html).toContain('<b>noon</b>')
+    expect(mail.attachments.map((a) => [a.filename, new TextDecoder().decode(a.content).trim()])).toEqual([
+      ['plan.txt', 'Step one'],
+    ])
   })
 })

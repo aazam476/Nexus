@@ -2,6 +2,7 @@
 // the passphrase-locked private key, and encrypted text. Passphrases never leave this page.
 // "Armored" means a key or message written as text, between "-----BEGIN PGP …-----" lines.
 import * as openpgp from 'openpgp'
+import PostalMime from 'postal-mime'
 import { api } from './api'
 
 export interface StoredKey {
@@ -37,16 +38,33 @@ export async function unlock(passphrase: string): Promise<openpgp.PrivateKey> {
   return unlocked
 }
 
-export async function decrypt(armored: string, key: openpgp.PrivateKey): Promise<string> {
+// What a decrypted message holds. Inline PGP is only text; PGP/MIME can have all three.
+export interface DecryptedMail {
+  text: string | null
+  html: string | null
+  attachments: { filename: string; contentType: string; content: Uint8Array<ArrayBuffer> }[]
+}
+
+export async function decrypt(armored: string, key: openpgp.PrivateKey): Promise<DecryptedMail> {
   const message = await openpgp.readMessage({ armoredMessage: armored })
   const { data } = await openpgp.decrypt({ message, decryptionKeys: key })
-  const text = String(data)
-  // PGP/MIME encrypts a whole MIME part, headers included ("Content-Type: …", a blank line, then
-  // the body). Show the body, without those headers.
-  // shortcut: nested multipart content inside PGP/MIME is shown as raw text; parse it if people send rich encrypted mail.
-  if (!/^content-type:/i.test(text)) return text
-  const [, ...bodyParts] = text.split(/\r?\n\r?\n/) // split at blank lines; the first part is the headers
-  return bodyParts.join('\n\n')
+  const decrypted = String(data)
+
+  // Inline PGP encrypts just the text. PGP/MIME (what Thunderbird sends) encrypts a whole email part:
+  // headers, a blank line, then text, HTML and attachments. That part is read like an email, with
+  // postal-mime, here in the browser, so the server never sees what was inside.
+  const headers = decrypted.split(/\r?\n\r?\n/)[0] // everything before the first blank line
+  if (!/^content-type:/im.test(headers)) return { text: decrypted, html: null, attachments: [] }
+  const mail = await PostalMime.parse(decrypted)
+  return {
+    text: mail.text ?? null,
+    html: mail.html ?? null,
+    attachments: mail.attachments.map((attachment) => ({
+      filename: attachment.filename ?? 'attachment',
+      contentType: attachment.mimeType,
+      content: new Uint8Array(attachment.content as ArrayBuffer),
+    })),
+  }
 }
 
 export async function encryptText(

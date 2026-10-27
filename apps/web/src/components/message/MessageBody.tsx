@@ -1,7 +1,7 @@
 // The text of a message: its HTML (shown safely by SafeHtml), its plain text, or, for PGP-encrypted
 // mail, a form to decrypt it right here in the browser.
-import { KeyRound } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { Download, KeyRound } from 'lucide-react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import * as pgp from '../../lib/pgp'
 import type { Message } from '../../types'
 import { SafeHtml } from '../SafeHtml'
@@ -19,7 +19,7 @@ export function MessageBody({ message }: { message: Message }) {
 
 // PGP decryption happens in the browser: the private key and passphrase never reach the server.
 function EncryptedBody({ message }: { message: Message }) {
-  const [plain, setPlain] = useState<string | null>(null) // the decrypted text, once decrypted
+  const [decrypted, setDecrypted] = useState<pgp.DecryptedMail | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -44,7 +44,7 @@ function EncryptedBody({ message }: { message: Message }) {
     setError('')
     try {
       const key = await pgp.unlock(passphrase)
-      setPlain(await pgp.decrypt(await encryptedText(), key))
+      setDecrypted(await pgp.decrypt(await encryptedText(), key))
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -52,7 +52,7 @@ function EncryptedBody({ message }: { message: Message }) {
     }
   }
 
-  if (plain !== null) return <div className={plainTextStyle}>{plain}</div>
+  if (decrypted) return <DecryptedBody mail={decrypted} />
 
   return (
     <form onSubmit={decrypt} className="grid gap-3 rounded-2xl border border-line bg-panel p-5">
@@ -92,5 +92,39 @@ function EncryptedBody({ message }: { message: Message }) {
         </p>
       )}
     </form>
+  )
+}
+
+// A decrypted message: its HTML (in the same safe frame as any email) or its text, and its files.
+function DecryptedBody({ mail }: { mail: pgp.DecryptedMail }) {
+  return (
+    <div className="grid gap-4">
+      {mail.html ? <SafeHtml html={mail.html} /> : <div className={plainTextStyle}>{mail.text}</div>}
+      {mail.attachments.length > 0 && (
+        <ul className="grid gap-2" aria-label="Decrypted attachments">
+          {mail.attachments.map((file, index) => (
+            <li key={index}>
+              <DecryptedFileLink file={file} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// The file only exists here in the browser, so the link points at an in-memory copy (a "blob:" URL),
+// which is freed again when the message is closed.
+function DecryptedFileLink({ file }: { file: pgp.DecryptedMail['attachments'][number] }) {
+  const url = useMemo(() => URL.createObjectURL(new Blob([file.content], { type: file.contentType })), [file])
+  useEffect(() => () => URL.revokeObjectURL(url), [url])
+  return (
+    <a
+      href={url}
+      download={file.filename}
+      className="flex items-center gap-2 rounded-xl border border-line bg-raise px-3 py-2 hover:bg-hover"
+    >
+      <Download size={15} className="text-muted" /> {file.filename}
+    </a>
   )
 }
