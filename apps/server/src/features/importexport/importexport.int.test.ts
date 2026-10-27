@@ -112,3 +112,36 @@ describe('export', () => {
     expect([back.subject, back.text?.trim()]).toEqual(['Keep me', 'From here on, a tricky line'])
   })
 })
+
+describe('export of a big mailbox', () => {
+  it('streams every message once, oldest first, across several batches', async () => {
+    const { browser } = await signedInUser(app)
+    const { id } = await addAccount(browser, uniqueAddress('pop'), 'pop3')
+    const folder = await db.folder.create({ data: { accountId: id, path: 'inbox', role: 'inbox' } })
+    // 120 messages: more than two batches of 50. Two share each date, to test ties in the order.
+    await db.message.createMany({
+      data: Array.from({ length: 120 }, (_, n) => ({
+        accountId: id,
+        folderId: folder.id,
+        fromName: 'Sender',
+        fromEmail: 'sender@x.test',
+        to: [],
+        cc: [],
+        subject: `Message ${n}`,
+        preview: '',
+        date: new Date(2030, 0, 1, 0, Math.floor(n / 2)),
+        category: 'people',
+        labels: [],
+        attachments: [],
+        raw: Buffer.from(`Subject: Message ${n}\r\n\r\nBody ${n}\r\n`),
+      })),
+    })
+
+    const exported = await browser.get(`/api/export.mbox?account=${id}`)
+    const subjects = [...exported.body.matchAll(/^Subject: Message (\d+)$/gm)].map((match) => Number(match[1]))
+    expect(subjects).toHaveLength(120)
+    expect(new Set(subjects).size).toBe(120) // none twice
+    const minutes = subjects.map((n) => Math.floor(n / 2))
+    expect(minutes).toEqual([...minutes].sort((a, b) => a - b)) // oldest first
+  })
+})

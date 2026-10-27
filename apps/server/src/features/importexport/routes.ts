@@ -1,4 +1,5 @@
 // Importing .eml/.mbox files and exporting folders as .mbox.
+import { Readable } from 'node:stream'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { db } from '../../db.ts'
@@ -13,6 +14,9 @@ import { saveMessage } from '../mail/store.ts'
 import { discoverFolders, localFolders } from '../mail/sync.ts'
 import { queueSync } from '../../jobs/queue.ts'
 import { splitMbox, toMbox } from './mbox.ts'
+
+// How many messages are read from the database at a time while exporting.
+const EXPORT_BATCH = 50
 
 export async function importExportRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireUser)
@@ -76,15 +80,30 @@ export async function importExportRoutes(app: FastifyInstance) {
     let accountIds = (await accessibleAccounts(request.user.id)).map((a) => a.account.id)
     if (query.account) accountIds = accountIds.filter((id) => id === query.account)
     const key = await storageKey(request)
-    // shortcut: builds the whole file in memory; stream it if people export mailboxes larger than a few GB.
-    const messages = await db.message.findMany({
-      where: { accountId: { in: accountIds }, ...(query.folder && { folder: { role: query.folder } }) },
-      select: { raw: true, html: true, text: true, sealedBody: true, fromEmail: true, date: true },
-      orderBy: { date: 'asc' },
-    })
+    const where = { accountId: { in: accountIds }, ...(query.folder && { folder: { role: query.folder } }) }
+
+    // The file is sent while it's being made, a batch of messages at a time, so even a huge mailbox
+    // never has to fit in memory. Each batch starts after the last message of the one before
+    // ("cursor"); ordering by date, then id, gives every message one fixed place in that order.
+    async function* mboxChunks() {
+      let after: string | undefined
+      for (;;) {
+        const batch = await db.message.findMany({
+          where,
+          select: { id: true, raw: true, html: true, text: true, sealedBody: true, fromEmail: true, date: true },
+          orderBy: [{ date: 'asc' }, { id: 'asc' }],
+          take: EXPORT_BATCH,
+          ...(after && { cursor: { id: after }, skip: 1 }), // skip: 1 leaves out the cursor message itself
+        })
+        if (batch.length === 0) return
+        yield toMbox(batch.map((m) => ({ fromEmail: m.fromEmail, date: m.date, raw: openBody(m, key).raw })))
+        after = batch[batch.length - 1].id
+      }
+    }
+
     return reply
       .header('content-type', 'application/mbox')
       .header('content-disposition', `attachment; filename="nexus-${query.folder ?? 'all'}.mbox"`)
-      .send(toMbox(messages.map((m) => ({ fromEmail: m.fromEmail, date: m.date, raw: openBody(m, key).raw }))))
+      .send(Readable.from(mboxChunks()))
   })
 }
