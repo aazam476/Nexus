@@ -5,7 +5,8 @@ A plugin connects Nexus to another service. It can do two things today:
 - **save an attachment** somewhere (Immich, Nextcloud, Paperless, a webhook…), shown in the **Save to…** menu
 - **create a calendar event** from a flight, booking or invite found in an email, shown on the event card
 
-Each user turns plugins on and fills in their own settings in **Settings → Plugins**. Settings are stored encrypted.
+Admins add, delete and turn plugins on or off for everyone in **Settings → Admin**. Each user then turns a
+plugin on for themself and fills in their own settings in **Settings → Plugins**. Settings are stored encrypted.
 
 ## The shortest possible plugin
 
@@ -44,13 +45,25 @@ The full types are in [`apps/server/src/plugins/types.ts`](../apps/server/src/pl
 
 ## Try it
 
-1. Copy [`examples/webhook-plugin`](examples/webhook-plugin) into the `plugins/` folder next to `docker-compose.yml`.
-2. Restart Nexus (`docker compose restart app`). The log says `Loaded plugin Webhook (webhook)`.
-3. Open **Settings → Plugins**, fill in the URL, and turn it on.
+Either:
 
-If a plugin fails to load, the log says why and Nexus starts without it.
+- **On the Admin page:** in **Settings → Admin → Plugins**, click **Add plugin** and pick the plugin's single
+  `.js` or `.mjs` file. Nexus shows what a quick look at the code found and its fingerprint before you install it.
+- **On the server:** copy the file or folder (for example [`examples/webhook-plugin`](examples/webhook-plugin))
+  into the `plugins/` folder next to `docker-compose.yml`, and restart Nexus (`docker compose restart app`).
+  The log says `Loaded plugin Webhook (webhook)`.
+
+Then open **Settings → Plugins**, fill in its settings, and turn it on.
+
+If a plugin fails to load, the log says why and Nexus starts without it. A deleted plugin's code stays in
+memory, unused, until Nexus restarts.
 
 ## Security
 
 Plugins run inside the Nexus server with the same access as Nexus itself: they could read any mail.
 Only install plugins you trust, exactly as you would any other server software, and read the code first.
+
+The Admin page's check before installing points out code that runs programs, reads the server's settings,
+talks to the database, reads files or hides code. It is a hint about what to read closely, not a guarantee:
+well-hidden code can get past it. Because admins can install plugins, an admin account can run code on the
+server, so give admins strong passwords and two-factor sign-in.

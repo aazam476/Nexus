@@ -177,13 +177,15 @@ Good to know before turning it on:
   viewers can only read.
 - **Admin:** admins add and delete users, change their role, reset a
   forgotten password, turn off two-factor sign-in for someone who lost their
-  phone, and see which mail accounts fail to sync: **Settings → Admin**.
+  phone, add, delete and turn off plugins, and see which mail accounts fail to
+  sync: **Settings → Admin**.
   Admins never see anyone's mail. Resetting the password of someone with
   private storage turns it off and downloads their mail again from the mail
   server, since nobody can open the copy locked with the old password.
 - **Feeds:** follow websites' RSS or Atom feeds and read their posts in Nexus,
-  in the same safe reader as email: **Feeds** in the sidebar. Paste a feed's
-  address, or just the website's; Nexus finds the feed. Feeds are checked every
+  in the same safe reader as email: **Feeds** in the sidebar. Follow one in
+  **Settings → Feeds** by pasting a feed's address, or just the website's;
+  Nexus finds the feed. Feeds are checked every
   30 minutes. Star posts to keep them, search them, and bring your feeds from
   another reader (or take them away) as an OPML file. Old posts are kept unless
   you choose **Delete posts after** a week, month, 3 months or a year; starred

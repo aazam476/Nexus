@@ -1,3 +1,6 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 // The settings the integration tests run with. Shared by global-setup.ts (before any test file)
 // and setup.ts (inside each test file's process), so both point at the same test database.
 export const testEnvironment = {
@@ -10,6 +13,8 @@ export const testEnvironment = {
   // GreenMail uses a self-signed certificate.
   MAIL_ALLOW_INSECURE_TLS: 'true',
   LOG_LEVEL: 'silent',
+  // Plugins admins upload in the tests go here, not into the real plugins folder.
+  PLUGINS_DIR: join(tmpdir(), 'nexus-test-plugins'),
   // Google sign-in is "set up" (against a fake Google in the tests); Microsoft is left unset on purpose.
   GOOGLE_CLIENT_ID: 'test-client-id',
   GOOGLE_CLIENT_SECRET: 'test-client-secret',

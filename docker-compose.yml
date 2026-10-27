@@ -33,7 +33,8 @@ services:
       # Off unless set to true in .env: the first visitor creates the admin, who then adds everyone else.
       ALLOW_SIGNUP: ${ALLOW_SIGNUP:-false}
     volumes:
-      - ./plugins:/app/plugins:ro
+      # Writable, so admins can add and delete plugins on the Admin page.
+      - ./plugins:/app/plugins
     depends_on:
       db:
         condition: service_healthy

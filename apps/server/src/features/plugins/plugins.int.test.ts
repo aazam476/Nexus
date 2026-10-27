@@ -289,3 +289,65 @@ describe('third-party plugins', () => {
     }
   })
 })
+
+describe('admins managing plugins', () => {
+  const code = (id: string) =>
+    `export default { id: '${id}', name: 'Uploaded', description: 'Test', author: 'Test', settings: [], async saveAttachment() { return {} } }`
+
+  it('reviews, installs, turns off for everyone, and deletes a plugin', async () => {
+    const admin = await signedInUser(app, { role: 'admin' })
+    const user = await signedInUser(app)
+    const id = `uploaded-${Date.now().toString(36)}`
+    const source = code(id)
+
+    const review = await admin.browser.json<{ sha256: string; findings: string[] }>(
+      'POST',
+      '/api/admin/plugins/review',
+      { code: source },
+    )
+    expect(review.findings).toEqual([])
+    // What's installed must be exactly what was reviewed.
+    expect(
+      (await admin.browser.post('/api/admin/plugins', { code: source + ' ', sha256: review.sha256 })).statusCode,
+    ).toBe(400)
+    expect(await admin.browser.json('POST', '/api/admin/plugins', { code: source, sha256: review.sha256 })).toEqual({
+      id,
+      name: 'Uploaded',
+    })
+    const ids = async () => (await user.browser.json<{ id: string }[]>('GET', '/api/plugins')).map((p) => p.id)
+    expect(await ids()).toContain(id)
+
+    // Off for everyone: hidden from users, and its actions refused.
+    await admin.browser.json('PUT', `/api/admin/plugins/${id}`, { enabled: false })
+    expect(await ids()).not.toContain(id)
+    expect((await user.browser.put(`/api/plugins/${id}`, { enabled: true })).statusCode).toBe(404)
+    const listed = await admin.browser.json<{ id: string; enabled: boolean }[]>('GET', '/api/admin/plugins')
+    expect(listed.find((p) => p.id === id)?.enabled).toBe(false)
+    await admin.browser.json('PUT', `/api/admin/plugins/${id}`, { enabled: true })
+    expect(await ids()).toContain(id)
+
+    await admin.browser.json('DELETE', `/api/admin/plugins/${id}`)
+    expect(await ids()).not.toContain(id)
+    expect((await admin.browser.delete('/api/admin/plugins/immich')).json().error).toMatch(
+      /Only plugins that were added/,
+    )
+  })
+
+  it('refuses code that is not a plugin, and is admin-only', async () => {
+    const admin = await signedInUser(app, { role: 'admin' })
+    const broken = 'export default 42'
+    const { sha256 } = await admin.browser.json<{ sha256: string }>('POST', '/api/admin/plugins/review', {
+      code: broken,
+    })
+    const refused = await admin.browser.post('/api/admin/plugins', { code: broken, sha256 })
+    expect(refused.json().error).toMatch(/not a Nexus plugin/)
+    // The refused file was removed, so trying again gives the same reason, not "already installed".
+    expect((await admin.browser.post('/api/admin/plugins', { code: broken, sha256 })).json().error).toMatch(
+      /not a Nexus plugin/,
+    )
+
+    const { browser } = await signedInUser(app)
+    expect((await browser.get('/api/admin/plugins')).statusCode).toBe(403)
+    expect((await browser.post('/api/admin/plugins/review', { code: broken })).statusCode).toBe(403)
+  })
+})

@@ -93,6 +93,30 @@ test('the admin page is hidden from people who are not admins', async ({ page, p
   await expect(dan.getByRole('link', { name: 'Admin' })).toBeHidden()
 })
 
+test('an admin reviews and adds a plugin, turns it off for everyone, and deletes it', async ({ page }) => {
+  const id = `shouty-${Date.now().toString(36)}`
+  const code = `export default { id: '${id}', name: 'Shouty ${id}', description: 'Test', author: 'Tess', settings: [],
+    async saveAttachment() { return { secret: process.env.APP_SECRET } } }`
+  await page.goto('/settings/admin')
+  const picker = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: 'Add plugin' }).click()
+  await (await picker).setFiles({ name: 'shouty.mjs', mimeType: 'text/javascript', buffer: Buffer.from(code) })
+  await expect(page.getByText('Install shouty.mjs?')).toBeVisible()
+  await expect(page.getByText(/Reads the server’s settings/)).toBeVisible() // the quick look flags the secret
+  await page.getByRole('button', { name: 'Install plugin' }).click()
+
+  const row = page.getByRole('listitem').filter({ hasText: `Shouty ${id}` })
+  await expect(row).toBeVisible()
+  await row.getByRole('switch', { name: `Shouty ${id} for everyone` }).click()
+  await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+  await page.goto('/settings/plugins')
+  await expect(page.getByText(`Shouty ${id}`)).toBeHidden() // off for everyone
+
+  await page.goto('/settings/admin')
+  await row.getByRole('button', { name: 'Delete' }).click()
+  await expect(row).toBeHidden()
+})
+
 test('changes the password, and turns private storage on and off', async ({ page, person }) => {
   const email = uniqueAddress('cleo')
   await page.request.post('/api/users', { data: { name: 'Cleo', email, password: 'cleos first password' } })

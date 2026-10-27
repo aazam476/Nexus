@@ -1,10 +1,10 @@
-// Settings → Admin, for admins only: the people on this server and how the server is doing.
+// Settings → Admin, for admins only: the people on this server, its plugins, and how it's doing.
 // Admins never see anyone's mail here, only counts and sync errors.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { UserPlus } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
-import { Avatar, Button, Card, Chip, Field, Input } from '../../components/ui'
-import { api, del, patch } from '../../lib/api'
+import { Upload, UserPlus } from 'lucide-react'
+import { useRef, useState, type FormEvent } from 'react'
+import { Avatar, Button, Card, Chip, Field, Input, Toggle } from '../../components/ui'
+import { api, del, patch, put } from '../../lib/api'
 import { useMe } from '../../lib/queries'
 
 interface User {
@@ -30,6 +30,7 @@ export function AdminSettings() {
     <>
       <OverviewCard />
       <UsersCard myId={me.id} />
+      <PluginsCard />
     </>
   )
 }
@@ -262,5 +263,184 @@ function ResetPassword({ user, onDone }: { user: User; onDone: () => void }) {
         </p>
       )}
     </form>
+  )
+}
+
+interface ServerPlugin {
+  id: string
+  name: string
+  description: string
+  author: string
+  builtIn: boolean
+  enabled: boolean // for everyone on the server
+  users: number // how many people have it turned on
+}
+
+interface Review {
+  sha256: string
+  size: number
+  findings: string[]
+}
+
+// Turning plugins on or off for everyone, and adding or deleting them. Each person still turns a
+// plugin on for themself and fills in its settings in Settings → Plugins.
+function PluginsCard() {
+  const client = useQueryClient()
+  const plugins = useQuery({ queryKey: ['admin-plugins'], queryFn: () => api<ServerPlugin[]>('/admin/plugins') }).data
+  const [adding, setAdding] = useState<{ code: string; filename: string; review: Review } | null>(null)
+  const [error, setError] = useState('')
+  const fileInput = useRef<HTMLInputElement>(null)
+  const refresh = () => {
+    client.invalidateQueries({ queryKey: ['admin-plugins'] })
+    client.invalidateQueries({ queryKey: ['plugins'] })
+  }
+
+  async function pick(file: File) {
+    setError('')
+    try {
+      const code = await file.text()
+      setAdding({ code, filename: file.name, review: await api<Review>('/admin/plugins/review', { body: { code } }) })
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  async function install() {
+    try {
+      await api('/admin/plugins', { body: { code: adding!.code, sha256: adding!.review.sha256 } })
+      setAdding(null)
+      refresh()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  async function setEnabled(plugin: ServerPlugin, enabled: boolean) {
+    await put(`/admin/plugins/${plugin.id}`, { enabled }).catch((e) => setError(e.message))
+    refresh()
+  }
+
+  async function remove(plugin: ServerPlugin) {
+    if (!confirm(`Delete ${plugin.name}? Everyone’s settings for it are deleted too.`)) return
+    await del(`/admin/plugins/${plugin.id}`).catch((e) => setError(e.message))
+    refresh()
+  }
+
+  return (
+    <Card
+      title="Plugins"
+      description="Turn a plugin off to hide it from everyone. Each person turns it on for themself in Settings → Plugins."
+      actions={
+        !adding && (
+          <Button onClick={() => fileInput.current?.click()}>
+            <Upload size={15} /> Add plugin
+          </Button>
+        )
+      }
+    >
+      <div className="grid gap-4">
+        {/* The real file picker, hidden; the button above opens it. */}
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".js,.mjs,text/javascript"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (file) pick(file)
+            event.target.value = '' // so picking the same file again still counts as a change
+          }}
+        />
+        {adding && <PluginReview {...adding} onInstall={install} onCancel={() => setAdding(null)} />}
+        <ul className="divide-y divide-line">
+          {plugins?.map((plugin) => (
+            <li key={plugin.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">
+                  {plugin.name} {plugin.builtIn && <Chip color="var(--muted)">Built in</Chip>}
+                </p>
+                <p className="text-[12.5px] text-muted">
+                  {plugin.description} · by {plugin.author} · {plugin.users}{' '}
+                  {plugin.users === 1 ? 'person uses' : 'people use'} it
+                </p>
+              </div>
+              {!plugin.builtIn && (
+                <Button variant="ghost" onClick={() => remove(plugin)}>
+                  Delete
+                </Button>
+              )}
+              <Toggle
+                checked={plugin.enabled}
+                onChange={(on) => setEnabled(plugin, on)}
+                label={`${plugin.name} for everyone`}
+              />
+            </li>
+          ))}
+        </ul>
+        {error && (
+          <p role="alert" className="text-[13px] text-danger">
+            {error}
+          </p>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+// What the admin sees before installing: the warning, what the quick look found, the fingerprint,
+// and the code itself.
+function PluginReview({
+  code,
+  filename,
+  review,
+  onInstall,
+  onCancel,
+}: {
+  code: string
+  filename: string
+  review: Review
+  onInstall: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="grid gap-3 rounded-xl border border-line p-4">
+      <p className="font-semibold">Install {filename}?</p>
+      <p className="text-[13px] text-ink-2">
+        A plugin runs inside Nexus with full access to everyone’s mail and the server’s secrets. Nexus can’t prove a
+        plugin is safe. Only install code from someone you trust, and read it first.
+      </p>
+      {review.findings.length > 0 ? (
+        <div className="grid gap-1">
+          <p className="text-[13px] font-semibold text-danger">Read these parts closely. The code:</p>
+          <ul className="grid list-disc gap-0.5 pl-5 text-[13px] text-danger">
+            {review.findings.map((finding) => (
+              <li key={finding}>{finding}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="text-[13px] text-muted">
+          A quick look found nothing unusual. That isn’t a guarantee; it can miss well-hidden code.
+        </p>
+      )}
+      <p className="text-[12.5px] text-muted">
+        Fingerprint (SHA-256), to compare with the one the author publishes:{' '}
+        <code className="font-mono break-all">{review.sha256}</code>
+      </p>
+      <details>
+        <summary className="cursor-pointer text-[13px]">Show the code ({Math.ceil(review.size / 1024)} KB)</summary>
+        <pre className="mt-2 max-h-80 overflow-auto rounded-lg bg-raise p-3 font-mono text-[12px] whitespace-pre-wrap">
+          {code}
+        </pre>
+      </details>
+      <div className="flex gap-2">
+        <Button variant="danger" onClick={onInstall}>
+          Install plugin
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   )
 }

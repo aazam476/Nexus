@@ -247,6 +247,12 @@ model SmimeCert {
   createdAt DateTime @default(now())
 }
 
+// An admin's switch for a plugin, for everyone on the server. No row means it's on.
+model ServerPlugin {
+  id      String  @id // the plugin's id
+  enabled Boolean @default(true)
+}
+
 model PluginSetting {
   userId   String
   user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
