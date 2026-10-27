@@ -30,6 +30,7 @@ model User {
   createdAt         DateTime @default(now())
 
   sessions       Session[]
+  passkeys       Passkey[]
   accounts       Account[]         @relation("owner")
   sharedAccounts AccountMember[]
   contacts       Contact[]
@@ -42,6 +43,22 @@ model User {
   outgoing       OutgoingMessage[]
   feeds          Feed[]
   preference     Preference?
+}
+
+// A passkey or security key (like a YubiKey): signs in without a password, or as the second step after it.
+model Passkey {
+  id         String    @id // the credential ID the authenticator gave it (base64url)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String // so the user can tell them apart: "MacBook", "YubiKey"
+  publicKey  Bytes
+  counter    Int // how often the authenticator says it was used; helps spot a cloned key
+  transports String[] // how the browser reaches it: "usb", "nfc", "internal"…
+  // Private storage: the user's private key locked with a secret only this passkey can produce (WebAuthn PRF).
+  // Empty if the passkey can't produce one, or was added before private storage was set up.
+  storageKey String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
 }
 
 model Session {

@@ -1,9 +1,11 @@
-// The second sign-in step: a 6-digit code from an authenticator app, or a recovery code.
+// The second sign-in step: a 6-digit code from an authenticator app, a passkey or security key
+// (like a YubiKey), or a recovery code.
 import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Button } from '../components/ui'
 import { api } from '../lib/api'
+import { secondStepWithPasskey } from '../lib/passkeys'
 import { AuthLayout } from './LoginPage'
 
 const CODE_LENGTH = 6
@@ -26,6 +28,17 @@ export function TwoFactorPage() {
       setError((e as Error).message)
       setDigits(Array(CODE_LENGTH).fill(''))
       inputs.current[0]?.focus()
+    }
+  }
+
+  async function verifyWithPasskey() {
+    setError('')
+    try {
+      await secondStepWithPasskey()
+      await client.invalidateQueries({ queryKey: ['me'] })
+      navigate('/mail/inbox')
+    } catch (e) {
+      setError((e as Error).message)
     }
   }
 
@@ -111,7 +124,7 @@ export function TwoFactorPage() {
           {error}
         </p>
       )}
-      <div className="mt-5 flex justify-between text-[13px]">
+      <div className="mt-5 flex flex-wrap justify-between gap-x-4 gap-y-2 text-[13px]">
         <button
           type="button"
           className="text-accent-text hover:underline"
@@ -121,6 +134,9 @@ export function TwoFactorPage() {
           }}
         >
           {useRecovery ? 'Use authenticator code' : 'Use a recovery code'}
+        </button>
+        <button type="button" className="text-accent-text hover:underline" onClick={verifyWithPasskey}>
+          Use a passkey or security key
         </button>
         <Link to="/login" className="text-muted hover:text-ink">
           Back

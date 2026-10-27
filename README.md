@@ -172,6 +172,11 @@ Good to know before turning it on:
 
 - **Two-factor sign-in** with an authenticator app, plus recovery codes:
   **Settings → Password & 2FA**.
+- **Passkeys and security keys** (Touch ID, Windows Hello, a phone, a
+  YubiKey): sign in without a password, or use one as the second step instead
+  of an app code: **Settings → Password & 2FA**. With private storage on, a
+  passkey that supports PRF (most do) can open your mail too. Passkeys belong
+  to the address in `PUBLIC_URL`, so set it to the address people really use.
 - **Shared mailboxes:** mail accounts are private to whoever added them, until
   they share one in **Settings → Sharing**. Editors can read, send and sort;
   viewers can only read.

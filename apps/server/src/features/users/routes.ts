@@ -102,6 +102,8 @@ export async function userRoutes(app: FastifyInstance) {
             storagePublicKey: null,
           },
         }),
+        // Copies of the old key that passkeys unlock (see auth/passkeys.ts) are useless now too.
+        db.passkey.updateMany({ where: { userId: user.id }, data: { storageKey: null } }),
         db.session.deleteMany({ where: { userId: user.id } }),
       ])
       for (const id of accountIds) await queueSync(id)

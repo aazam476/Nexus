@@ -24,7 +24,7 @@ test('an admin adds a user, who signs in, turns on two-factor sign-in, and signs
   await bob.goto('/login')
   await bob.getByLabel('Email', { exact: true }).fill(email)
   await bob.getByLabel(/^Password/).fill(password)
-  await bob.getByRole('button', { name: 'Sign in' }).click()
+  await bob.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(bob).toHaveURL(/\/mail\/inbox$/)
 
   await bob.goto('/settings/security')
@@ -46,7 +46,7 @@ test('an admin adds a user, who signs in, turns on two-factor sign-in, and signs
   // Signing in now asks for a code; pasting the whole code fills every box.
   await bob.getByLabel('Email', { exact: true }).fill(email)
   await bob.getByLabel(/^Password/).fill(password)
-  await bob.getByRole('button', { name: 'Sign in' }).click()
+  await bob.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(bob).toHaveURL(/\/login\/2fa$/)
   // Each code works once, and turning 2FA on used the current one, so sign in with the next one.
   await bob.getByLabel('Digit 1').fill(authenticator.clone({ epoch: Date.now() + 30_000 }).generate(secret))
@@ -56,7 +56,7 @@ test('an admin adds a user, who signs in, turns on two-factor sign-in, and signs
   await bob.getByRole('button', { name: 'Sign out' }).click()
   await bob.getByLabel('Email', { exact: true }).fill(email)
   await bob.getByLabel(/^Password/).fill(password)
-  await bob.getByRole('button', { name: 'Sign in' }).click()
+  await bob.getByRole('button', { name: 'Sign in', exact: true }).click()
   await bob.getByRole('button', { name: 'Use a recovery code' }).click()
   await bob.getByLabel('Recovery code').fill(recoveryCode)
   await bob.getByRole('button', { name: 'Verify recovery code' }).click()
@@ -75,7 +75,7 @@ test('an admin adds a user, who signs in, turns on two-factor sign-in, and signs
   await expect(bob).toHaveURL(/\/login$/) // signed out everywhere
   await bob.getByLabel('Email', { exact: true }).fill(email)
   await bob.getByLabel(/^Password/).fill('bobs second password')
-  await bob.getByRole('button', { name: 'Sign in' }).click()
+  await bob.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(bob).toHaveURL(/\/mail\/inbox$/) // no code asked for
 })
 
@@ -86,7 +86,7 @@ test('the admin page is hidden from people who are not admins', async ({ page, p
   await dan.goto('/login')
   await dan.getByLabel('Email', { exact: true }).fill(email)
   await dan.getByLabel(/^Password/).fill('dans first password')
-  await dan.getByRole('button', { name: 'Sign in' }).click()
+  await dan.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(dan).toHaveURL(/\/mail\/inbox$/)
   await dan.goto('/settings/sharing')
   await expect(dan.getByRole('link', { name: 'Sharing' })).toBeVisible()
@@ -124,7 +124,7 @@ test('changes the password, and turns private storage on and off', async ({ page
   await cleo.goto('/login')
   await cleo.getByLabel('Email', { exact: true }).fill(email)
   await cleo.getByLabel(/^Password/).fill('cleos first password')
-  await cleo.getByRole('button', { name: 'Sign in' }).click()
+  await cleo.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(cleo).toHaveURL(/\/mail\/inbox$/)
   await cleo.goto('/settings/security')
 

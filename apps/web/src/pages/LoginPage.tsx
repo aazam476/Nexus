@@ -1,9 +1,11 @@
 // Signing in, and creating the first (admin) account on a new server.
 import { useQueryClient } from '@tanstack/react-query'
+import { KeyRound } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { Button, Field, Input, Logo } from '../components/ui'
 import { api } from '../lib/api'
+import { signInWithPasskey } from '../lib/passkeys'
 import { useServerStatus } from '../lib/queries'
 
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
@@ -56,6 +58,17 @@ export function LoginPage() {
     }
   }
 
+  async function passkey() {
+    setError('')
+    try {
+      await signInWithPasskey()
+      await client.invalidateQueries({ queryKey: ['me'] })
+      navigate('/mail/inbox')
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
   const firstVisit = status.data?.needsSetup
   let title = 'Sign in to Nexus'
   if (firstVisit) title = 'Welcome to Nexus'
@@ -99,6 +112,11 @@ export function LoginPage() {
         <Button type="submit" variant="primary" className="py-2.5" disabled={busy || status.isLoading}>
           {signingUp ? 'Create account' : 'Sign in'}
         </Button>
+        {!signingUp && (
+          <Button onClick={passkey} className="py-2.5">
+            <KeyRound size={15} /> Sign in with a passkey
+          </Button>
+        )}
         {status.data?.allowSignup && !status.data.needsSetup && (
           <button
             type="button"

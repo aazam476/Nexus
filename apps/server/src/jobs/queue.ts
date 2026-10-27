@@ -12,6 +12,8 @@ import { failInterruptedSends, sendScheduled } from '../features/send/send.ts'
 
 // BullMQ needs maxRetriesPerRequest: null, so a Redis hiccup makes workers wait instead of crash.
 const connection = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null })
+// Shared with the rest of the server for small short-lived values (passkey challenges).
+export const redis = connection
 
 const syncQueue = new Queue('sync', { connection })
 const sendQueue = new Queue('send', { connection })

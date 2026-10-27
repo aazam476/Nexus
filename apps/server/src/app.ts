@@ -9,6 +9,7 @@ import Fastify from 'fastify'
 import { config } from './config.ts'
 import { accountRoutes } from './features/accounts/routes.ts'
 import { authRoutes } from './features/auth/routes.ts'
+import { passkeyRoutes } from './features/auth/passkeys.ts'
 import { contactRoutes } from './features/contacts/routes.ts'
 import { encryptionRoutes } from './features/encryption/routes.ts'
 import { feedRoutes } from './features/feeds/routes.ts'
@@ -66,6 +67,7 @@ export async function buildApp() {
   })
 
   await app.register(authRoutes, { prefix: '/api/auth' })
+  await app.register(passkeyRoutes, { prefix: '/api/auth' })
   await app.register(userRoutes, { prefix: '/api/users' })
   for (const routes of [
     accountRoutes,

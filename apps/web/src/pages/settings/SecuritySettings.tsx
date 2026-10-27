@@ -1,10 +1,11 @@
-// Settings → Password & 2FA: change password, two-factor sign-in, private storage, signed-in devices.
+// Settings → Password & 2FA: change password, two-factor sign-in, passkeys, private storage, signed-in devices.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Laptop, Smartphone } from 'lucide-react'
+import { KeyRound, Laptop, Smartphone } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Button, Card, Chip, Field, Input } from '../../components/ui'
 import { api, del } from '../../lib/api'
 import { timeAgo } from '../../lib/format'
+import { addPasskey, letPasskeyUnlockStorage } from '../../lib/passkeys'
 import { useMe } from '../../lib/queries'
 
 interface Session {
@@ -46,6 +47,7 @@ export function SecuritySettings() {
     <>
       <PasswordCard />
       <TwoFactorCard />
+      <PasskeysCard />
       <PrivateStorageCard />
       <SessionsCard />
     </>
@@ -349,6 +351,114 @@ function PrivateStorageCard() {
         {error && (
           <p role="alert" className="text-[13px] text-danger">
             {error}
+          </p>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+interface Passkey {
+  id: string
+  name: string
+  createdAt: string
+  lastUsedAt: string | null
+  unlocksPrivateStorage: boolean
+}
+
+function PasskeysCard() {
+  const me = useMe().data
+  const client = useQueryClient()
+  const passkeys = useQuery({ queryKey: ['passkeys'], queryFn: () => api<Passkey[]>('/auth/passkeys') }).data ?? []
+  const [naming, setNaming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
+  const refresh = () => client.invalidateQueries({ queryKey: ['passkeys'] })
+
+  // Runs one passkey step, showing what went wrong in words if it fails.
+  async function attempt(work: () => Promise<void>, done: string) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await work()
+      setMessage({ ok: true, text: done })
+    } catch (e) {
+      setMessage({ ok: false, text: (e as Error).message })
+    } finally {
+      setBusy(false)
+      refresh()
+    }
+  }
+
+  function add(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const name = String(new FormData(event.currentTarget).get('name') ?? '')
+    setNaming(false)
+    attempt(() => addPasskey(name), `${name} added. You can now sign in with it, without your password.`)
+  }
+
+  return (
+    <Card
+      title="Passkeys and security keys"
+      description="Sign in with your fingerprint, face, phone or a security key like a YubiKey, without typing your password. One also works as the second step instead of an app code."
+    >
+      <div className="grid gap-4">
+        {passkeys.length > 0 && (
+          <ul className="divide-y divide-line">
+            {passkeys.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-raise text-muted">
+                  <KeyRound size={17} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{p.name}</p>
+                  <p className="text-[12.5px] text-muted">
+                    {p.lastUsedAt ? `Used ${timeAgo(p.lastUsedAt)}` : 'Not used yet'}
+                    {me?.privateStorage && !p.unlocksPrivateStorage && ' · can’t open private storage yet'}
+                  </p>
+                </div>
+                {me?.privateStorage && !p.unlocksPrivateStorage && (
+                  <Button
+                    disabled={busy}
+                    onClick={() =>
+                      attempt(() => letPasskeyUnlockStorage(p.id), `${p.name} can now open your private storage.`)
+                    }
+                  >
+                    Let it open private storage
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={() => del(`/auth/passkeys/${p.id}`).then(refresh)}>
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {naming ? (
+          <form className="flex max-w-md flex-wrap items-end gap-2" onSubmit={add}>
+            <div className="min-w-0 flex-1">
+              <Field label="Name it, to tell it apart" hint="Like “MacBook” or “YubiKey”.">
+                <Input name="name" required maxLength={60} autoFocus />
+              </Field>
+            </div>
+            <Button type="submit" variant="primary">
+              Continue
+            </Button>
+            <Button variant="ghost" onClick={() => setNaming(false)}>
+              Cancel
+            </Button>
+          </form>
+        ) : (
+          <Button className="justify-self-start" disabled={busy} onClick={() => setNaming(true)}>
+            Add a passkey or security key
+          </Button>
+        )}
+        {message && (
+          <p
+            role={message.ok ? 'status' : 'alert'}
+            className={`text-[13px] ${message.ok ? 'text-news' : 'text-danger'}`}
+          >
+            {message.text}
           </p>
         )}
       </div>
