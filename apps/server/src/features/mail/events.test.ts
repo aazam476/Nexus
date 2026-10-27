@@ -89,7 +89,7 @@ describe('calendar invites (.ics)', () => {
   it('reads the summary, times and location, undoing escaping and line folding', () => {
     expect(fromIcs(invite)).toEqual({
       title: 'Planning, round 2',
-      start: '2030-11-14T10:25:00Z',
+      start: '2030-11-14T09:25:00.000Z', // 10:25 in Oslo is 09:25 UTC in winter
       end: '2030-11-14T11:30:00Z',
       location: 'Room 4B',
     })
@@ -99,8 +99,8 @@ describe('calendar invites (.ics)', () => {
     const allDay = 'BEGIN:VEVENT\nSUMMARY:Holiday\nDTSTART;VALUE=DATE:20300704\nEND:VEVENT'
     expect(extractEvent({ html: '<p>no booking</p>', icsTexts: [allDay] })).toEqual({
       title: 'Holiday',
-      start: '2030-07-04T00:00:00Z',
-      end: '2030-07-04T00:00:00Z',
+      start: '2030-07-04T00:00:00', // all day: floating, so it's the 4th wherever you are
+      end: '2030-07-04T00:00:00',
       location: undefined,
     })
   })
@@ -108,5 +108,26 @@ describe('calendar invites (.ics)', () => {
   it('ignores files without an event or a start time', () => {
     expect(fromIcs('BEGIN:VCALENDAR\nEND:VCALENDAR')).toBeNull()
     expect(fromIcs('BEGIN:VEVENT\nSUMMARY:No time\nEND:VEVENT')).toBeNull()
+  })
+})
+
+describe('time zones in invites', () => {
+  const invite = (start: string) => `BEGIN:VEVENT\nSUMMARY:Meeting\n${start}\nEND:VEVENT`
+  const startOf = (line: string) => fromIcs(invite(line))?.start
+
+  it('follows daylight saving time', () => {
+    expect(startOf('DTSTART;TZID=Europe/Oslo:20300715T102500')).toBe('2030-07-15T08:25:00.000Z') // summer: UTC+2
+    expect(startOf('DTSTART;TZID=America/New_York:20300115T090000')).toBe('2030-01-15T14:00:00.000Z') // winter: UTC−5
+  })
+
+  it('understands the Windows zone names Outlook uses, quoted or not', () => {
+    expect(startOf('DTSTART;TZID="W. Europe Standard Time":20301114T102500')).toBe('2030-11-14T09:25:00.000Z')
+    expect(startOf('DTSTART;TZID=Pacific Standard Time:20300115T090000')).toBe('2030-01-15T17:00:00.000Z')
+  })
+
+  it('keeps UTC as it is, leaves floating times floating, and reads unknown zones as UTC', () => {
+    expect(startOf('DTSTART:20301114T102500Z')).toBe('2030-11-14T10:25:00Z')
+    expect(startOf('DTSTART:20301114T102500')).toBe('2030-11-14T10:25:00')
+    expect(startOf('DTSTART;TZID=Mars/Olympus_Mons:20301114T102500')).toBe('2030-11-14T10:25:00Z')
   })
 })

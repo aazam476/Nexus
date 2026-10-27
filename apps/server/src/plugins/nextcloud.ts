@@ -86,11 +86,16 @@ const calendarUrl = (s: PluginSettings) =>
   `${trimUrl(s.url)}/remote.php/dav/calendars/${encodeURIComponent(s.username)}/${encodeURIComponent(s.calendar || 'personal')}/`
 
 export function toIcs(event: PluginEvent, uid: string): string {
-  const stamp = (iso: string) =>
-    new Date(iso)
+  // iCalendar writes times as 20301114T102500Z. Floating times (no "Z", see mail/events.ts) stay
+  // floating, without a "Z", so they keep meaning the same clock time everywhere.
+  const stamp = (iso: string) => {
+    const floating = !/(Z|[+-]\d\d:\d\d)$/.test(iso)
+    if (floating) return iso.replace(/[-:]/g, '').slice(0, 15)
+    return new Date(iso)
       .toISOString()
       .replace(/[-:]/g, '')
       .replace(/\.\d{3}/, '')
+  }
   const text = (value: string) => value.replace(/([\\,;])/g, '\\$1').replace(/\n/g, '\\n')
   return [
     'BEGIN:VCALENDAR',
