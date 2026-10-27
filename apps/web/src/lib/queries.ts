@@ -1,7 +1,7 @@
 // Data hooks: one place that knows which API path returns what.
 // Components call these instead of fetching directly, so caching and refreshing stay consistent.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Account, Contact, FolderRole, Message, Plugin, Rule } from '../types'
+import type { Account, Contact, Feed, FeedItem, FolderRole, Message, Plugin, Rule } from '../types'
 import { api } from './api'
 
 export interface Me {
@@ -59,6 +59,16 @@ export const useContacts = (q = '') =>
   useQuery({ queryKey: ['contacts', q], queryFn: () => api<Contact[]>(`/contacts${query({ q })}`) })
 export const usePlugins = () => useQuery({ queryKey: ['plugins'], queryFn: () => api<Plugin[]>('/plugins') })
 export const useRules = () => useQuery({ queryKey: ['rules'], queryFn: () => api<Rule[]>('/rules') })
+// Feeds refresh on the server every half hour; re-checking the lists every minute picks that up.
+export const useFeeds = () => useQuery({ queryKey: ['feeds'], queryFn: () => api<Feed[]>('/feeds'), ...live })
+export const useFeedItems = (feedId: string | null) =>
+  useQuery({
+    queryKey: ['feed-items', feedId],
+    queryFn: () => api<FeedItem[]>(`/feed-items${query({ feed: feedId })}`),
+    ...live,
+  })
+export const useFeedItem = (id: string | undefined) =>
+  useQuery({ queryKey: ['feed-item', id], queryFn: () => api<FeedItem>(`/feed-items/${id}`), enabled: !!id })
 export const useBlocked = () => useQuery({ queryKey: ['blocked'], queryFn: () => api<string[]>('/blocked') })
 
 // After any change to mail, refresh everything that shows mail.

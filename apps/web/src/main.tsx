@@ -10,6 +10,7 @@ import { LoginPage } from './pages/LoginPage'
 import { TwoFactorPage } from './pages/TwoFactorPage'
 import { MailPage } from './pages/MailPage'
 import { ContactsPage } from './pages/ContactsPage'
+import { FeedsPage } from './pages/FeedsPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 10_000 } } })
@@ -26,6 +27,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/" element={<Navigate to="/mail/inbox" replace />} />
               <Route path="/mail/:folder/:messageId?" element={<MailPage />} />
               <Route path="/contacts/:contactId?" element={<ContactsPage />} />
+              <Route path="/feeds/:itemId?" element={<FeedsPage />} />
               <Route path="/settings/:section?" element={<SettingsPage />} />
             </Route>
           </Routes>

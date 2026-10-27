@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   Archive,
   BookUser,
+  Rss,
   Clock,
   FileText,
   Inbox,
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react'
 import { NavLink, useLocation, useNavigate } from 'react-router'
 import { api } from '../lib/api'
-import { useAccounts, useCounts, useLabels } from '../lib/queries'
+import { useAccounts, useCounts, useFeeds, useLabels } from '../lib/queries'
 import { useStore } from '../lib/store'
 import { timeAgo } from '../lib/format'
 import type { Account, FolderRole } from '../types'
@@ -48,6 +49,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const accounts = useAccounts().data ?? []
   const labels = useLabels().data ?? []
   const counts = useCounts().data
+  const feedsUnread = (useFeeds().data ?? []).reduce((total, feed) => total + feed.unread, 0)
 
   const unreadIn = (role: FolderRole) => counts?.folders[role] ?? 0
   const client = useQueryClient()
@@ -133,6 +135,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       )}
 
       <div className="mt-auto grid gap-0.5 border-t border-line pt-3">
+        <NavLink to="/feeds" onClick={onNavigate} className={({ isActive }) => itemClass(isActive)}>
+          <Rss size={16} strokeWidth={1.8} /> Feeds
+          <Count value={feedsUnread} />
+        </NavLink>
         <NavLink to="/contacts" onClick={onNavigate} className={({ isActive }) => itemClass(isActive)}>
           <BookUser size={16} strokeWidth={1.8} /> Contacts
         </NavLink>

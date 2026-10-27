@@ -83,6 +83,13 @@ first**, then in the database, so every mail app shows the same thing.
 | Private storage | each user's mail sealed to their own key, unlocked by their password (`lib/sealed.ts`, `features/mail/private.ts`) |
 | PGP | entirely in the browser (`apps/web/src/lib/pgp.ts`); the server never sees a usable private key |
 
+## Feeds
+
+`features/feeds/`. Someone follows a website: `feeds.ts` downloads the address (or the feed the
+page announces), `parse.ts` turns RSS or Atom into posts, and they're saved as `FeedItem` rows.
+The background job checks each feed every 30 minutes. In the web app, `pages/FeedsPage.tsx` shows
+them, and posts open in the same `SafeHtml` sandbox as email, since they're HTML from other sites.
+
 ## Plugins
 
 A plugin is one object (`plugins/types.ts`) that can save an attachment somewhere and/or create a

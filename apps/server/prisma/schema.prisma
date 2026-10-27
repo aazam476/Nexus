@@ -14,22 +14,22 @@ datasource db {
 // ---------- People ----------
 
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String
-  passwordHash  String
-  role          String   @default("user") // "admin" | "user"
-  totpSecret    String? // encrypted
-  totpEnabled   Boolean  @default(false)
-  recoveryCodes String[] // sha256 hashes, removed once used
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String
+  passwordHash      String
+  role              String   @default("user") // "admin" | "user"
+  totpSecret        String? // encrypted
+  totpEnabled       Boolean  @default(false)
+  recoveryCodes     String[] // sha256 hashes, removed once used
   // Private storage (see src/lib/sealed.ts). Keys are kept after it is turned off, so nothing becomes unreadable.
-  privateStorage    Boolean @default(false)
+  privateStorage    Boolean  @default(false)
   storagePublicKey  String?
   storagePrivateKey String? // locked with the user's password
-  createdAt     DateTime @default(now())
+  createdAt         DateTime @default(now())
 
   sessions       Session[]
-  accounts       Account[]        @relation("owner")
+  accounts       Account[]         @relation("owner")
   sharedAccounts AccountMember[]
   contacts       Contact[]
   rules          Rule[]
@@ -39,6 +39,7 @@ model User {
   smimeCerts     SmimeCert[]
   plugins        PluginSetting[]
   outgoing       OutgoingMessage[]
+  feeds          Feed[]
   preference     Preference?
 }
 
@@ -96,13 +97,13 @@ model AccountMember {
 }
 
 model Folder {
-  id          String  @id @default(cuid())
-  accountId   String
-  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  path        String // name on the IMAP server; POP3 accounts use local paths
-  role        String // "inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"
-  uidValidity BigInt?
-  lastUid     Int     @default(0)
+  id            String  @id @default(cuid())
+  accountId     String
+  account       Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  path          String // name on the IMAP server; POP3 accounts use local paths
+  role          String // "inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"
+  uidValidity   BigInt?
+  lastUid       Int     @default(0)
   // Change counter (IMAP CONDSTORE) and message count at the last sync; if neither moved, nothing changed.
   highestModseq BigInt?
   lastExists    Int?
@@ -116,35 +117,35 @@ model Folder {
 // ---------- Mail ----------
 
 model Message {
-  id          String   @id @default(cuid())
-  accountId   String
-  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  folderId    String
-  folder      Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  uid         Int? // IMAP UID inside the folder
-  remoteId    String? // POP3 UIDL
-  messageId   String? // the Message-ID header
-  fromName    String
-  fromEmail   String
-  to          Json // [{ name, email }]
-  cc          Json
-  subject     String
-  preview     String
-  text        String?
-  html        String?
-  date        DateTime
-  unread      Boolean  @default(true)
-  starred     Boolean  @default(false)
-  category    String // "people" | "travel" | "notifications" | "newsletters"
-  labels      String[]
-  attachments Json // [{ id, filename, contentType, size }]; content stays in `raw`
-  security    String?
-  event       Json?
-  raw         Bytes // the full original message (empty when sealed)
+  id            String   @id @default(cuid())
+  accountId     String
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  folderId      String
+  folder        Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  uid           Int? // IMAP UID inside the folder
+  remoteId      String? // POP3 UIDL
+  messageId     String? // the Message-ID header
+  fromName      String
+  fromEmail     String
+  to            Json // [{ name, email }]
+  cc            Json
+  subject       String
+  preview       String
+  text          String?
+  html          String?
+  date          DateTime
+  unread        Boolean  @default(true)
+  starred       Boolean  @default(false)
+  category      String // "people" | "travel" | "notifications" | "newsletters"
+  labels        String[]
+  attachments   Json // [{ id, filename, contentType, size }]; content stays in `raw`
+  security      String?
+  event         Json?
+  raw           Bytes // the full original message (empty when sealed)
   // Private storage: when set, raw/html/text/preview/attachments/event are inside these instead.
   sealedSummary Bytes? // preview, attachments, event: small, opened for every list row
   sealedBody    Bytes? // raw, html, text: opened only when the message is read
-  createdAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   // Full-text search: Postgres keeps this up to date from subject, sender and text (see the init migration).
   search Unsupported("tsvector")? @default(dbgenerated("((setweight(to_tsvector('simple'::regconfig, COALESCE(subject, ''::text)), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, ((COALESCE(\"fromName\", ''::text) || ' '::text) || COALESCE(\"fromEmail\", ''::text))), 'B'::\"char\")) || setweight(to_tsvector('simple'::regconfig, COALESCE(text, ''::text)), 'C'::\"char\"))"))
@@ -257,4 +258,40 @@ model Preference {
   theme         String @default("system")
   layout        String @default("three-pane")
   spamThreshold Float  @default(5)
+}
+
+// ---------- Feeds (RSS and Atom) ----------
+
+// A feed someone subscribed to. Each user has their own list.
+model Feed {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url           String // the feed's own address (found from the website's page if needed)
+  title         String
+  siteUrl       String? // the website the feed belongs to
+  lastFetchedAt DateTime?
+  error         String? // why the last refresh failed, shown in the app
+  createdAt     DateTime   @default(now())
+  items         FeedItem[]
+
+  @@unique([userId, url])
+}
+
+// One post from a feed.
+model FeedItem {
+  id          String   @id @default(cuid())
+  feedId      String
+  feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  guid        String // the feed's own id for the post (or its link), so it's never stored twice
+  title       String
+  link        String?
+  author      String?
+  content     String // HTML from the feed; the web app sanitizes it before showing it (SafeHtml)
+  summary     String // the start as plain text, for the list
+  publishedAt DateTime
+  unread      Boolean  @default(true)
+
+  @@unique([feedId, guid])
+  @@index([feedId, publishedAt])
 }

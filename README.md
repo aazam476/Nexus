@@ -28,7 +28,8 @@ to the rest of your self-hosted stack.
   - the mail servers of the accounts you add;
   - Google or Microsoft, only for accounts you add with their sign-in;
   - the services you set up in a plugin (Immich, Nextcloud, Paperless);
-  - an email's remote images, only when you choose to load them.
+  - an email's remote images, only when you choose to load them;
+  - the websites whose feeds you follow, every 30 minutes.
 - **For households and teams.** Several users, each with their own login and
   two-factor sign-in, and shared mailboxes with editor or viewer access.
 - **Licensed under Apache-2.0.**
@@ -169,6 +170,10 @@ Good to know before turning it on:
   **Settings → Password & 2FA**.
 - **Shared mailboxes:** **Settings → Users & sharing**. Editors can read,
   send and sort; viewers can only read.
+- **Feeds:** follow websites' RSS or Atom feeds and read their posts in Nexus,
+  in the same safe reader as email: **Feeds** in the sidebar. Paste a feed's
+  address, or just the website's; Nexus finds the feed. Feeds are checked every
+  30 minutes.
 - **Plugins:** save attachments to Immich, Nextcloud Files or Paperless, and
   add flights and invites to Nextcloud Calendar: **Settings → Plugins**. To
   write your own, see [docs/plugins.md](docs/plugins.md).
@@ -205,7 +210,8 @@ cp .env.example .env
 In `.env`, set `APP_SECRET`, `PUBLIC_URL=http://localhost:5173`,
 `DATABASE_URL=postgresql://nexus:nexus@localhost:5432/nexus`,
 `REDIS_URL=redis://localhost:6379` and `MAIL_ALLOW_INSECURE_TLS=true` (the test
-mail server uses a self-signed certificate). Then, in two terminals:
+mail server uses a self-signed certificate). Then, in two terminals (the
+server applies any new database migrations as it starts):
 
 ```bash
 npm run dev:server

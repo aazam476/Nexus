@@ -54,4 +54,7 @@ may load. Nexus's forbids scripts from anywhere but itself.
 **XSS** (cross-site scripting): getting a script to run inside someone else's page, for example
 through an email's HTML. Sanitizing plus a sandboxed frame is how Nexus prevents it.
 
+**RSS / Atom**: two formats websites use to list their latest posts as XML (a "feed"), so feed
+readers can follow them. Nexus reads both (`features/feeds/parse.ts`).
+
 **BullMQ**: the job queue library (on Redis) behind syncs and scheduled sends.

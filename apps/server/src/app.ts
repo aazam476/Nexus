@@ -11,6 +11,7 @@ import { accountRoutes } from './features/accounts/routes.ts'
 import { authRoutes } from './features/auth/routes.ts'
 import { contactRoutes } from './features/contacts/routes.ts'
 import { encryptionRoutes } from './features/encryption/routes.ts'
+import { feedRoutes } from './features/feeds/routes.ts'
 import { importExportRoutes } from './features/importexport/routes.ts'
 import { mailRoutes } from './features/mail/routes.ts'
 import { pluginRoutes } from './features/plugins/routes.ts'
@@ -75,6 +76,7 @@ export async function buildApp() {
     encryptionRoutes,
     pluginRoutes,
     importExportRoutes,
+    feedRoutes,
   ]) {
     await app.register(routes, { prefix: '/api' })
   }

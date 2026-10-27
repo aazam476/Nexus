@@ -112,3 +112,28 @@ export interface Rule {
   value?: string | null
   enabled: boolean
 }
+
+// ---------- Feeds (RSS and Atom) ----------
+
+export interface Feed {
+  id: string
+  url: string
+  title: string
+  siteUrl: string | null
+  lastFetchedAt: string | null
+  error: string | null // why the last check failed
+  unread: number
+}
+
+export interface FeedItem {
+  id: string
+  feedId: string
+  feedTitle: string
+  title: string
+  link: string | null
+  author: string | null
+  summary: string
+  content?: string // only when one post is loaded
+  publishedAt: string
+  unread: boolean
+}
