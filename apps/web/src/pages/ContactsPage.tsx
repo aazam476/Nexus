@@ -56,7 +56,7 @@ export function ContactsPage() {
               <Menu size={18} />
             </button>
             <h1 className="text-[19px] font-bold tracking-tight">Contacts</h1>
-            <div className="ml-auto flex gap-1">
+            <div className="ml-auto flex items-center gap-1">
               <Button
                 variant="ghost"
                 title="Import vCard"
@@ -80,7 +80,7 @@ export function ContactsPage() {
                 href="/api/contacts/export.vcf"
                 title="Export vCard"
                 aria-label="Export vCard"
-                className="rounded-lg px-3 py-1.5 text-ink-2 hover:bg-raise"
+                className="inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-ink-2 hover:bg-raise"
               >
                 <Download size={15} />
               </a>
