@@ -98,7 +98,7 @@ to the rest of your self-hosted stack.
 | Lost your two-factor device | Use one of the recovery codes you saved when you turned it on: *Use a recovery code* on the sign-in page. |
 | A scheduled message says "Nexus stopped while sending this" | Nexus restarted in the middle of sending it, so it may or may not have gone out. Check **Sent**, then choose *Send now* or *Cancel*. |
 | "This message is in private storage" | Only its owner can read it, while signed in. See [Private storage](#private-storage). |
-| Signing in to Gmail or Outlook says it isn't set up | The server has no OAuth app for it yet. See [Gmail and Outlook sign-in](#gmail-and-outlook-sign-in), or use an app password with *Other provider*. |
+| Google or Microsoft is greyed out when adding an account | The server has no OAuth app for it yet. See [Gmail and Outlook sign-in](#gmail-and-outlook-sign-in), or use an app password with *Other provider*. |
 
 ## Updating
 
