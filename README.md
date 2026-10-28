@@ -77,8 +77,9 @@ to the rest of your self-hosted stack.
 5. **Add a mail account:** **Settings → Mail accounts**. Pick Google,
    Microsoft or *Other provider* and fill in its servers. Your mail shows up
    in the inbox as it syncs.
-6. **Optional, more users:** admins add people in **Settings → Users &
-   sharing**, and can share a mailbox with them as an editor or a viewer.
+6. **Optional, more users:** admins add people in **Settings → Admin**.
+   Anyone can then share their mailbox with other people in
+   **Settings → Sharing**, as an editor or a viewer.
 
 > **Important:** keep `APP_SECRET` safe and never change it. It encrypts the
 > stored mail passwords; with a different secret Nexus can't read them, and
@@ -126,8 +127,8 @@ Keep `.env` with it: the backup is useless without the same `APP_SECRET`.
 
 Create an OAuth app with Google and/or Microsoft. Set its redirect URL to
 `PUBLIC_URL/api/oauth/google/callback` (or `/microsoft/callback`), and put
-its client ID and secret in `.env`. Without them, those buttons explain
-what's missing, and IMAP with an app password still works.
+its client ID and secret in `.env`. Without them, those buttons are greyed
+out and say they aren't set up, and IMAP with an app password still works.
 
 ### Encrypt the host disk
 
