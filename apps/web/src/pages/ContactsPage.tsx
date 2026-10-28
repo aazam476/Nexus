@@ -56,9 +56,10 @@ export function ContactsPage() {
               <Menu size={18} />
             </button>
             <h1 className="text-[19px] font-bold tracking-tight">Contacts</h1>
-            <div className="ml-auto flex items-center gap-1">
+            {/* Same boxes, stretched to the same height, so the gaps between them look equal. */}
+            <div className="ml-auto flex items-stretch gap-1.5">
               <Button
-                variant="ghost"
+                variant="secondary"
                 title="Import vCard"
                 aria-label="Import vCard"
                 onClick={() => importInput.current?.click()}
@@ -80,7 +81,7 @@ export function ContactsPage() {
                 href="/api/contacts/export.vcf"
                 title="Export vCard"
                 aria-label="Export vCard"
-                className="inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-ink-2 hover:bg-raise"
+                className="inline-flex items-center justify-center rounded-lg border border-line bg-raise px-3 text-ink hover:bg-hover"
               >
                 <Download size={15} />
               </a>
