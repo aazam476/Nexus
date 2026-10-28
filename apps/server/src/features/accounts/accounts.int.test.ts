@@ -36,7 +36,11 @@ describe('adding an account', () => {
     const { browser } = await signedInUser(app)
     const unreachable = await browser.post('/api/accounts', { ...greenMail(uniqueAddress()), inPort: 1 })
     expect(unreachable.statusCode).toBe(400)
-    expect(unreachable.json().error).toMatch(/^Could not connect: .*ECONNREFUSED/)
+    expect(unreachable.json().error).toMatch(/^Could not connect: Incoming mail: .*ECONNREFUSED/)
+
+    // SSL/TLS on a port that expects STARTTLS (GreenMail's plain SMTP port) gets a plain explanation.
+    const wrongSecurity = await browser.post('/api/accounts', { ...greenMail(uniqueAddress()), smtpPort: 3025 })
+    expect(wrongSecurity.json().error).toMatch(/^Could not connect: Outgoing mail \(SMTP\): .*port 3025.*STARTTLS/)
 
     const { email } = await addAccount(browser)
     const twice = await browser.post('/api/accounts', greenMail(email))

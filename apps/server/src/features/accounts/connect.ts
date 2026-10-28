@@ -4,6 +4,7 @@ import { ImapFlow } from 'imapflow'
 import nodemailer from 'nodemailer'
 import { config } from '../../config.ts'
 import { decrypt } from '../../lib/crypto.ts'
+import { errorMessage } from '../../lib/http.ts'
 import { accessToken } from './oauth.ts'
 import { Pop3 } from './pop3.ts'
 
@@ -89,15 +90,36 @@ export async function smtpTransport(account: ServerSettings) {
 }
 
 // Used when adding or editing an account: proves both servers accept the login before saving.
+// Errors say which server failed, and what to change when the security setting doesn't fit the port.
 export async function testConnection(account: ServerSettings & { protocol: string }) {
-  if (account.protocol === 'imap') {
-    await withImap(account, async () => undefined)
-  } else {
-    const pop3 = await openPop3(account)
-    await pop3.uidl()
-    await pop3.quit()
+  await explained('Incoming mail', account.inPort, account.inTls, async () => {
+    if (account.protocol === 'imap') {
+      await withImap(account, async () => undefined)
+    } else {
+      const pop3 = await openPop3(account)
+      await pop3.uidl()
+      await pop3.quit()
+    }
+  })
+  await explained('Outgoing mail (SMTP)', account.smtpPort, account.smtpTls, async () => {
+    const transport = await smtpTransport(account)
+    await transport.verify()
+    transport.close()
+  })
+}
+
+async function explained(server: string, port: number, tls: boolean, work: () => Promise<void>) {
+  try {
+    await work()
+  } catch (error) {
+    const message = errorMessage(error)
+    // OpenSSL's "wrong version number": we started with SSL/TLS, but the server answered in plain
+    // text, because on this port it expects STARTTLS (like 587 for sending or 143 for IMAP).
+    if (tls && /wrong version number/i.test(message)) {
+      throw new Error(
+        `${server}: the server on port ${port} doesn't use SSL/TLS from the start. Choose STARTTLS for this port, or switch to its SSL/TLS port (usually 993 for IMAP, 995 for POP3, 465 for SMTP).`,
+      )
+    }
+    throw new Error(`${server}: ${message}`)
   }
-  const transport = await smtpTransport(account)
-  await transport.verify()
-  transport.close()
 }
