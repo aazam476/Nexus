@@ -90,7 +90,9 @@ export function Toggle({
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="rounded border border-line px-1.5 font-sans text-[11px] font-semibold text-muted">{children}</kbd>
+    <kbd className="rounded border border-line px-1.5 font-sans whitespace-nowrap text-[11px] font-semibold text-muted">
+      {children}
+    </kbd>
   )
 }
 

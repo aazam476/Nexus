@@ -42,7 +42,7 @@ function Count({ value }: { value: number }) {
   return value > 0 ? <span className="ml-auto text-[12px] text-muted">{value}</span> : null
 }
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+export function Sidebar({ onNavigate, onShowShortcuts }: { onNavigate?: () => void; onShowShortcuts: () => void }) {
   const { openComposer } = useStore()
   const { pathname, search } = useLocation()
   const accountFilter = new URLSearchParams(search).get('account')
@@ -148,13 +148,13 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <button type="button" onClick={signOut} className={itemClass(false)}>
           <LogOut size={16} strokeWidth={1.8} /> Sign out
         </button>
-        <SyncStatus accounts={accounts} />
+        <SyncStatus accounts={accounts} onShowShortcuts={onShowShortcuts} />
       </div>
     </nav>
   )
 }
 
-function SyncStatus({ accounts }: { accounts: Account[] }) {
+function SyncStatus({ accounts, onShowShortcuts }: { accounts: Account[]; onShowShortcuts: () => void }) {
   const failing = accounts.filter((a) => a.syncError)
   const last = accounts
     .map((a) => a.lastSyncAt)
@@ -175,9 +175,14 @@ function SyncStatus({ accounts }: { accounts: Account[] }) {
     >
       <i className={`h-[7px] w-[7px] shrink-0 rounded-full ${failing.length ? 'bg-danger' : 'bg-news'}`} />
       <span className="truncate">{text}</span>
-      <span className="ml-auto">
-        <Kbd>?</Kbd>
-      </span>
+      {/* Opens the list of keyboard shortcuts, as pressing ? does. */}
+      <button
+        type="button"
+        onClick={onShowShortcuts}
+        className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-raise hover:text-ink"
+      >
+        Shortcuts <Kbd>?</Kbd>
+      </button>
     </div>
   )
 }

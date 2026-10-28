@@ -63,7 +63,7 @@ export function AppShell() {
   return (
     <div className="flex h-full overflow-hidden">
       <aside className="hidden w-[228px] shrink-0 border-r border-line md:block">
-        <Sidebar />
+        <Sidebar onShowShortcuts={() => setHelpOpen(true)} />
       </aside>
 
       {navOpen && (
@@ -75,7 +75,13 @@ export function AppShell() {
             onClick={() => setNavOpen(false)}
           />
           <aside className="absolute inset-y-0 left-0 w-[280px] border-r border-line shadow-pop">
-            <Sidebar onNavigate={() => setNavOpen(false)} />
+            <Sidebar
+              onNavigate={() => setNavOpen(false)}
+              onShowShortcuts={() => {
+                setNavOpen(false)
+                setHelpOpen(true)
+              }}
+            />
           </aside>
         </div>
       )}

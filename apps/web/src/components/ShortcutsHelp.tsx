@@ -29,7 +29,7 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-line bg-panel shadow-pop"
+        className="w-full max-w-xl rounded-2xl border border-line bg-panel shadow-pop"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
@@ -45,7 +45,7 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
             <X size={16} />
           </button>
         </header>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 px-5 py-4">
+        <dl className="grid gap-x-6 gap-y-2 px-5 py-4 sm:grid-cols-2">
           {shortcuts.map(([key, label]) => (
             <div key={key} className="flex items-center justify-between gap-3">
               <dt className="text-ink-2">{label}</dt>
