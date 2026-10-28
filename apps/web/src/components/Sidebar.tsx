@@ -20,6 +20,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router'
 import { api } from '../lib/api'
 import { useAccounts, useCounts, useFeeds, useLabels } from '../lib/queries'
 import { useStore } from '../lib/store'
+import { timeAgo } from '../lib/format'
 import type { Account, FolderRole } from '../types'
 import { Kbd, Logo } from './ui'
 
@@ -153,21 +154,27 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-// Says only when something is wrong: an account that can't sync (the reason shows on hover).
-// The "?" opens the keyboard shortcuts.
 function SyncStatus({ accounts }: { accounts: Account[] }) {
   const failing = accounts.filter((a) => a.syncError)
+  const last = accounts
+    .map((a) => a.lastSyncAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1)
+  const text = failing.length
+    ? `Can’t sync ${failing.map((a) => a.email).join(', ')}`
+    : accounts.length === 0
+      ? 'No accounts yet'
+      : last
+        ? `Synced ${timeAgo(last)}`
+        : 'Syncing…'
   return (
     <div
       className="flex items-center gap-2 px-2 pt-2 text-[12px] text-muted"
       title={failing.map((a) => `${a.email}: ${a.syncError}`).join('\n') || undefined}
     >
-      {failing.length > 0 && (
-        <>
-          <i className="h-[7px] w-[7px] shrink-0 rounded-full bg-danger" />
-          <span className="truncate">Can’t sync {failing.map((a) => a.email).join(', ')}</span>
-        </>
-      )}
+      <i className={`h-[7px] w-[7px] shrink-0 rounded-full ${failing.length ? 'bg-danger' : 'bg-news'}`} />
+      <span className="truncate">{text}</span>
       <span className="ml-auto">
         <Kbd>?</Kbd>
       </span>
