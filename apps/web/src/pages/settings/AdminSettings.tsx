@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Upload, UserPlus } from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'
-import { Avatar, Button, Card, Chip, Field, Input, Toggle } from '../../components/ui'
+import { Avatar, Button, Card, Chip, Field, Input, Select, Toggle } from '../../components/ui'
 import { api, del, patch, put } from '../../lib/api'
 import { useMe } from '../../lib/queries'
 
@@ -134,14 +134,10 @@ function UsersCard({ myId }: { myId: string }) {
               <Input name="password" type="text" minLength={12} required autoComplete="off" />
             </Field>
             <Field label="Role">
-              <select
-                name="role"
-                defaultValue="user"
-                className="w-full rounded-lg border border-line bg-raise px-3 py-2 text-ink"
-              >
+              <Select name="role" defaultValue="user" className="w-full">
                 <option value="user">User</option>
                 <option value="admin">Admin</option>
-              </select>
+              </Select>
             </Field>
             <div className="flex gap-2 sm:col-span-2">
               <Button type="submit" variant="primary">
@@ -163,18 +159,17 @@ function UsersCard({ myId }: { myId: string }) {
                 <p className="text-[12.5px] text-muted">{user.email}</p>
               </div>
               {!user.twoFactor && <Chip color="var(--notif)">2FA off</Chip>}
-              <select
+              <Select
                 value={user.role}
                 disabled={user.id === myId}
                 aria-label={`Role for ${user.name}`}
                 onChange={(e) =>
                   patch(`/users/${user.id}`, { role: e.target.value }).then(refresh, (err) => setError(err.message))
                 }
-                className="rounded-lg border border-line bg-raise px-2.5 py-1.5 text-ink disabled:opacity-60"
               >
                 <option value="admin">Admin</option>
                 <option value="user">User</option>
-              </select>
+              </Select>
               {user.id !== myId && (
                 <Button variant="ghost" onClick={() => setResetting(resetting === user.id ? null : user.id)}>
                   Reset password

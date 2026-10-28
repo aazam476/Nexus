@@ -1,7 +1,7 @@
 // Settings → Sharing: owners share their mail accounts with other people on the server, as editor or viewer.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Avatar, Button, Card } from '../../components/ui'
+import { Avatar, Button, Card, Select } from '../../components/ui'
 import { api, del, put } from '../../lib/api'
 import { useAccounts, useMe } from '../../lib/queries'
 import type { Account } from '../../types'
@@ -78,15 +78,14 @@ function AccountMembers({ account }: { account: Account }) {
           <span className="flex-1">
             {m.name} <span className="text-muted">{m.email}</span>
           </span>
-          <select
+          <Select
             value={m.role}
             aria-label={`Access for ${m.name}`}
             onChange={(e) => setRole(m.userId, e.target.value)}
-            className="rounded-lg border border-line bg-raise px-2.5 py-1.5 text-ink"
           >
             <option value="editor">Editor</option>
             <option value="viewer">Viewer</option>
-          </select>
+          </Select>
           <Button variant="ghost" onClick={() => del(`/accounts/${account.id}/members/${m.userId}`).then(refresh)}>
             Remove
           </Button>
@@ -101,26 +100,17 @@ function AccountMembers({ account }: { account: Account }) {
             setRole(String(f.get('userId')), String(f.get('role')))
           }}
         >
-          <select
-            name="userId"
-            aria-label="Person to share with"
-            className="min-w-0 flex-1 rounded-lg border border-line bg-raise px-2.5 py-1.5 text-ink"
-          >
+          <Select name="userId" aria-label="Person to share with" className="min-w-0 flex-1">
             {candidates.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name} ({u.email})
               </option>
             ))}
-          </select>
-          <select
-            name="role"
-            defaultValue="viewer"
-            aria-label="Access level"
-            className="rounded-lg border border-line bg-raise px-2.5 py-1.5 text-ink"
-          >
+          </Select>
+          <Select name="role" defaultValue="viewer" aria-label="Access level">
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
-          </select>
+          </Select>
           <Button type="submit">Share</Button>
         </form>
       )}

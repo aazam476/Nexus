@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Download, Trash2, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { AddFeed } from '../../components/feeds/AddFeed'
-import { Button, Card } from '../../components/ui'
+import { Button, Card, Select } from '../../components/ui'
 import { api, del, put } from '../../lib/api'
 import { useFeeds, useMe } from '../../lib/queries'
 import type { Feed } from '../../types'
@@ -87,17 +87,13 @@ function OldPosts() {
     >
       <label className="flex items-center gap-2 text-ink-2">
         Delete posts after
-        <select
-          value={retention ?? ''}
-          onChange={(event) => setRetention(event.target.value)}
-          className="rounded-lg border border-line bg-raise px-2 py-1 text-ink"
-        >
+        <Select value={retention ?? ''} onChange={(event) => setRetention(event.target.value)}>
           {RETENTION_CHOICES.map(({ label, days }) => (
             <option key={label} value={days ?? ''}>
               {label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
     </Card>
   )

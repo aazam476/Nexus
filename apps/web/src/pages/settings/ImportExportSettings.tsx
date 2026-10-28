@@ -1,11 +1,9 @@
 // Settings → Import & export: upload .eml/.mbox files into an account, download mail as .mbox.
 import { Download, Upload } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Button, Card, Field } from '../../components/ui'
+import { Button, Card, Field, Select } from '../../components/ui'
 import { api } from '../../lib/api'
 import { useAccounts, useRefreshMail } from '../../lib/queries'
-
-const select = 'w-full rounded-lg border border-line bg-raise px-3 py-2 text-ink'
 
 export function ImportExportSettings() {
   const accounts = useAccounts().data ?? []
@@ -67,7 +65,7 @@ export function ImportExportSettings() {
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Into account">
-              <select name="accountId" className={select} required>
+              <Select name="accountId" className="w-full" required>
                 {accounts
                   .filter((a) => a.role !== 'viewer')
                   .map((a) => (
@@ -75,14 +73,14 @@ export function ImportExportSettings() {
                       {a.email}
                     </option>
                   ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Folder">
-              <select name="folder" defaultValue="archive" className={select}>
+              <Select name="folder" defaultValue="archive" className="w-full">
                 <option value="archive">Archive</option>
                 <option value="inbox">Inbox</option>
                 <option value="sent">Sent</option>
-              </select>
+              </Select>
             </Field>
           </div>
           {status && (
@@ -107,24 +105,24 @@ export function ImportExportSettings() {
       <Card title="Export mail" description="Download mail as a standard .mbox file any mail client can open.">
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <Field label="Account">
-            <select value={exportAccount} onChange={(e) => setExportAccount(e.target.value)} className={select}>
+            <Select value={exportAccount} onChange={(e) => setExportAccount(e.target.value)} className="w-full">
               <option value="">All accounts</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.email}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Folder">
-            <select value={exportFolder} onChange={(e) => setExportFolder(e.target.value)} className={select}>
+            <Select value={exportFolder} onChange={(e) => setExportFolder(e.target.value)} className="w-full">
               <option value="">Everything</option>
               <option value="inbox">Inbox</option>
               <option value="sent">Sent</option>
               <option value="archive">Archive</option>
               <option value="spam">Spam</option>
               <option value="trash">Trash</option>
-            </select>
+            </Select>
           </Field>
           <a
             href={exportUrl}

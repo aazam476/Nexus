@@ -1,5 +1,6 @@
 // Small shared building blocks. Keep these plain: one job each.
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 import { avatarColor, initials } from '../lib/format'
 
 export function Logo({ size = 28 }: { size?: number }) {
@@ -60,6 +61,25 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
       className="w-full rounded-lg border border-line bg-raise px-3 py-2 text-[13.5px] text-ink placeholder:text-faint focus:border-accent focus:outline-none"
       {...props}
     />
+  )
+}
+
+// The browser's own dropdown (it keeps keyboard, screen-reader and phone pickers working), dressed
+// like Input so the two line up. Its built-in arrow is hidden and drawn here to match the theme.
+// `className` sizes the whole thing, like "w-full".
+export function Select({ className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <span className={`relative inline-flex ${className}`}>
+      <select
+        className="w-full min-w-0 cursor-pointer appearance-none rounded-lg border border-line bg-raise py-2 pr-8 pl-3 text-[13.5px] text-ink focus:border-accent focus:outline-none disabled:cursor-default disabled:opacity-60"
+        {...props}
+      />
+      <ChevronDown
+        size={14}
+        className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-muted"
+        aria-hidden
+      />
+    </span>
   )
 }
 

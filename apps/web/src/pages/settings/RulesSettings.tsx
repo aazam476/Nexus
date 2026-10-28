@@ -2,7 +2,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Card, Field, Input, Toggle } from '../../components/ui'
+import { Button, Card, Field, Input, Select, Toggle } from '../../components/ui'
 import { api, del, patch, put } from '../../lib/api'
 import { useBlocked, useMe, useRules } from '../../lib/queries'
 import type { Rule } from '../../types'
@@ -186,7 +186,6 @@ function NewRule({ onDone }: { onDone: () => void }) {
       setError((e as Error).message)
     }
   }
-  const select = 'w-full rounded-lg border border-line bg-raise px-3 py-2 text-ink'
   return (
     <form onSubmit={submit} className="grid gap-3 rounded-xl border border-line p-4 sm:grid-cols-2">
       <div className="sm:col-span-2">
@@ -195,41 +194,41 @@ function NewRule({ onDone }: { onDone: () => void }) {
         </Field>
       </div>
       <Field label="When">
-        <select name="field" className={select}>
+        <Select name="field" className="w-full">
           <option value="from">Sender</option>
           <option value="to">Recipient</option>
           <option value="subject">Subject</option>
           <option value="body">Message text</option>
-        </select>
+        </Select>
       </Field>
       <Field label="Contains">
         <Input name="contains" placeholder="invoice" required />
       </Field>
       <Field label="Then">
-        <select value={action} onChange={(e) => setAction(e.target.value as Rule['action'])} className={select}>
+        <Select value={action} onChange={(e) => setAction(e.target.value as Rule['action'])} className="w-full">
           {Object.entries(actions).map(([id, a]) => (
             <option key={id} value={id}>
               {a.text[0].toUpperCase() + a.text.slice(1)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       {action === 'move' ? (
         <Field label="Folder">
-          <select name="value" className={select}>
+          <Select name="value" className="w-full">
             <option value="archive">Archive</option>
             <option value="spam">Spam</option>
             <option value="trash">Trash</option>
-          </select>
+          </Select>
         </Field>
       ) : action === 'category' ? (
         <Field label="Section">
-          <select name="value" className={select}>
+          <Select name="value" className="w-full">
             <option value="people">People</option>
             <option value="travel">Travel</option>
             <option value="notifications">Notifications</option>
             <option value="newsletters">Newsletters</option>
-          </select>
+          </Select>
         </Field>
       ) : actions[action].needsValue ? (
         <Field label={actions[action].needsValue!}>

@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, KeyRound, Plus, Trash2, Upload } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Button, Card, Chip, Field, Input } from '../../components/ui'
+import { Button, Card, Chip, Field, Input, Select } from '../../components/ui'
 import { api, del, fileToBase64 } from '../../lib/api'
 import * as pgp from '../../lib/pgp'
 import { useAccounts, useMe } from '../../lib/queries'
@@ -80,11 +80,11 @@ function PgpCard() {
           <form onSubmit={submit} className="grid gap-3 rounded-xl border border-line p-4">
             {mode === 'generate' ? (
               <Field label="Email address on the key">
-                <select name="email" className="w-full rounded-lg border border-line bg-raise px-3 py-2 text-ink">
+                <Select name="email" className="w-full">
                   {[...new Set([me?.email, ...accounts.map((a) => a.email)])].filter(Boolean).map((email) => (
                     <option key={email}>{email}</option>
                   ))}
-                </select>
+                </Select>
               </Field>
             ) : (
               <Field

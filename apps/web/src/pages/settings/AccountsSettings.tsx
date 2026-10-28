@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Plus, RefreshCw } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
-import { Button, Card, Chip, Field, Input } from '../../components/ui'
+import { Button, Card, Chip, Field, Input, Select } from '../../components/ui'
 import { api, del, patch, put } from '../../lib/api'
 import { timeAgo } from '../../lib/format'
 import { sanitizeForEditor } from '../../lib/sanitize'
@@ -251,17 +251,13 @@ function UndoSendCard() {
     >
       <label className="flex items-center gap-2 text-ink-2">
         Wait before sending
-        <select
-          value={seconds}
-          onChange={(event) => choose(event.target.value)}
-          className="rounded-lg border border-line bg-raise px-2 py-1 text-ink"
-        >
+        <Select value={seconds} onChange={(event) => choose(event.target.value)}>
           {UNDO_CHOICES.map(({ label, seconds }) => (
             <option key={seconds} value={seconds}>
               {label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
     </Card>
   )
@@ -317,14 +313,10 @@ function AddAccount({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
 
   const security = (name: string, defaultValue: string) => (
     <Field label="Security">
-      <select
-        name={name}
-        defaultValue={defaultValue}
-        className="w-full rounded-lg border border-line bg-raise px-3 py-2 text-ink"
-      >
+      <Select name={name} defaultValue={defaultValue} className="w-full">
         <option value="tls">SSL/TLS</option>
         <option value="starttls">STARTTLS</option>
-      </select>
+      </Select>
     </Field>
   )
 
