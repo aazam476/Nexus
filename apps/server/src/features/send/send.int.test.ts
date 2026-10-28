@@ -4,6 +4,7 @@ import { simpleParser } from 'mailparser'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from '../../db.ts'
 import { syncAccount } from '../mail/sync.ts'
+import { sendScheduled } from './send.ts'
 import {
   addAccount,
   makeP12,
@@ -252,6 +253,30 @@ describe('scheduled send', () => {
     expect(await browser.json('POST', `/api/outgoing/${second.id}/send-now`)).toEqual({ sent: true })
     expect((await received(to)).map((m) => m.subject)).toEqual(['Later 2'])
     expect(await browser.json('GET', '/api/messages?folder=scheduled')).toEqual([])
+  })
+
+  it('holds a sent message back for undo, and turns it back into a draft', async () => {
+    const { browser, accountId } = await sender()
+    const to = uniqueAddress()
+    const message = { accountId, to: [to], subject: 'Oops', html: '<p>Wrong attachment</p>', text: 'Wrong attachment' }
+
+    const held = await browser.json<{ id: string; sendsAt: string }>('POST', '/api/send', {
+      ...message,
+      undoSeconds: 10,
+    })
+    expect(Date.parse(held.sendsAt) - Date.now()).toBeGreaterThan(8_000)
+    expect(await received(to)).toEqual([]) // not sent yet
+
+    const draft = await browser.json('POST', `/api/outgoing/${held.id}/undo`)
+    expect(draft).toMatchObject({ id: held.id, to: [to], subject: 'Oops', html: '<p>Wrong attachment</p>' })
+    const drafts = await browser.json<{ id: string }[]>('GET', '/api/messages?folder=drafts')
+    expect(drafts.map((d) => d.id)).toEqual([held.id])
+
+    // Once the timer is up it goes, and then it's too late to undo.
+    const second = await browser.json<{ id: string }>('POST', '/api/send', { ...message, undoSeconds: 5 })
+    await sendScheduled(second.id, true) // what the send job does when the timer is up
+    expect((await received(to)).map((m) => m.subject)).toEqual(['Oops'])
+    expect((await browser.post(`/api/outgoing/${second.id}/undo`)).json().error).toMatch(/Too late/)
   })
 
   it('sends right away when the chosen time has already passed', async () => {

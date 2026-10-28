@@ -31,7 +31,7 @@ test('sends a formatted message with an attachment', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(page.getByText('Message sent')).toBeVisible()
-  await expect.poll(() => subjectsOnServer(to)).toEqual([title])
+  await expect.poll(() => subjectsOnServer(to), { timeout: 15_000 }).toEqual([title])
 })
 
 test('refuses to send without a recipient, saying why', async ({ page }) => {
@@ -89,7 +89,7 @@ test('explains Bcc-only mail before it is sent', async ({ page }) => {
   await expect(page.getByText(/Sending to Bcc only/)).toBeVisible()
   await page.getByLabel('Subject').fill(title)
   await page.getByRole('button', { name: 'Send', exact: true }).click()
-  await expect.poll(() => subjectsOnServer(hidden)).toEqual([title])
+  await expect.poll(() => subjectsOnServer(hidden), { timeout: 15_000 }).toEqual([title])
 })
 
 test('formats text, links, lists, fonts, images and raw HTML, and the recipient gets all of it', async ({ page }) => {
@@ -132,5 +132,44 @@ test('formats text, links, lists, fonts, images and raw HTML, and the recipient 
   await expect(page.getByLabel('Message body').getByText('Added in')).toBeVisible()
 
   await page.getByRole('button', { name: 'Send', exact: true }).click()
-  await expect.poll(() => subjectsOnServer(to)).toEqual([title])
+  await expect.poll(() => subjectsOnServer(to), { timeout: 15_000 }).toEqual([title])
+})
+
+test('undo send: takes a message back, sends it on View message, and goes by itself when the time is up', async ({
+  page,
+}) => {
+  const to = uniqueAddress('undo')
+  const notice = page.getByRole('status').filter({ hasText: 'Message sent.' })
+  await page.goto('/settings/accounts')
+  await page.getByLabel('Wait before sending').selectOption({ label: '30 seconds' })
+  await expect(page.getByLabel('Wait before sending')).toHaveValue('30')
+
+  // Undo send brings it back to the composer, unsent.
+  const first = subject('Wrong attachment')
+  await write(page, to, first, 'Oops.')
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
+  await notice.getByRole('button', { name: 'Undo send' }).click()
+  await expect(page.getByLabel('Subject')).toHaveValue(first)
+  expect(await subjectsOnServer(to)).toEqual([])
+
+  // View message sends it at once, and opens the copy in Sent.
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
+  await notice.getByRole('button', { name: 'View message' }).click()
+  await expect(page).toHaveURL(/\/mail\/sent\/\w+/, { timeout: 15_000 })
+  await expect(page.getByRole('heading', { name: first })).toBeVisible()
+  expect(await subjectsOnServer(to)).toEqual([first])
+
+  // When the time is up it goes by itself, and the notice stays without Undo send.
+  await page.goto('/settings/accounts')
+  await page.getByLabel('Wait before sending').selectOption({ label: '5 seconds' })
+  await expect(page.getByLabel('Wait before sending')).toHaveValue('5')
+  const second = subject('On its way')
+  await write(page, to, second, 'Here it comes.')
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect(notice.getByRole('button', { name: 'Undo send' })).toBeVisible()
+  await expect(notice.getByRole('button', { name: 'Undo send' })).toBeHidden({ timeout: 10_000 })
+  await expect(notice).toBeVisible()
+  await expect.poll(() => subjectsOnServer(to), { timeout: 15_000 }).toContain(second)
+  await notice.getByRole('button', { name: 'Close' }).click()
+  await expect(notice).toBeHidden()
 })

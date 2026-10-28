@@ -178,6 +178,9 @@ Good to know before turning it on:
   **Settings → Password & 2FA**. With private storage on, a passkey that
   supports PRF (most do) can open your mail too. Both belong to the address in
   `PUBLIC_URL`, so set it to the address people really use.
+- **Undo send:** a sent message waits a few seconds (5 by default; Off, 10,
+  20 or 30 in **Settings → Mail accounts**) so you can take it back from the
+  notice in the corner. PGP-encrypted mail goes at once.
 - **Shared mailboxes:** mail accounts are private to whoever added them, until
   they share one in **Settings → Sharing**. Editors can read, send and sort;
   viewers can only read.

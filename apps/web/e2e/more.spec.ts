@@ -73,7 +73,7 @@ test('previews and forwards attachments', async ({ page }) => {
   await page.getByLabel('To', { exact: true }).fill(to)
   await page.getByLabel('To', { exact: true }).press('Enter')
   await page.getByRole('button', { name: 'Send', exact: true }).click()
-  await expect.poll(() => subjectsOnServer(to)).toEqual([`Fwd: ${title}`])
+  await expect.poll(() => subjectsOnServer(to), { timeout: 15_000 }).toEqual([`Fwd: ${title}`])
 })
 
 test('saves an attachment to Paperless through its plugin', async ({ page }) => {

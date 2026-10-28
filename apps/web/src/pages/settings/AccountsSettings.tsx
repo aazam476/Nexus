@@ -5,10 +5,10 @@ import { Plus, RefreshCw } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
 import { Button, Card, Chip, Field, Input } from '../../components/ui'
-import { api, del, patch } from '../../lib/api'
+import { api, del, patch, put } from '../../lib/api'
 import { timeAgo } from '../../lib/format'
 import { sanitizeForEditor } from '../../lib/sanitize'
-import { useAccounts, useServerStatus } from '../../lib/queries'
+import { useAccounts, useMe, useServerStatus } from '../../lib/queries'
 import type { Account } from '../../types'
 
 const authLabels = { password: 'Password', 'oauth-google': 'Google sign-in', 'oauth-microsoft': 'Microsoft sign-in' }
@@ -68,6 +68,8 @@ export function AccountsSettings() {
           onCancel={() => setAdding(false)}
         />
       )}
+
+      <UndoSendCard />
 
       {accounts.some((a) => a.role !== 'viewer') && (
         <Card title="Signatures" description="Added to the end of new messages. Saved when you click away.">
@@ -221,6 +223,47 @@ function AccountRow({ account, onChange }: { account: Account; onChange: () => v
         </p>
       )}
     </li>
+  )
+}
+
+// How long a sent message waits before it goes, so "Undo send" can still take it back.
+const UNDO_CHOICES = [
+  { label: 'Off', seconds: 0 },
+  { label: '5 seconds', seconds: 5 },
+  { label: '10 seconds', seconds: 10 },
+  { label: '20 seconds', seconds: 20 },
+  { label: '30 seconds', seconds: 30 },
+]
+
+function UndoSendCard() {
+  const client = useQueryClient()
+  const seconds = useMe().data?.preferences.undoSendSeconds ?? 5
+
+  async function choose(value: string) {
+    await put('/auth/me/preferences', { undoSendSeconds: Number(value) })
+    client.invalidateQueries({ queryKey: ['me'] })
+  }
+
+  return (
+    <Card
+      title="Undo send"
+      description="After you click Send, the message waits this long before it goes, so you can still take it back."
+    >
+      <label className="flex items-center gap-2 text-ink-2">
+        Wait before sending
+        <select
+          value={seconds}
+          onChange={(event) => choose(event.target.value)}
+          className="rounded-lg border border-line bg-raise px-2 py-1 text-ink"
+        >
+          {UNDO_CHOICES.map(({ label, seconds }) => (
+            <option key={seconds} value={seconds}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </Card>
   )
 }
 

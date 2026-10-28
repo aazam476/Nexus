@@ -154,7 +154,7 @@ test('replies to a message, and the reply reaches the sender', async ({ page }) 
   await page.keyboard.type('Yes, see you then!')
   await page.getByRole('button', { name: 'Send', exact: true }).click()
 
-  await expect.poll(() => subjectsOnServer(friend)).toEqual([`Re: ${question}`])
+  await expect.poll(() => subjectsOnServer(friend), { timeout: 15_000 }).toEqual([`Re: ${question}`])
   await expect.poll(() => subjectsOnServer(run().mailbox, 'Sent')).toContain(`Re: ${question}`)
 })
 

@@ -173,6 +173,7 @@ export async function authRoutes(app: FastifyInstance) {
           layout: 'three-pane',
           spamThreshold: 5,
           feedRetentionDays: null,
+          undoSendSeconds: 5,
         },
       }
     })
@@ -184,6 +185,7 @@ export async function authRoutes(app: FastifyInstance) {
           layout: z.enum(['three-pane', 'list']).optional(),
           spamThreshold: z.number().min(1).max(20).optional(),
           feedRetentionDays: z.number().int().min(1).max(3650).nullable().optional(), // null = keep feed posts forever
+          undoSendSeconds: z.number().int().min(0).max(30).optional(), // 0 = send at once
         }),
         request.body,
       )

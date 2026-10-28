@@ -7,6 +7,7 @@ import { isTyping } from '../lib/keyboard'
 import { useMe } from '../lib/queries'
 import { useStore } from '../lib/store'
 import { Composer } from './Composer'
+import { SentNotice } from './SentNotice'
 import { ShortcutsHelp } from './ShortcutsHelp'
 import { Sidebar } from './Sidebar'
 import { Logo } from './ui'
@@ -91,6 +92,7 @@ export function AppShell() {
       </main>
 
       {draft && <Composer key={draft.id ?? 'new'} />}
+      <SentNotice />
       {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
     </div>
   )

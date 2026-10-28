@@ -37,7 +37,7 @@ const PLACEMENT = {
 
 export function Composer() {
   // `draft` is what the composer was opened with: empty for a new message, or a reply, forward or saved draft.
-  const { draft, closeComposer } = useStore()
+  const { draft, closeComposer, setHeldMessage } = useStore()
   const me = useMe().data
   const refresh = useRefreshMail()
   // Viewers of a shared account can read it but not send from it.
@@ -143,8 +143,19 @@ export function Composer() {
     setBusy(true)
     setError('')
     try {
+      // Undo send: hold the message back for a few seconds (see SentNotice). Not for PGP mail, whose
+      // text is already encrypted here and couldn't come back to the composer readable.
+      const usesPgp = method === 'PGP' && (encrypt || sign)
+      const undoSeconds = scheduledFor || usesPgp ? 0 : (me?.preferences.undoSendSeconds ?? 0)
       // draftId tells the server to delete the draft this message came from.
-      await api('/send', { body: { ...(await buildPayload()), scheduledFor: scheduledFor?.toISOString(), draftId } })
+      const result = await api<{ id?: string; sendsAt?: string }>('/send', {
+        body: { ...(await buildPayload()), scheduledFor: scheduledFor?.toISOString(), draftId, undoSeconds },
+      })
+      if (undoSeconds > 0 && result.id && result.sendsAt) {
+        setHeldMessage({ id: result.id, accountId: account.id, subject, sendsAt: result.sendsAt })
+        refresh()
+        return closeComposer()
+      }
       setSentMessage(scheduledFor ? `Scheduled for ${formatFullDate(scheduledFor.toISOString())}` : 'Message sent')
       refresh()
       setTimeout(closeComposer, 1200)

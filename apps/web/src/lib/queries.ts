@@ -18,6 +18,7 @@ export interface Me {
     layout: 'three-pane' | 'list'
     spamThreshold: number
     feedRetentionDays: number | null // delete feed posts older than this; null keeps them all
+    undoSendSeconds: number // how long a sent message waits so it can be taken back; 0 = off
   }
 }
 

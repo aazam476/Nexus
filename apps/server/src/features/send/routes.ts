@@ -14,23 +14,32 @@ export async function sendRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireUser)
 
   // Send now, or later when `scheduledFor` is in the future. `draftId` removes the draft it came from.
+  // `undoSeconds` holds the message back for a few seconds, so it can still be taken back (undo send):
+  // it waits like a scheduled message, and POST /outgoing/:id/undo turns it back into a draft.
   app.post('/send', { bodyLimit: 30 * 1024 * 1024 }, async (request) => {
     const body = parse(
-      outgoingSchema.extend({ scheduledFor: z.coerce.date().optional(), draftId: z.string().optional() }),
+      outgoingSchema.extend({
+        scheduledFor: z.coerce.date().optional(),
+        draftId: z.string().optional(),
+        undoSeconds: z.number().int().min(0).max(30).default(0),
+      }),
       request.body,
     )
-    const { scheduledFor, draftId, ...fields } = body
+    const { draftId, undoSeconds, ...fields } = body
+    let { scheduledFor } = body
     await requireAccountRole(request.user.id, fields.accountId, 'editor')
     const payload = await withForwardedAttachments(request, fields)
+    const holdForUndo = !scheduledFor && undoSeconds > 0
+    if (holdForUndo) scheduledFor = new Date(Date.now() + undoSeconds * 1000)
 
-    if (scheduledFor && scheduledFor.getTime() > Date.now() + 30_000) {
+    if (scheduledFor && (holdForUndo || scheduledFor.getTime() > Date.now() + 30_000)) {
       const outgoing = await db.outgoingMessage.create({
         data: { userId: request.user.id, accountId: payload.accountId, status: 'scheduled', payload, scheduledFor },
       })
       await scheduleSend(outgoing.id, scheduledFor)
       if (draftId)
         await db.outgoingMessage.deleteMany({ where: { id: draftId, userId: request.user.id, status: 'draft' } })
-      return { scheduled: true, id: outgoing.id }
+      return { scheduled: true, id: outgoing.id, sendsAt: scheduledFor }
     }
 
     await sendNow(request.user.id, payload)
@@ -74,6 +83,28 @@ export async function sendRoutes(app: FastifyInstance) {
     await cancelSend(outgoing.id)
     await db.outgoingMessage.delete({ where: { id: outgoing.id } })
     return { ok: true }
+  })
+
+  // Undo send: a message still waiting to go becomes a draft again, and comes back to the composer.
+  app.post<{ Params: { id: string } }>('/outgoing/:id/undo', async (request) => {
+    // Claim it first, in one step, so the send job (which also claims it) can't send it at the same moment.
+    const claimed = await db.outgoingMessage.updateMany({
+      where: { id: request.params.id, userId: request.user.id, status: 'scheduled' },
+      data: { status: 'draft', scheduledFor: null },
+    })
+    if (!claimed.count) throw badRequest('Too late: it has already been sent')
+    await cancelSend(request.params.id)
+    const draft = await db.outgoingMessage.findUniqueOrThrow({ where: { id: request.params.id } })
+    const payload = draft.payload as OutgoingPayload
+    return {
+      id: draft.id,
+      accountId: draft.accountId,
+      to: payload.to,
+      cc: payload.cc,
+      bcc: payload.bcc,
+      subject: payload.subject,
+      html: payload.html, // the composer doesn't hold PGP mail back (its text is already encrypted)
+    }
   })
 
   app.post<{ Params: { id: string } }>('/outgoing/:id/send-now', async (request) => {

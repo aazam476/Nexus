@@ -294,6 +294,8 @@ model Preference {
   spamThreshold     Float  @default(5)
   // Delete feed posts older than this many days (starred ones are kept). Empty: keep everything.
   feedRetentionDays Int?
+  // Undo send: how many seconds a sent message waits, so it can still be taken back. 0 turns it off.
+  undoSendSeconds   Int    @default(5)
 }
 
 // ---------- Feeds (RSS and Atom) ----------

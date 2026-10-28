@@ -1,4 +1,4 @@
-// UI state shared across the app: theme, layout and the open composer.
+// UI state shared across the app: theme, layout, the open composer, and the "Message sent" notice.
 // Mail itself comes from the server through the hooks in queries.ts.
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Message } from '../types'
@@ -19,6 +19,14 @@ export interface Draft {
   forwardOf?: string // id of the message whose attachments go along
 }
 
+// A message held back for a few seconds after Send, so it can still be taken back (undo send).
+export interface HeldMessage {
+  id: string // its id on the server, while it waits
+  accountId: string
+  subject: string
+  sendsAt: string // when the server sends it, if nothing else happens first
+}
+
 interface Store {
   theme: Theme
   setTheme: (theme: Theme) => void
@@ -28,6 +36,8 @@ interface Store {
   draft: Draft | null
   openComposer: (draft?: Partial<Draft>) => void
   closeComposer: () => void
+  heldMessage: HeldMessage | null
+  setHeldMessage: (held: HeldMessage | null) => void
 }
 
 const StoreContext = createContext<Store | null>(null)
@@ -53,6 +63,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => readLocal('nexus.theme', 'system'))
   const [layout, setLayoutState] = useState<Layout>(() => readLocal('nexus.layout', 'three-pane'))
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [heldMessage, setHeldMessage] = useState<HeldMessage | null>(null)
 
   // Apply the theme to the page (styles.css picks colours by the html element's data-theme).
   // "system" follows the device's light/dark setting, and keeps following it if it changes.
@@ -94,6 +105,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     draft,
     openComposer: (partial) => setDraft({ to: '', cc: '', bcc: '', subject: '', ...partial }),
     closeComposer: () => setDraft(null),
+    heldMessage,
+    setHeldMessage,
   }
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>
