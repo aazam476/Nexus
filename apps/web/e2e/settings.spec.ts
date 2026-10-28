@@ -220,6 +220,7 @@ test('PGP: creates a key, sends encrypted mail, and decrypts it, all in the brow
   await page.getByLabel('Message body').click()
   await page.keyboard.type('Meet at the old oak tree.')
   await page.getByRole('switch', { name: 'Encrypt with PGP' }).click()
+  await expect(page.getByText(/can’t be unsent/)).toBeVisible() // encrypted mail skips undo send
   await page.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(page.getByText('Message sent')).toBeVisible()
 

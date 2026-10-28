@@ -90,7 +90,7 @@ export async function startWorkers() {
   // truth, so queue every pending one again; jobs already in Redis are skipped because the job
   // id is the message id.
   await failInterruptedSends()
-  const pending = await db.outgoingMessage.findMany({ where: { status: 'scheduled' } })
+  const pending = await db.outgoingMessage.findMany({ where: { status: { in: ['scheduled', 'held'] } } })
   for (const outgoing of pending) await scheduleSend(outgoing.id, outgoing.scheduledFor ?? new Date())
 
   // Failed sync jobs kept by older versions would still block their accounts (see syncDone).

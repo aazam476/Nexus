@@ -157,8 +157,9 @@ export async function sendScheduled(outgoingId: string, lastAttempt: boolean) {
   const outgoing = await db.outgoingMessage.findUnique({ where: { id: outgoingId } })
   if (!outgoing) return // cancelled or already sent
   // Claim it in one step, so it is only ever sent once even if two workers pick it up.
+  // "held" is a message waiting out its undo-send seconds; "scheduled", one the user scheduled.
   const claimed = await db.outgoingMessage.updateMany({
-    where: { id: outgoingId, status: 'scheduled' },
+    where: { id: outgoingId, status: { in: ['scheduled', 'held'] } },
     data: { status: 'sending' },
   })
   if (!claimed.count) return
@@ -168,7 +169,7 @@ export async function sendScheduled(outgoingId: string, lastAttempt: boolean) {
   } catch (error) {
     await db.outgoingMessage.update({
       where: { id: outgoingId },
-      data: { status: lastAttempt ? 'failed' : 'scheduled', error: errorMessage(error) },
+      data: { status: lastAttempt ? 'failed' : outgoing.status, error: errorMessage(error) },
     })
     throw error
   }

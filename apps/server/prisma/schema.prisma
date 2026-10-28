@@ -188,7 +188,7 @@ model OutgoingMessage {
   userId       String
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accountId    String? // empty for a draft written before any mail account was added
-  status       String // "draft" | "scheduled" | "sending" | "sent" | "failed"
+  status       String // "draft" | "scheduled" | "held" (waiting out undo send) | "sending" | "sent" | "failed"
   payload      Json // what the composer sent: recipients, subject, html, attachments, security options
   scheduledFor DateTime?
   error        String?

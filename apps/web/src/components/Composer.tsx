@@ -300,6 +300,8 @@ export function Composer() {
           {(encrypt || sign) && method === 'PGP' && (
             <p className="px-4 pb-1 text-[12.5px] text-muted">
               PGP mail is sent as plain text; formatting and inline images are left out.
+              {(me?.preferences.undoSendSeconds ?? 0) > 0 &&
+                ' It’s encrypted here before it leaves, so it goes at once and can’t be unsent.'}
             </p>
           )}
           {error && (

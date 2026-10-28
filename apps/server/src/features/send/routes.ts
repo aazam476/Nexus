@@ -34,7 +34,14 @@ export async function sendRoutes(app: FastifyInstance) {
 
     if (scheduledFor && (holdForUndo || scheduledFor.getTime() > Date.now() + 30_000)) {
       const outgoing = await db.outgoingMessage.create({
-        data: { userId: request.user.id, accountId: payload.accountId, status: 'scheduled', payload, scheduledFor },
+        data: {
+          userId: request.user.id,
+          accountId: payload.accountId,
+          // Held for undo send: out of sight in Scheduled, since it's as good as sent.
+          status: holdForUndo ? 'held' : 'scheduled',
+          payload,
+          scheduledFor,
+        },
       })
       await scheduleSend(outgoing.id, scheduledFor)
       if (draftId)
@@ -89,7 +96,7 @@ export async function sendRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>('/outgoing/:id/undo', async (request) => {
     // Claim it first, in one step, so the send job (which also claims it) can't send it at the same moment.
     const claimed = await db.outgoingMessage.updateMany({
-      where: { id: request.params.id, userId: request.user.id, status: 'scheduled' },
+      where: { id: request.params.id, userId: request.user.id, status: 'held' },
       data: { status: 'draft', scheduledFor: null },
     })
     if (!claimed.count) throw badRequest('Too late: it has already been sent')
@@ -109,7 +116,7 @@ export async function sendRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>('/outgoing/:id/send-now', async (request) => {
     const outgoing = await db.outgoingMessage.findFirst({
-      where: { id: request.params.id, userId: request.user.id, status: { in: ['scheduled', 'failed'] } },
+      where: { id: request.params.id, userId: request.user.id, status: { in: ['scheduled', 'held', 'failed'] } },
     })
     if (!outgoing) throw notFound('Scheduled message')
     await cancelSend(outgoing.id)

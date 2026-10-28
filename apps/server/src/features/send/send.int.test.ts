@@ -266,6 +266,8 @@ describe('scheduled send', () => {
     })
     expect(Date.parse(held.sendsAt) - Date.now()).toBeGreaterThan(8_000)
     expect(await received(to)).toEqual([]) // not sent yet
+    expect(await browser.json('GET', '/api/messages?folder=scheduled')).toEqual([]) // as good as sent, so not listed
+    expect((await browser.json('GET', '/api/counts')).folders.scheduled).toBe(0)
 
     const draft = await browser.json('POST', `/api/outgoing/${held.id}/undo`)
     expect(draft).toMatchObject({ id: held.id, to: [to], subject: 'Oops', html: '<p>Wrong attachment</p>' })
