@@ -7,6 +7,7 @@ import {
   Clock,
   FileText,
   Inbox,
+  Keyboard,
   LogOut,
   PenLine,
   Send,
@@ -145,16 +146,23 @@ export function Sidebar({ onNavigate, onShowShortcuts }: { onNavigate?: () => vo
         <NavLink to="/settings" onClick={onNavigate} className={({ isActive }) => itemClass(isActive)}>
           <Settings size={16} strokeWidth={1.8} /> Settings
         </NavLink>
+        {/* Opens the list of keyboard shortcuts, as pressing ? does. */}
+        <button type="button" onClick={onShowShortcuts} className={itemClass(false)}>
+          <Keyboard size={16} strokeWidth={1.8} /> Shortcuts
+          <span className="ml-auto">
+            <Kbd>?</Kbd>
+          </span>
+        </button>
         <button type="button" onClick={signOut} className={itemClass(false)}>
           <LogOut size={16} strokeWidth={1.8} /> Sign out
         </button>
-        <SyncStatus accounts={accounts} onShowShortcuts={onShowShortcuts} />
+        <SyncStatus accounts={accounts} />
       </div>
     </nav>
   )
 }
 
-function SyncStatus({ accounts, onShowShortcuts }: { accounts: Account[]; onShowShortcuts: () => void }) {
+function SyncStatus({ accounts }: { accounts: Account[] }) {
   const failing = accounts.filter((a) => a.syncError)
   const last = accounts
     .map((a) => a.lastSyncAt)
@@ -175,14 +183,6 @@ function SyncStatus({ accounts, onShowShortcuts }: { accounts: Account[]; onShow
     >
       <i className={`h-[7px] w-[7px] shrink-0 rounded-full ${failing.length ? 'bg-danger' : 'bg-news'}`} />
       <span className="truncate">{text}</span>
-      {/* Opens the list of keyboard shortcuts, as pressing ? does. */}
-      <button
-        type="button"
-        onClick={onShowShortcuts}
-        className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-raise hover:text-ink"
-      >
-        Shortcuts <Kbd>?</Kbd>
-      </button>
     </div>
   )
 }
